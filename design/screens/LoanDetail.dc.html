@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loan detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F1}
+a{color:#0E3B2E}a:hover{color:#08261D}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F5F1; font-family: Inter, system-ui, sans-serif; color: #121614">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0E3B2E; color: #E8EFE9; padding: 24px 16px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <div style="width: 32px; height: 32px; border-radius: 9px; background: #C6F432; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0E3B2E">K</div>
+      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #FFFFFF">Kora Lend</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="Pipeline.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Applications</a>
+      <a href="LoanDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; background: #C6F432; color: #0E3B2E; text-decoration: none; font-weight: 600; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg>Loans</a>
+      <a href="Borrower.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Borrowers</a>
+      <a href="Collections.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Collections</a>
+      <a href="Reports.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Reports</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5B635E">
+      <a href="#" style="color: #5B635E; text-decoration: none">Loans</a><span aria-hidden="true">/</span><span style="color: #121614">LN-0418-2026</span>
+    </div>
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px">
+      <span style="width: 56px; height: 56px; border-radius: 16px; background: #E3EBDF; color: #0E3B2E; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 20px; display: flex; align-items: center; justify-content: center">AU</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; margin-right: auto">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+          <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Aline Uwase</h1>
+          <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #E2F5C4; color: #2E4A05; display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3E7A07"></span>Active · on track</span>
+        </div>
+        <span style="font-size: 14px; color: #5B635E">SME working capital · Uwase Tailoring, Kimironko · Officer: Kevin N.</span>
+      </div>
+      <button style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{openRestructure}}">Restructure</button>
+      <button style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{showStatement}}">Statement</button>
+      <button style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{openPay}}">Record payment</button>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+        <section style="background: #0E3B2E; color: #FFFFFF; border-radius: 22px; padding: 26px; display: flex; flex-wrap: wrap; gap: 28px; align-items: center">
+          <div role="img" aria-label="{{paidPct}} percent of principal repaid" style="width: 132px; height: 132px; border-radius: 50%; background: {{ring}}; display: flex; align-items: center; justify-content: center; flex: none">
+            <div style="width: 104px; height: 104px; border-radius: 50%; background: #0E3B2E; display: flex; flex-direction: column; align-items: center; justify-content: center">
+              <span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">{{paidPct}}%</span>
+              <span style="font-size: 11px; color: #B9CCC0">repaid</span>
+            </div>
+          </div>
+          <div style="flex: 1 1 360px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 28px">
+            <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #B9CCC0">Outstanding principal</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">RWF {{outstanding}}</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #B9CCC0">Next instalment · {{nextDate}}</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; color: #C6F432">RWF {{payment}}</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #B9CCC0">Total repaid</span><span style="font-size: 16px; font-weight: 600">RWF {{repaid}}</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #B9CCC0">Instalments</span><span style="font-size: 16px; font-weight: 600">{{paidCount}} of 18 paid · 0 late</span></div>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; margin-right: auto">Repayment schedule</h2>
+            <span style="font-size: 12px; color: #5B635E">Reducing balance · monthly</span>
+          </div>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; min-width: 600px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums">
+              <thead>
+                <tr style="text-align: left; color: #5B635E; font-size: 12px">
+                  <th style="font-weight: 500; padding: 8px 8px 10px 0; border-bottom: 1px solid #E1E4DD">#</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD">Due date</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Principal</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Interest</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Instalment</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Balance</th>
+                  <th style="font-weight: 500; padding: 8px 0 10px 8px; border-bottom: 1px solid #E1E4DD">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{rows}}" as="r" hint-placeholder-count="9">
+                  <tr style="{{r.rowStyle}}">
+                    <td style="padding: 11px 8px 11px 0; border-bottom: 1px solid #F0F1EC; color: #5B635E">{{r.n}}</td>
+                    <td style="padding: 11px 8px; border-bottom: 1px solid #F0F1EC">{{r.date}}</td>
+                    <td style="padding: 11px 8px; border-bottom: 1px solid #F0F1EC; text-align: right">{{r.principal}}</td>
+                    <td style="padding: 11px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; color: #5B635E">{{r.interest}}</td>
+                    <td style="padding: 11px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">{{r.payment}}</td>
+                    <td style="padding: 11px 8px; border-bottom: 1px solid #F0F1EC; text-align: right">{{r.balance}}</td>
+                    <td style="padding: 11px 0 11px 8px; border-bottom: 1px solid #F0F1EC"><span style="{{r.pill}}">{{r.status}}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <button style="align-self: flex-start; height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Show all 18 instalments</button>
+        </section>
+      </div>
+
+      <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">Loan terms</h2>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; font-size: 14px">
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Principal</span><span style="font-weight: 600">RWF 4,500,000</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Interest rate</span><span style="font-weight: 600">17% p.a.</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Term</span><span style="font-weight: 600">18 months</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Disbursed</span><span style="font-weight: 600">4 May 2026</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Channel</span><span style="font-weight: 600">MTN MoMo</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Collateral</span><span style="font-weight: 600">Equipment lien</span></div>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">Borrower</h2>
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+            <div style="display: flex; justify-content: space-between"><span style="color: #5B635E">Credit score</span><span style="font-weight: 600">742 · Good</span></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: #5B635E">KYC</span><span style="font-weight: 600; color: #1F6B45">Verified</span></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: #5B635E">Previous loans</span><span style="font-weight: 600">2 · fully repaid</span></div>
+            <div style="display: flex; justify-content: space-between"><span style="color: #5B635E">Phone</span><span style="font-weight: 600">+250 78• ••• 412</span></div>
+          </div>
+          <a href="Borrower.dc.html" style="font-size: 14px; font-weight: 600">Open borrower profile</a>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0 0 10px; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">Activity</h2>
+          <sc-for list="{{activity}}" as="e" hint-placeholder-count="4">
+            <div style="display: flex; gap: 12px">
+              <div style="display: flex; flex-direction: column; align-items: center">
+                <span style="{{e.dot}}"></span>
+                <span style="flex: 1; width: 2px; background: #EEF0EA; min-height: 28px"></span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 14px">
+                <span style="font-size: 14px; font-weight: 500">{{e.title}}</span>
+                <span style="font-size: 12px; color: #5B635E">{{e.when}}</span>
+              </div>
+            </div>
+          </sc-for>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <sc-if value="{{payOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="background: rgba(18,22,20,0.45); position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px">
+      <div role="dialog" aria-modal="true" aria-labelledby="pay-title" style="background: #FFFFFF; border-radius: 22px; width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.25)">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-right: auto"><h2 id="pay-title" style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600">Record payment</h2><span style="font-size: 13px; color: #5B635E">Instalment {{nextNo}} of 18 · due {{nextDate}}</span></div>
+          <button aria-label="Close" onClick="{{closeModal}}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E1E4DD; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#121614" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Amount received (RWF)
+          <input type="text" inputmode="numeric" value="{{payment}}" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums"></label>
+        <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px">
+          <legend style="font-size: 12px; color: #5B635E; margin-bottom: 6px">Paid via</legend>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{channels}}" as="ch" hint-placeholder-count="3">
+              <button aria-pressed="{{ch.pressed}}" onClick="{{ch.pick}}" style="{{ch.style}}">{{ch.label}}</button>
+            </sc-for>
+          </div>
+        </fieldset>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Date received
+            <input type="date" value="2026-11-12" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box"></label>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Transaction ID
+            <input type="text" placeholder="e.g. MP261112.1432" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box"></label>
+        </div>
+        <div style="background: #F2F8E3; border-radius: 12px; padding: 12px; font-size: 13px; color: #2E4A05; line-height: 1.45">This clears instalment {{nextNo}} in full. Outstanding principal will drop to RWF {{afterPay}}.</div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <button onClick="{{closeModal}}" style="height: 46px; padding: 0 18px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Cancel</button>
+          <button onClick="{{savePay}}" style="height: 46px; padding: 0 20px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Save payment</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{restructureOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="background: rgba(18,22,20,0.45); position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px">
+      <div role="dialog" aria-modal="true" aria-labelledby="rs-title" style="background: #FFFFFF; border-radius: 22px; width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.25)">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-right: auto"><h2 id="rs-title" style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600">Restructure loan</h2><span style="font-size: 13px; color: #5B635E">RWF {{outstanding}} outstanding · {{remaining}} instalments left</span></div>
+          <button aria-label="Close" onClick="{{closeModal}}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E1E4DD; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#121614" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <fieldset style="border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px">
+          <legend style="font-size: 12px; color: #5B635E; margin-bottom: 6px">Option</legend>
+          <sc-for list="{{rsTypes}}" as="t" hint-placeholder-count="2">
+            <button aria-pressed="{{t.pressed}}" onClick="{{t.pick}}" style="{{t.style}}"><span style="font-weight: 600">{{t.label}}</span><span style="font-size: 12px; color: #5B635E">{{t.hint}}</span></button>
+          </sc-for>
+        </fieldset>
+        <sc-if value="{{isExtend}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span id="rs-term" style="font-size: 12px; color: #5B635E">New remaining term</span>
+            <div role="group" aria-labelledby="rs-term" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+              <sc-for list="{{rsTerms}}" as="t" hint-placeholder-count="3">
+                <button aria-pressed="{{t.pressed}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <div style="background: #F4F5F1; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #5B635E">Current instalment</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600">RWF {{payment}}</span></div>
+          <div style="background: #0E3B2E; color: #FFFFFF; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #B9CCC0">New instalment</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600; color: #C6F432">RWF {{rsPay}}</span></div>
+        </div>
+        <span style="font-size: 13px; color: #3B423E; line-height: 1.45">{{rsNote}}</span>
+        <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Reason
+          <textarea rows="2" placeholder="e.g. Slow season, orders pick up in January" style="font: inherit; font-size: 14px; color: #121614; border: 1px solid #D5D9D0; border-radius: 12px; padding: 10px 12px; resize: vertical"></textarea></label>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <button onClick="{{closeModal}}" style="height: 46px; padding: 0 18px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Cancel</button>
+          <button onClick="{{sendRestructure}}" style="height: 46px; padding: 0 20px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Send for approval</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: fixed; right: 24px; bottom: 24px; z-index: 60; background: #121614; color: #FFFFFF; border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); max-width: 420px">
+      <span style="width: 24px; height: 24px; border-radius: 50%; background: #C6F432; display: flex; align-items: center; justify-content: center; flex: none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0E3B2E" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+      <span>{{toast}}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { paid: 6, modal: null, channel: 'MoMo', rsType: 'extend', rsTerm: 18, toast: null, extra: [] };
+  }
+  componentWillUnmount() { clearTimeout(this.t); }
+  flash(msg) {
+    var self = this;
+    clearTimeout(this.t);
+    this.setState({ toast: msg });
+    this.t = setTimeout(function () { self.setState({ toast: null }); }, 3500);
+  }
+  renderVals() {
+    var self = this, st = this.state;
+    var P = 4500000, r = 0.17 / 12, n = 18, paidCount = st.paid;
+    var pay = P * r / (1 - Math.pow(1 + r, -n));
+    var fmt = function (x) { return Math.round(x).toLocaleString('en-US'); };
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var dateOf = function (i, longYear) { var mi = (4 + i) % 12; var yr = 2026 + Math.floor((4 + i) / 12); return '4 ' + months[mi] + (longYear ? ' ' + yr : ''); };
+    var pill = function (bg, fg) { return 'display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: ' + bg + '; color: ' + fg; };
+    var bal = P, rows = [], balances = [P];
+    for (var i = 1; i <= n; i++) {
+      var interest = bal * r;
+      var principal = pay - interest;
+      bal = bal - principal;
+      balances.push(Math.max(bal, 0));
+      var status, p, rowStyle = '';
+      if (i <= paidCount) { status = 'Paid'; p = pill('#E2F5C4', '#2E4A05'); }
+      else if (i === paidCount + 1) { status = 'Due next'; p = pill('#121614', '#C6F432'); rowStyle = 'background: #F7FBEA'; }
+      else { status = 'Upcoming'; p = pill('#EEF0EA', '#3B423E'); }
+      if (i <= 9) rows.push({ n: i, date: dateOf(i, true), principal: fmt(principal), interest: fmt(interest), payment: fmt(pay), balance: fmt(Math.max(bal, 0)), status: status, pill: p, rowStyle: rowStyle });
+    }
+    var outstanding = balances[paidCount];
+    var remaining = n - paidCount;
+    var paidPct = Math.round((P - outstanding) / P * 100);
+    var deg = Math.round(paidPct * 3.6);
+    var dot = function (c) { return 'width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: ' + c; };
+    var opt = function (on) { return 'min-height: 46px; border-radius: 12px; font: inherit; font-size: 14px; cursor: pointer; ' + (on ? 'border: 2px solid #0E3B2E; background: #E2F5C4; color: #0E3B2E; font-weight: 600' : 'border: 1px solid #D5D9D0; background: #FFFFFF; color: #121614'); };
+    var channels = ['MoMo', 'Bank', 'Cash'].map(function (c) {
+      return { label: c === 'MoMo' ? 'MTN MoMo' : (c === 'Bank' ? 'Bank transfer' : 'Cash at branch'), pressed: st.channel === c ? 'true' : 'false', style: opt(st.channel === c), pick: function () { self.setState({ channel: c }); } };
+    });
+    var rsTypes = [['extend', 'Extend the term', 'Lower instalments, more interest overall'], ['holiday', 'One-month payment holiday', 'Skip ' + dateOf(paidCount + 1) + ', interest still accrues']].map(function (t) {
+      var on = st.rsType === t[0];
+      return { label: t[1], hint: t[2], pressed: on ? 'true' : 'false', pick: function () { self.setState({ rsType: t[0] }); },
+        style: 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; font: inherit; font-size: 14px; cursor: pointer; color: #121614; ' + (on ? 'border: 2px solid #0E3B2E; background: #F2F8E3' : 'border: 1px solid #D5D9D0; background: #FFFFFF') };
+    });
+    var terms = [remaining + 6, remaining + 12, remaining + 18];
+    var rsTerm = terms.indexOf(st.rsTerm) >= 0 ? st.rsTerm : terms[0];
+    var rsTerms = terms.map(function (m) { return { label: m + ' months', pressed: m === rsTerm ? 'true' : 'false', style: opt(m === rsTerm), pick: function () { self.setState({ rsTerm: m }); } }; });
+    var rsPay, rsNote;
+    if (st.rsType === 'extend') {
+      rsPay = outstanding * r / (1 - Math.pow(1 + r, -rsTerm));
+      var extraInt = rsPay * rsTerm - pay * remaining;
+      rsNote = 'Instalment drops by RWF ' + fmt(pay - rsPay) + ' a month. The borrower pays about RWF ' + fmt(extraInt) + ' more interest in total. Needs credit committee approval.';
+    } else {
+      var grown = outstanding * (1 + r);
+      rsPay = grown * r / (1 - Math.pow(1 + r, -remaining));
+      rsNote = 'No payment on ' + dateOf(paidCount + 1, true) + '. That month’s interest (RWF ' + fmt(outstanding * r) + ') is added to the balance and spread over the remaining ' + remaining + ' instalments.';
+    }
+    var activity = st.extra.concat([
+      { title: 'Instalment 6 received via MoMo', when: '4 Nov 2026 · 09:12', dot: dot('#A9D61C') },
+      { title: 'SMS reminder sent', when: '1 Nov 2026 · auto', dot: dot('#A7ADA3') },
+      { title: 'Instalment 5 received via MoMo', when: '3 Oct 2026 · 17:40', dot: dot('#A9D61C') },
+      { title: 'Loan disbursed', when: '4 May 2026 · by Kevin N.', dot: dot('#0E3B2E') }
+    ]).slice(0, 5);
+    var chLabel = { MoMo: 'MoMo', Bank: 'bank transfer', Cash: 'cash' };
+    return {
+      rows: rows,
+      payment: fmt(pay),
+      outstanding: fmt(outstanding),
+      afterPay: fmt(balances[Math.min(paidCount + 1, n)]),
+      repaid: fmt(pay * paidCount),
+      paidPct: paidPct,
+      paidCount: paidCount,
+      remaining: remaining,
+      nextNo: paidCount + 1,
+      nextDate: dateOf(paidCount + 1),
+      ring: 'conic-gradient(#C6F432 0deg ' + deg + 'deg, rgba(255,255,255,0.14) ' + deg + 'deg 360deg)',
+      activity: activity,
+      channels: channels,
+      rsTypes: rsTypes,
+      rsTerms: rsTerms,
+      isExtend: st.rsType === 'extend',
+      rsPay: fmt(rsPay),
+      rsNote: rsNote,
+      payOpen: st.modal === 'pay',
+      restructureOpen: st.modal === 'restructure',
+      hasToast: !!st.toast,
+      toast: st.toast || '',
+      openPay: function () { if (self.state.paid < n) self.setState({ modal: 'pay' }); else self.flash('This loan is fully repaid.'); },
+      openRestructure: function () { self.setState({ modal: 'restructure' }); },
+      closeModal: function () { self.setState({ modal: null }); },
+      showStatement: function () { self.flash('Statement for LN-0418-2026 is ready (PDF, 1 May – 12 Nov 2026).'); },
+      savePay: function () {
+        var k = self.state.paid + 1;
+        var ev = { title: 'Instalment ' + k + ' recorded by you (' + chLabel[self.state.channel] + ')', when: '12 Nov 2026 · just now', dot: dot('#A9D61C') };
+        self.setState({ paid: k, modal: null, extra: [ev].concat(self.state.extra) });
+        self.flash('Payment of RWF ' + fmt(pay) + ' recorded for instalment ' + k + '.');
+      },
+      sendRestructure: function () {
+        var ev = { title: 'Restructure request sent for approval', when: '12 Nov 2026 · just now', dot: dot('#4B2A9B') };
+        self.setState({ modal: null, extra: [ev].concat(self.state.extra) });
+        self.flash('Restructure request sent to the credit committee.');
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

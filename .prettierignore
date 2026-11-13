@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.turbo
+.expo
+pnpm-lock.yaml
+design/
+apps/api/src/generated
+apps/api/prisma/migrations
+scripts-setup-env.tmp
+*.md
+.github

@@ -1,0 +1,1068 @@
+// Kora Lend data model.
+//
+// Rules this schema enforces (BUILD_BRIEF §4):
+//  - Money is whole RWF in BigInt columns. There are no Float or Decimal money fields.
+//  - Balances are never stored on a loan. They are sums over LedgerEntry.
+//  - LedgerEntry, LedgerTransaction and AuditLog are append-only, and every
+//    ledger transaction must balance. Both are enforced by triggers in the
+//    first migration, not only by application code.
+//  - Payment and Disbursement carry unique idempotency keys and external refs.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Staff, roles, branches ─────────────────────────
+
+/// Staff roles. The brief lists Role as an entity; a fixed enum keeps the
+/// role guards type-safe. Move to a table if roles need to be edited at runtime.
+enum StaffRole {
+  ADMIN
+  MANAGER
+  LOAN_OFFICER
+  COLLECTIONS_AGENT
+}
+
+model Branch {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  code      String   @unique
+  name      String
+  district  String
+  createdAt DateTime @default(now())
+
+  users        User[]
+  borrowers    Borrower[]
+  applications Application[]
+  loans        Loan[]
+}
+
+/// A member of staff who signs in to the lender console.
+model User {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         StaffRole
+  branchId     String?   @db.Uuid
+  phone        String?
+  isActive     Boolean   @default(true)
+
+  /// TOTP secret, AES-256-GCM encrypted. Null until 2FA setup starts.
+  totpSecretEnc String?
+  totpEnabledAt DateTime?
+  /// Last accepted TOTP time step, to stop a code being replayed.
+  totpLastStep  Int?
+
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  branch   Branch?   @relation(fields: [branchId], references: [id])
+  sessions Session[]
+
+  borrowers            Borrower[]          @relation("BorrowerOfficer")
+  applications         Application[]       @relation("ApplicationOfficer")
+  decidedApplications  Application[]       @relation("ApplicationDecider")
+  secondApprovals      Application[]       @relation("ApplicationSecondApprover")
+  loans                Loan[]              @relation("LoanOfficer")
+  scoreOverrides       CreditScore[]
+  verifiedDocuments    KycDocument[]
+  paymentsRecorded     Payment[]
+  disbursementsStarted Disbursement[]      @relation("DisbursementInitiator")
+  disbursementsOkayed  Disbursement[]      @relation("DisbursementApprover")
+  restructuresAsked    Restructure[]       @relation("RestructureRequester")
+  restructuresDecided  Restructure[]       @relation("RestructureApprover")
+  collectionCases      CollectionCase[]
+  contactLogs          ContactLog[]
+  promisesRecorded     PromiseToPay[]
+  notes                Note[]
+  notifications        Notification[]
+  smsSent              SmsMessage[]
+  ledgerTransactions   LedgerTransaction[]
+}
+
+/// A refresh-token session. Only a hash of the token is stored.
+model Session {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @db.Uuid
+  refreshTokenHash     String    @unique
+  /// The token this one replaced. Accepted for a few seconds after rotation,
+  /// so two requests racing to refresh do not sign the user out.
+  prevRefreshTokenHash String?   @unique
+  rotatedAt            DateTime?
+  userAgent            String?
+  ip                   String?
+  createdAt            DateTime  @default(now())
+  lastUsedAt           DateTime  @default(now())
+  expiresAt            DateTime
+  revokedAt            DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────────── Borrowers and KYC ─────────────────────────
+
+enum BorrowerType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum Language {
+  EN
+  RW
+  FR
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Borrower {
+  id       String       @id @default(uuid(7)) @db.Uuid
+  /// Human reference, e.g. BR-00731.
+  code     String       @unique
+  type     BorrowerType @default(INDIVIDUAL)
+  fullName String
+  /// E.164, e.g. +250788123412. Always mask before display or logging.
+  phone    String       @unique
+
+  /// National ID, AES-256-GCM encrypted. Never stored in the clear.
+  nationalIdEnc   String?
+  /// HMAC of the ID, so duplicates can be found without decrypting.
+  nationalIdHash  String? @unique
+  /// Last three digits, for the masked display.
+  nationalIdLast3 String?
+
+  dateOfBirth       DateTime? @db.Date
+  gender            Gender    @default(UNDISCLOSED)
+  preferredLanguage Language  @default(EN)
+  district          String?
+  sector            String?
+
+  /// Verified monthly income or revenue, used by the affordability rule.
+  monthlyIncome    BigInt?
+  incomeVerifiedAt DateTime?
+  momoLinked       Boolean    @default(false)
+  kycStatus        KycStatus  @default(PENDING)
+  riskLevel        RiskLevel?
+  preApprovedLimit BigInt?
+
+  officerId     String?  @db.Uuid
+  branchId      String?  @db.Uuid
+  customerSince DateTime @default(now()) @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  officer User?   @relation("BorrowerOfficer", fields: [officerId], references: [id])
+  branch  Branch? @relation(fields: [branchId], references: [id])
+
+  business      Business?
+  kycDocuments  KycDocument[]
+  consents      Consent[]
+  applications  Application[]
+  creditScores  CreditScore[]
+  loans         Loan[]
+  payments      Payment[]
+  contactLogs   ContactLog[]
+  notes         Note[]
+  notifications Notification[]
+  smsMessages   SmsMessage[]
+  sessions      BorrowerSession[]
+  offers        LoanOffer[]
+  momoInflows   MomoInflowMonth[]
+
+  @@index([fullName])
+  @@index([officerId])
+}
+
+model Business {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  borrowerId        String    @unique @db.Uuid
+  name              String
+  sector            String?
+  /// The borrower's role in the business, e.g. "Owner".
+  borrowerRole      String?
+  rdbNumber         String?
+  registeredOn      DateTime? @db.Date
+  avgMonthlyRevenue BigInt?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+}
+
+enum KycDocumentType {
+  NATIONAL_ID
+  BUSINESS_REGISTRATION
+  FINANCIAL_STATEMENTS
+  PROOF_OF_ADDRESS
+  SELFIE
+  OTHER
+}
+
+model KycDocument {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  borrowerId   String          @db.Uuid
+  type         KycDocumentType
+  status       KycStatus       @default(PENDING)
+  /// Object-storage key. The file itself never lives in the database.
+  storageKey   String?
+  /// Where verification came from, e.g. "NIDA".
+  verifiedVia  String?
+  note         String?
+  uploadedAt   DateTime        @default(now())
+  verifiedAt   DateTime?
+  expiresOn    DateTime?       @db.Date
+  verifiedById String?         @db.Uuid
+
+  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  verifiedBy User?    @relation(fields: [verifiedById], references: [id])
+
+  @@index([borrowerId])
+}
+
+enum ConsentType {
+  TERMS
+  DATA_PROCESSING
+  MOMO_HISTORY
+  CREDIT_BUREAU
+  MARKETING_SMS
+}
+
+enum ConsentChannel {
+  APP
+  OFFICER
+  USSD
+}
+
+/// A record of explicit consent (Law Nº 058/2021). Rows are never deleted;
+/// withdrawing consent sets revokedAt.
+model Consent {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  borrowerId    String         @db.Uuid
+  type          ConsentType
+  /// Version of the wording the borrower agreed to.
+  textVersion   String
+  channel       ConsentChannel
+  applicationId String?        @db.Uuid
+  ip            String?
+  grantedAt     DateTime       @default(now())
+  revokedAt     DateTime?
+
+  borrower    Borrower     @relation(fields: [borrowerId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([borrowerId, type])
+}
+
+// ───────────────────────── Products and applications ─────────────────────────
+
+enum ProductKind {
+  SME
+  PERSONAL
+  AGRI
+  ASSET
+}
+
+model Product {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  code              String      @unique
+  name              String
+  /// Short name used on pipeline cards, e.g. "Agri input".
+  shortName         String
+  kind              ProductKind
+  /// Default annual nominal rate in basis points (17% = 1700).
+  annualRateBps     Int
+  minTermMonths     Int
+  maxTermMonths     Int
+  minAmount         BigInt
+  maxAmount         BigInt
+  originationFeeBps Int         @default(0)
+  latePenaltyBps    Int         @default(0)
+  /// Instalments may be at most this share of verified income (35% = 3500).
+  affordabilityBps  Int         @default(3500)
+
+  /// Auto-approve policy. Null means every application needs an officer.
+  autoApproveMinScore  Int?
+  autoApproveMaxAmount BigInt?
+  /// Approvals above this amount need a second approver.
+  secondApprovalAbove  BigInt?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications Application[]
+  loans        Loan[]
+  offers       LoanOffer[]
+}
+
+enum ApplicationStage {
+  NEW
+  UNDER_REVIEW
+  CREDIT_CHECK
+  APPROVED
+  DISBURSED
+  DECLINED
+  WITHDRAWN
+}
+
+enum ApplicationChannel {
+  CONSOLE
+  APP
+  USSD
+}
+
+model Application {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  /// Human reference, e.g. APP-20931.
+  code          String             @unique
+  borrowerId    String             @db.Uuid
+  productId     String             @db.Uuid
+  amount        BigInt
+  termMonths    Int
+  annualRateBps Int
+  purpose       String?
+  channel       ApplicationChannel @default(CONSOLE)
+
+  stage               ApplicationStage @default(NEW)
+  stageEnteredAt      DateTime         @default(now())
+  /// Short status shown on the card, e.g. "Contract sent", "Awaiting CRB".
+  statusNote          String?
+  docsReceived        Int              @default(0)
+  docsRequired        Int              @default(0)
+  statedMonthlyIncome BigInt?
+  /// Business details given in the app's apply flow.
+  businessName        String?
+  businessSector      String?
+
+  officerId String? @db.Uuid
+  branchId  String? @db.Uuid
+
+  /// Credit decisions are made by a person (or the auto-approve policy), never by a model.
+  decidedById      String?   @db.Uuid
+  decidedAt        DateTime?
+  autoApproved     Boolean   @default(false)
+  declineReason    String?
+  secondApproverId String?   @db.Uuid
+  secondApprovedAt DateTime?
+
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  borrower       Borrower @relation(fields: [borrowerId], references: [id])
+  product        Product  @relation(fields: [productId], references: [id])
+  officer        User?    @relation("ApplicationOfficer", fields: [officerId], references: [id])
+  decidedBy      User?    @relation("ApplicationDecider", fields: [decidedById], references: [id])
+  secondApprover User?    @relation("ApplicationSecondApprover", fields: [secondApproverId], references: [id])
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+
+  creditScores CreditScore[]
+  consents     Consent[]
+  loan         Loan?
+
+  @@index([stage])
+  @@index([borrowerId])
+  @@index([officerId])
+}
+
+/// Advisory only. There is deliberately no DECLINE value: a model can ask for
+/// a review or raise a flag, but declining is a human decision.
+enum ScoreRecommendation {
+  AUTO_APPROVE_ELIGIBLE
+  APPROVE
+  REVIEW
+  FLAG
+}
+
+/// A credit score or AI recommendation, stored with what it was based on.
+model CreditScore {
+  id                  String               @id @default(uuid(7)) @db.Uuid
+  borrowerId          String               @db.Uuid
+  applicationId       String?              @db.Uuid
+  /// 300–850.
+  value               Int
+  recommendation      ScoreRecommendation?
+  /// One-line summary shown in the UI, e.g. "Flag · income mismatch".
+  headline            String?
+  /// Estimated chance of repayment in basis points (92% = 9200).
+  repayProbabilityBps Int?
+  /// A longer written summary, when a model produced one.
+  summary             String?
+  /// The reasons behind the score, as shown to the officer.
+  reasons             Json
+  /// The inputs the model saw, for audit and bias testing.
+  inputs              Json
+  modelVersion        String
+  createdAt           DateTime             @default(now())
+
+  /// Set when an officer decides against the recommendation.
+  overriddenById String?   @db.Uuid
+  overrideReason String?
+  overriddenAt   DateTime?
+
+  borrower     Borrower     @relation(fields: [borrowerId], references: [id])
+  application  Application? @relation(fields: [applicationId], references: [id])
+  overriddenBy User?        @relation(fields: [overriddenById], references: [id])
+
+  @@index([borrowerId, createdAt])
+  @@index([applicationId])
+}
+
+// ───────────────────────── Loans and schedules ─────────────────────────
+
+enum LoanStatus {
+  PENDING_DISBURSEMENT
+  ACTIVE
+  REPAID
+  WRITTEN_OFF
+}
+
+model Loan {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  /// Human reference, e.g. LN-0418-2026.
+  code             String     @unique
+  borrowerId       String     @db.Uuid
+  applicationId    String?    @unique @db.Uuid
+  productId        String     @db.Uuid
+  principal        BigInt
+  annualRateBps    Int
+  termMonths       Int
+  /// The level instalment from the schedule calculator in @kora/core.
+  instalmentAmount BigInt
+  status           LoanStatus @default(PENDING_DISBURSEMENT)
+  disbursedOn      DateTime?  @db.Date
+  firstDueDate     DateTime   @db.Date
+  maturityDate     DateTime   @db.Date
+  closedOn         DateTime?  @db.Date
+  /// What secures the loan, if anything, e.g. "Equipment lien".
+  collateral       String?
+  /// Bumped on each restructure. Instalments from older versions are kept for history.
+  scheduleVersion  Int        @default(1)
+  officerId        String?    @db.Uuid
+  branchId         String?    @db.Uuid
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  // No balance columns here on purpose: outstanding principal and interest
+  // are derived from LedgerEntry.
+
+  borrower    Borrower     @relation(fields: [borrowerId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+  product     Product      @relation(fields: [productId], references: [id])
+  officer     User?        @relation("LoanOfficer", fields: [officerId], references: [id])
+  branch      Branch?      @relation(fields: [branchId], references: [id])
+
+  instalments        ScheduleInstalment[]
+  ledgerEntries      LedgerEntry[]
+  ledgerTransactions LedgerTransaction[]
+  payments           Payment[]
+  disbursements      Disbursement[]
+  restructures       Restructure[]
+  collectionCases    CollectionCase[]
+  contactLogs        ContactLog[]
+  promises           PromiseToPay[]
+  notes              Note[]
+  smsMessages        SmsMessage[]
+
+  @@index([borrowerId])
+  @@index([status])
+  @@index([officerId])
+}
+
+enum InstalmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+model ScheduleInstalment {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  loanId          String           @db.Uuid
+  scheduleVersion Int              @default(1)
+  number          Int
+  dueDate         DateTime         @db.Date
+  principalDue    BigInt
+  interestDue     BigInt
+  /// How much of this instalment has been covered. Written in the same
+  /// database transaction as the ledger entries that paid it.
+  principalPaid   BigInt           @default(0)
+  interestPaid    BigInt           @default(0)
+  status          InstalmentStatus @default(PENDING)
+  paidAt          DateTime?
+  /// Set when a restructure replaces this instalment.
+  supersededAt    DateTime?
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@unique([loanId, scheduleVersion, number])
+  @@index([dueDate, status])
+}
+
+// ───────────────────────── Double-entry ledger ─────────────────────────
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+model LedgerAccount {
+  id   String            @id @default(uuid(7)) @db.Uuid
+  /// Chart-of-accounts code, e.g. "1100".
+  code String            @unique
+  name String
+  type LedgerAccountType
+
+  entries LedgerEntry[]
+}
+
+enum LedgerTransactionType {
+  OPENING_BALANCE
+  DISBURSEMENT
+  REPAYMENT
+  FEE
+  INTEREST_ACCRUAL
+  PENALTY
+  WRITE_OFF
+  REVERSAL
+  ADJUSTMENT
+}
+
+/// One business event. Its entries must sum to zero (debits = credits);
+/// a deferred constraint trigger rejects the commit otherwise.
+model LedgerTransaction {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  type           LedgerTransactionType
+  /// Unique per business event, so a retried request cannot post twice.
+  idempotencyKey String                @unique
+  loanId         String?               @db.Uuid
+  memo           String?
+  /// The day the event counts for (Kigali calendar).
+  effectiveOn    DateTime              @db.Date
+  postedAt       DateTime              @default(now())
+  postedById     String?               @db.Uuid
+  /// For a REVERSAL: the transaction being undone. Entries are never edited.
+  reversesId     String?               @unique @db.Uuid
+
+  loan       Loan?              @relation(fields: [loanId], references: [id])
+  postedBy   User?              @relation(fields: [postedById], references: [id])
+  reverses   LedgerTransaction? @relation("Reversal", fields: [reversesId], references: [id])
+  reversedBy LedgerTransaction? @relation("Reversal")
+
+  entries      LedgerEntry[]
+  payment      Payment?
+  disbursement Disbursement?
+
+  @@index([loanId, effectiveOn])
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+/// One side of a transaction. Append-only: a trigger blocks UPDATE and DELETE.
+model LedgerEntry {
+  id            String         @id @default(uuid(7)) @db.Uuid
+  transactionId String         @db.Uuid
+  accountId     String         @db.Uuid
+  loanId        String?        @db.Uuid
+  direction     EntryDirection
+  /// Always positive. The direction says which side it sits on.
+  amount        BigInt
+  createdAt     DateTime       @default(now())
+
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id])
+  account     LedgerAccount     @relation(fields: [accountId], references: [id])
+  loan        Loan?             @relation(fields: [loanId], references: [id])
+
+  @@index([transactionId])
+  @@index([accountId])
+  @@index([loanId, accountId])
+}
+
+// ───────────────────────── Money movement ─────────────────────────
+
+enum PaymentChannel {
+  MTN_MOMO
+  AIRTEL_MONEY
+  BANK_TRANSFER
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  REVERSED
+}
+
+/// A repayment. A callback that arrives twice hits the unique keys below
+/// and is processed once.
+model Payment {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  loanId              String         @db.Uuid
+  borrowerId          String         @db.Uuid
+  amount              BigInt
+  channel             PaymentChannel
+  status              PaymentStatus  @default(PENDING)
+  /// Our reference for the request (the MoMo X-Reference-Id).
+  idempotencyKey      String         @unique
+  /// The provider's transaction ID, once known.
+  externalRef         String?
+  payerPhone          String?
+  failureReason       String?
+  /// The provider callback as received, for reconciliation.
+  rawCallback         Json?
+  initiatedAt         DateTime       @default(now())
+  confirmedAt         DateTime?
+  recordedById        String?        @db.Uuid
+  ledgerTransactionId String?        @unique @db.Uuid
+
+  loan              Loan               @relation(fields: [loanId], references: [id])
+  borrower          Borrower           @relation(fields: [borrowerId], references: [id])
+  recordedBy        User?              @relation(fields: [recordedById], references: [id])
+  ledgerTransaction LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
+
+  @@unique([channel, externalRef])
+  @@index([loanId, confirmedAt])
+  @@index([status])
+}
+
+enum DisbursementStatus {
+  PENDING
+  SENT
+  SUCCESSFUL
+  FAILED
+}
+
+model Disbursement {
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  loanId              String             @db.Uuid
+  amount              BigInt
+  channel             PaymentChannel
+  status              DisbursementStatus @default(PENDING)
+  idempotencyKey      String             @unique
+  externalRef         String?
+  payeePhone          String?
+  failureReason       String?
+  rawCallback         Json?
+  initiatedAt         DateTime           @default(now())
+  confirmedAt         DateTime?
+  initiatedById       String?            @db.Uuid
+  approvedById        String?            @db.Uuid
+  ledgerTransactionId String?            @unique @db.Uuid
+
+  loan              Loan               @relation(fields: [loanId], references: [id])
+  initiatedBy       User?              @relation("DisbursementInitiator", fields: [initiatedById], references: [id])
+  approvedBy        User?              @relation("DisbursementApprover", fields: [approvedById], references: [id])
+  ledgerTransaction LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
+
+  @@unique([channel, externalRef])
+  @@index([loanId])
+}
+
+enum RestructureType {
+  EXTEND_TERM
+  PAYMENT_HOLIDAY
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A change to a loan's terms. Always needs a second person to approve.
+model Restructure {
+  id                   String          @id @default(uuid(7)) @db.Uuid
+  loanId               String          @db.Uuid
+  type                 RestructureType
+  status               ApprovalStatus  @default(PENDING)
+  reason               String?
+  outstandingAtRequest BigInt
+  previousInstalment   BigInt
+  newInstalment        BigInt
+  newTermMonths        Int
+  capitalisedInterest  BigInt          @default(0)
+  requestedById        String          @db.Uuid
+  approvedById         String?         @db.Uuid
+  requestedAt          DateTime        @default(now())
+  decidedAt            DateTime?
+
+  loan        Loan  @relation(fields: [loanId], references: [id])
+  requestedBy User  @relation("RestructureRequester", fields: [requestedById], references: [id])
+  approvedBy  User? @relation("RestructureApprover", fields: [approvedById], references: [id])
+
+  @@index([loanId])
+  @@index([status])
+}
+
+// ───────────────────────── Collections ─────────────────────────
+
+enum CollectionCaseStatus {
+  OPEN
+  PROMISED
+  RESOLVED
+  WRITTEN_OFF
+}
+
+enum CollectionAction {
+  SMS
+  CALL
+  FOLLOW_UP
+  FIELD_VISIT
+  WAIT
+}
+
+model CollectionCase {
+  id           String               @id @default(uuid(7)) @db.Uuid
+  loanId       String               @db.Uuid
+  status       CollectionCaseStatus @default(OPEN)
+  nextAction   CollectionAction     @default(CALL)
+  assignedToId String?              @db.Uuid
+  dpdAtOpen    Int                  @default(0)
+  /// When the next step is due: the promise date, or the day to call again.
+  nextActionOn DateTime?            @db.Date
+  openedAt     DateTime             @default(now())
+  closedAt     DateTime?
+
+  loan       Loan  @relation(fields: [loanId], references: [id])
+  assignedTo User? @relation(fields: [assignedToId], references: [id])
+
+  contactLogs ContactLog[]
+  promises    PromiseToPay[]
+
+  @@index([loanId])
+  @@index([status, assignedToId])
+}
+
+enum ContactChannel {
+  CALL
+  SMS
+  VISIT
+  LETTER
+  PAYMENT
+}
+
+enum ContactOutcome {
+  SENT
+  REACHED
+  NO_ANSWER
+  PROMISED_TO_PAY
+  PAID_PART
+  REFUSED
+  WRONG_NUMBER
+  DISPUTED
+}
+
+model ContactLog {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  caseId     String?        @db.Uuid
+  loanId     String         @db.Uuid
+  borrowerId String         @db.Uuid
+  /// Null when the system did it (an automatic reminder, say).
+  staffId    String?        @db.Uuid
+  channel    ContactChannel
+  outcome    ContactOutcome
+  summary    String
+  occurredAt DateTime       @default(now())
+
+  case     CollectionCase? @relation(fields: [caseId], references: [id])
+  loan     Loan            @relation(fields: [loanId], references: [id])
+  borrower Borrower        @relation(fields: [borrowerId], references: [id])
+  staff    User?           @relation(fields: [staffId], references: [id])
+
+  @@index([loanId, occurredAt])
+}
+
+enum PromiseStatus {
+  OPEN
+  KEPT
+  BROKEN
+  CANCELLED
+}
+
+model PromiseToPay {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  caseId       String?       @db.Uuid
+  loanId       String        @db.Uuid
+  amount       BigInt
+  promisedFor  DateTime      @db.Date
+  status       PromiseStatus @default(OPEN)
+  recordedById String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+
+  case       CollectionCase? @relation(fields: [caseId], references: [id])
+  loan       Loan            @relation(fields: [loanId], references: [id])
+  recordedBy User?           @relation(fields: [recordedById], references: [id])
+
+  @@index([loanId])
+  @@index([promisedFor, status])
+}
+
+// ───────────────────────── Notes, notifications, SMS ─────────────────────────
+
+model Note {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  borrowerId String   @db.Uuid
+  loanId     String?  @db.Uuid
+  authorId   String   @db.Uuid
+  body       String
+  createdAt  DateTime @default(now())
+
+  borrower Borrower @relation(fields: [borrowerId], references: [id])
+  loan     Loan?    @relation(fields: [loanId], references: [id])
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([borrowerId, createdAt])
+}
+
+enum NotificationKind {
+  AI_FLAG
+  RISK
+  CONTRACT
+  PAYMENT
+  SYSTEM
+}
+
+/// In-app notification for a staff member (userId) or a borrower (borrowerId).
+/// A staff notification with no userId goes to everyone in the console.
+model Notification {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  userId     String?          @db.Uuid
+  borrowerId String?          @db.Uuid
+  kind       NotificationKind
+  title      String
+  /// Where it links to inside the app, e.g. "/applications/APP-20914".
+  href       String?
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  user     User?     @relation(fields: [userId], references: [id])
+  borrower Borrower? @relation(fields: [borrowerId], references: [id])
+
+  @@index([userId, readAt])
+  @@index([borrowerId, readAt])
+}
+
+enum SmsDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum SmsStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model SmsMessage {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  borrowerId        String?      @db.Uuid
+  loanId            String?      @db.Uuid
+  toPhone           String
+  body              String
+  language          Language     @default(EN)
+  direction         SmsDirection @default(OUTBOUND)
+  status            SmsStatus    @default(QUEUED)
+  /// Which template produced it, e.g. "reminder.due_soon". Null for free text.
+  template          String?
+  provider          String       @default("africastalking")
+  providerMessageId String?      @unique
+  failureReason     String?
+  sentById          String?      @db.Uuid
+  createdAt         DateTime     @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+
+  borrower Borrower? @relation(fields: [borrowerId], references: [id])
+  loan     Loan?     @relation(fields: [loanId], references: [id])
+  sentBy   User?     @relation(fields: [sentById], references: [id])
+
+  @@index([borrowerId, createdAt])
+  @@index([status])
+}
+
+// ───────────────────────── Audit ─────────────────────────
+
+enum ActorType {
+  STAFF
+  BORROWER
+  SYSTEM
+}
+
+/// Who did what and when. Append-only: a trigger blocks UPDATE and DELETE.
+model AuditLog {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  actorType  ActorType @default(STAFF)
+  actorId    String?   @db.Uuid
+  /// Dotted verb, e.g. "auth.login", "loan.restructure.approve".
+  action     String
+  entityType String?
+  entityId   String?
+  /// Extra context. Must already be masked: no raw phone or ID numbers.
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  // actorId has no foreign key on purpose: an audit row must outlive whatever
+  // it describes, and a cascading update would trip the append-only trigger.
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+// ───────────────────────── Reference numbers ─────────────────────────
+
+/// Running numbers for human references (APP-20936, BR-01165, LN-0001-2027).
+/// Incremented with a single atomic statement, so two requests never share one.
+model CodeCounter {
+  key   String @id
+  value Int
+}
+
+// ───────────────────────── Providers ─────────────────────────
+
+/// Credentials the app obtains for itself (the MoMo sandbox API user and key).
+/// Values are encrypted like other secrets held in the database.
+model ProviderCredential {
+  key       String   @id
+  valueEnc  String
+  updatedAt DateTime @updatedAt
+}
+
+/// State for the local MoMo simulator, used only when no MoMo keys are set.
+model SimulatedTransfer {
+  reference String   @id
+  kind      String
+  phone     String
+  amount    BigInt
+  createdAt DateTime @default(now())
+}
+
+/// One-time sign-in codes for borrowers. Only a hash of the code is stored.
+model OtpChallenge {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  phone      String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}
+
+/// A borrower's sign-in session in the mobile app.
+model BorrowerSession {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  borrowerId       String    @db.Uuid
+  refreshTokenHash String    @unique
+  deviceName       String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  @@index([borrowerId])
+}
+
+/// A top-up or new-loan offer shown in the borrower app.
+model LoanOffer {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  borrowerId  String    @db.Uuid
+  productId   String    @db.Uuid
+  maxAmount   BigInt
+  termMonths  Int
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  expiresOn   DateTime  @db.Date
+  acceptedAt  DateTime?
+  dismissedAt DateTime?
+
+  borrower Borrower @relation(fields: [borrowerId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([borrowerId])
+}
+
+/// Monthly money-in on a borrower's MoMo wallet, shared with their consent.
+/// The scoring rules use it to judge how steady their income is.
+model MomoInflowMonth {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  borrowerId String   @db.Uuid
+  month      DateTime @db.Date
+  inflow     BigInt
+
+  borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  @@unique([borrowerId, month])
+}
+
+/// A question asked in "Ask your data", with the query that answered it.
+model DataQuestion {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  question  String
+  sql       String?
+  rowCount  Int?
+  error     String?
+  model     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Text an AI model wrote for staff: a borrower summary, a collections
+/// approach, an SMS draft. Always advisory, always stored with its inputs.
+model AiNote {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  kind       String
+  borrowerId String?  @db.Uuid
+  loanId     String?  @db.Uuid
+  content    Json
+  inputs     Json
+  model      String
+  createdAt  DateTime @default(now())
+
+  @@index([kind, borrowerId, createdAt])
+  @@index([kind, loanId, createdAt])
+}

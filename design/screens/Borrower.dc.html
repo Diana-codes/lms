@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Borrower profile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F1}
+a{color:#0E3B2E}a:hover{color:#08261D}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F5F1; font-family: Inter, system-ui, sans-serif; color: #121614">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0E3B2E; color: #E8EFE9; padding: 24px 16px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <div style="width: 32px; height: 32px; border-radius: 9px; background: #C6F432; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0E3B2E">K</div>
+      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #FFFFFF">Kora Lend</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="Pipeline.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Applications</a>
+      <a href="LoanDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg>Loans</a>
+      <a href="Borrower.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; background: #C6F432; color: #0E3B2E; text-decoration: none; font-weight: 600; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Borrowers</a>
+      <a href="Collections.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Collections</a>
+      <a href="Reports.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Reports</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5B635E">
+      <a href="#" style="color: #5B635E; text-decoration: none">Borrowers</a><span aria-hidden="true">/</span><span style="color: #121614">BR-00731</span>
+    </div>
+
+    <header style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 22px; padding: 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 18px">
+      <span style="width: 72px; height: 72px; border-radius: 22px; background: #0E3B2E; color: #C6F432; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 26px; display: flex; align-items: center; justify-content: center">AU</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; margin-right: auto">
+        <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Aline Uwase</h1>
+        <span style="font-size: 14px; color: #5B635E">Owner, Uwase Tailoring · Kimironko, Gasabo · Customer since Feb 2024</span>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px">
+          <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #E2F5C4; color: #2E4A05">KYC verified</span>
+          <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #E3ECF8; color: #1E3A66">Repeat borrower</span>
+          <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #EEF0EA; color: #3B423E">Low risk</span>
+        </div>
+      </div>
+      <button style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer" onClick="{{message}}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Message</button>
+      <button style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{offer}}" disabled="{{offered}}">{{offerLabel}}</button>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <section style="background: #0E3B2E; color: #FFFFFF; border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; align-items: center"><h2 style="margin: 0 auto 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">Credit score</h2><span style="font-size: 12px; color: #B9CCC0">Updated 2 Nov</span></div>
+          <div style="display: flex; align-items: baseline; gap: 10px">
+            <span style="font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 600; letter-spacing: -0.03em">742</span>
+            <span style="font-size: 13px; font-weight: 600; color: #C6F432">+18 in 6 months</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div role="img" aria-label="Score 742 on a scale of 300 to 850" style="position: relative; height: 10px; border-radius: 99px; background: linear-gradient(90deg, #C2410C 0%, #F0A23B 35%, #A9D61C 65%, #C6F432 100%)">
+              <span style="position: absolute; left: 80%; top: -5px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%; background: #FFFFFF; border: 4px solid #0E3B2E; box-sizing: border-box"></span>
+            </div>
+            <div style="display: flex; font-size: 11px; color: #B9CCC0"><span style="margin-right: auto">300</span><span>850</span></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; font-size: 13px">
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #B9CCC0">On-time payments</span><span style="font-weight: 600">100%</span></div>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #B9CCC0">Debt-to-income</span><span style="font-weight: 600">28%</span></div>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">KYC documents</h2>
+          <sc-for list="{{docs}}" as="d" hint-placeholder-count="4">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #F0F1EC">
+              <span style="width: 36px; height: 36px; border-radius: 10px; background: #F4F5F1; display: flex; align-items: center; justify-content: center; flex: none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B423E" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>
+              <div style="display: flex; flex-direction: column; margin-right: auto; min-width: 0"><span style="font-size: 14px; font-weight: 500">{{d.name}}</span><span style="font-size: 12px; color: #5B635E">{{d.meta}}</span></div>
+              <span style="{{d.pill}}">{{d.status}}</span>
+            </div>
+          </sc-for>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 12px; font-size: 14px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">Contact &amp; business</h2>
+          <div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #5B635E">Phone</span><span style="font-weight: 500">+250 78• ••• 412</span></div>
+          <div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #5B635E">MoMo wallet</span><span style="font-weight: 500">Linked</span></div>
+          <div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #5B635E">Sector</span><span style="font-weight: 500">Garments &amp; tailoring</span></div>
+          <div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #5B635E">Avg. monthly revenue</span><span style="font-weight: 500">RWF 1,650,000</span></div>
+          <div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #5B635E">Relationship officer</span><span style="font-weight: 500">Kevin N.</span></div>
+        </section>
+      </div>
+
+      <div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <section aria-label="AI summary" style="background: #F1EDFB; border: 1px solid #DCD3F5; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 12px; color: #2D1766">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 32px; height: 32px; border-radius: 10px; background: #4B2A9B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+            <h2 style="margin: 0 auto 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 16px; font-weight: 600">AI summary</h2>
+            <span style="font-size: 12px; color: #3E2A78">Updated today</span>
+          </div>
+          <p style="margin: 0; font-size: 14px; line-height: 1.55; color: #2A2140">Low risk, and improving. MoMo inflows have been steady at about RWF 1.6M a month for 14 months, with a rise every December–January from school-uniform orders. A top-up to RWF 6M over 18 months would cost about RWF 380,000 a month, 23% of her revenue, inside the 35% affordability limit.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FFFFFF; color: #2D1766">Why: 24 on-time payments</span>
+            <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FFFFFF; color: #2D1766">Why: stable revenue</span>
+            <span style="font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #FFFFFF; color: #7A3B06">Watch: proof of address expires 30 Nov</span>
+          </div>
+        </section>
+
+        <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px">
+          <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Lifetime borrowed</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600">RWF 7.3M</span></div>
+          <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Currently owed</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600">RWF 3.12M</span></div>
+          <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Pre-approved limit</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600; color: #1F6B45">RWF 6.0M</span></div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Loans</h2>
+          <div style="overflow-x: auto">
+            <table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums">
+              <thead>
+                <tr style="text-align: left; color: #5B635E; font-size: 12px">
+                  <th style="font-weight: 500; padding: 8px 8px 10px 0; border-bottom: 1px solid #E1E4DD">Loan</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD">Product</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Principal</th>
+                  <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD">Period</th>
+                  <th style="font-weight: 500; padding: 8px 0 10px 8px; border-bottom: 1px solid #E1E4DD">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding: 12px 8px 12px 0; border-bottom: 1px solid #F0F1EC"><a href="LoanDetail.dc.html" style="font-weight: 600">LN-0418-2026</a></td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC">SME working capital</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">RWF 4,500,000</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; color: #5B635E">May 2026 – Nov 2027</td>
+                  <td style="padding: 12px 0 12px 8px; border-bottom: 1px solid #F0F1EC"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #121614; color: #C6F432">Active</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 8px 12px 0; border-bottom: 1px solid #F0F1EC; font-weight: 600">LN-0912-2025</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC">SME working capital</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">RWF 2,000,000</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; color: #5B635E">Mar 2025 – Mar 2026</td>
+                  <td style="padding: 12px 0 12px 8px; border-bottom: 1px solid #F0F1EC"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #E2F5C4; color: #2E4A05">Repaid early</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 8px 12px 0; border-bottom: 1px solid #F0F1EC; font-weight: 600">LN-0233-2024</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC">Personal loan</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">RWF 800,000</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; color: #5B635E">Feb 2024 – Aug 2024</td>
+                  <td style="padding: 12px 0 12px 8px; border-bottom: 1px solid #F0F1EC"><span style="font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #E2F5C4; color: #2E4A05">Repaid</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+            <h2 style="margin: 0 auto 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Payment history</h2>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5B635E"><span style="width: 12px; height: 12px; border-radius: 4px; background: #0E3B2E"></span>On time</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5B635E"><span style="width: 12px; height: 12px; border-radius: 4px; background: #A9D61C"></span>Early</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5B635E"><span style="width: 12px; height: 12px; border-radius: 4px; border: 1.5px dashed #A7ADA3; box-sizing: border-box"></span>Upcoming</span>
+          </div>
+          <div role="img" aria-label="24 instalments paid on time or early, next 6 upcoming" style="display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 6px">
+            <sc-for list="{{cells}}" as="c" hint-placeholder-count="30">
+              <span style="{{c}}"></span>
+            </sc-for>
+          </div>
+          <span style="font-size: 13px; color: #5B635E">24 instalments across 3 loans · never late · 2 paid early</span>
+        </section>
+
+        <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Officer notes</h2>
+          <sc-for list="{{notes}}" as="n" hint-placeholder-count="0">
+            <div style="background: #F4F5F1; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 14px; line-height: 1.5; white-space: pre-line">{{n.text}}</span>
+              <span style="font-size: 12px; color: #5B635E">{{n.who}}</span>
+            </div>
+          </sc-for>
+          <div style="background: #F4F5F1; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 14px; line-height: 1.5">Visited the shop on 28 Oct. Two new sewing machines bought with the current loan; school-uniform orders up for January.</span>
+            <span style="font-size: 12px; color: #5B635E">Kevin N. · 28 Oct 2026</span>
+          </div>
+          <label for="note" style="position: absolute; left: -9999px">Add a note</label>
+          <textarea id="note" rows="2" placeholder="Add a note…" value="{{draft}}" onChange="{{editNote}}" style="font: inherit; font-size: 14px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 12px; resize: vertical"></textarea>
+          <button onClick="{{saveNote}}" style="align-self: flex-end; height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Save note</button>
+        </section>
+      </div>
+    </div>
+  </main>
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: #121614; color: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.4; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: max-content; max-width: min(440px, calc(100% - 32px)); box-sizing: border-box">
+      <span style="width: 22px; height: 22px; border-radius: 50%; background: #C6F432; display: flex; align-items: center; justify-content: center; flex: none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0E3B2E" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+      <span>{{toast}}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1340}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { offered: false, notes: [], draft: '', toast: null };
+  }
+  flash(msg) {
+    var self = this;
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(function () { self.setState({ toast: null }); }, 3500);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    var self = this, st = this.state;
+    var pill = function (bg, fg) { return 'font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; flex: none; background: ' + bg + '; color: ' + fg; };
+    var docs = [
+      { name: 'National ID', meta: 'Verified via NIDA · Feb 2024', status: 'Verified', pill: pill('#E2F5C4', '#2E4A05') },
+      { name: 'Business registration (RDB)', meta: 'Uploaded Mar 2025', status: 'Verified', pill: pill('#E2F5C4', '#2E4A05') },
+      { name: 'Bank & MoMo statements', meta: '6 months · Apr 2026', status: 'Verified', pill: pill('#E2F5C4', '#2E4A05') },
+      { name: 'Proof of address', meta: 'Expires 30 Nov 2026', status: 'Renew soon', pill: pill('#FFF0DA', '#7A3B06') }
+    ];
+    var base = 'height: 28px; border-radius: 6px; box-sizing: border-box; ';
+    var cells = [];
+    for (var i = 0; i < 30; i++) {
+      if (i >= 24) cells.push(base + 'border: 1.5px dashed #A7ADA3');
+      else if (i === 4 || i === 13) cells.push(base + 'background: #A9D61C');
+      else cells.push(base + 'background: #0E3B2E');
+    }
+    return {
+      docs: docs, cells: cells,
+      notes: st.notes,
+      draft: st.draft,
+      editNote: function (e) { self.setState({ draft: e.target.value }); },
+      saveNote: function () {
+        var t = (self.state.draft || '').trim();
+        if (!t) { self.flash('Write something first.'); return; }
+        self.setState({ notes: [{ text: t, who: 'You · 12 Nov 2026' }].concat(self.state.notes), draft: '' });
+        self.flash('Note saved.');
+      },
+      message: function () { self.flash('SMS thread with Aline opened. Replies show up in her activity.'); },
+      offer: function () { self.setState({ offered: true }); self.flash('Top-up offer of up to RWF 6,000,000 sent to Aline\u2019s app and by SMS.'); },
+      offered: st.offered,
+      offerLabel: st.offered ? 'Offer sent' : 'Offer top-up',
+      hasToast: !!st.toast,
+      toast: st.toast || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

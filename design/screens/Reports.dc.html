@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reports</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F1}
+a{color:#0E3B2E}a:hover{color:#08261D}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F5F1; font-family: Inter, system-ui, sans-serif; color: #121614">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0E3B2E; color: #E8EFE9; padding: 24px 16px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <div style="width: 32px; height: 32px; border-radius: 9px; background: #C6F432; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0E3B2E">K</div>
+      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #FFFFFF">Kora Lend</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="Pipeline.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Applications</a>
+      <a href="LoanDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg>Loans</a>
+      <a href="Borrower.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Borrowers</a>
+      <a href="Collections.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Collections</a>
+      <a href="Reports.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; background: #C6F432; color: #0E3B2E; text-decoration: none; font-weight: 600; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Reports</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 4px; margin-right: auto">
+        <span style="font-size: 13px; color: #5B635E">{{periodText}} · all branches</span>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em">Reports</h1>
+      </div>
+      <div role="group" aria-label="Period" style="display: flex; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 12px; padding: 3px">
+        <sc-for list="{{periods}}" as="p" hint-placeholder-count="3">
+          <button aria-pressed="{{p.pressed}}" onClick="{{p.pick}}" style="{{p.style}}">{{p.label}}</button>
+        </sc-for>
+      </div>
+      <button style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer" onClick="{{exportReport}}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Export</button>
+    </header>
+
+    <section aria-label="Ask your data" style="background: #FFFFFF; border: 1px solid #DCD3F5; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 0 0 4px #F1EDFB">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <span style="width: 36px; height: 36px; border-radius: 10px; background: #4B2A9B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+        <label for="ask" style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; margin-right: auto">Ask your data</label>
+        <span style="font-size: 12px; color: #5B635E">Answers in English, Kinyarwanda or French</span>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <input id="ask" type="text" value="{{askText}}" onChange="{{editAsk}}" style="flex: 1; min-width: 0; font: inherit; font-size: 15px; height: 48px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 14px; box-sizing: border-box">
+        <button style="height: 48px; padding: 0 18px; border-radius: 12px; border: 0; background: #4B2A9B; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{ask}}">Ask</button>
+      </div>
+      <div role="group" aria-label="Suggested questions" style="display: flex; flex-wrap: wrap; gap: 8px">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="3">
+          <button aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.label}}</button>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; background: #FAF8FE; border-radius: 14px; padding: 16px">
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+          <span style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600; color: #2D1766">{{q.headline}}</span>
+          <span style="font-size: 14px; line-height: 1.55; color: #3B423E">{{q.body}}</span>
+          <span style="font-size: 12px; color: #5B635E">{{q.source}}</span>
+        </div>
+        <div role="img" aria-label="{{q.chartLabel}}" style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 10px; justify-content: center">
+          <sc-for list="{{q.bars}}" as="b" hint-placeholder-count="4">
+            <div style="display: grid; grid-template-columns: 110px minmax(0, 1fr) 64px; gap: 10px; align-items: center; font-size: 13px">
+              <span>{{b.label}}</span>
+              <span style="height: 12px; border-radius: 99px; background: #ECE7F8"><span style="{{b.bar}}"></span></span>
+              <span style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums">{{b.value}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+          <span style="font-size: 12px; color: #5B635E">{{k.label}}</span>
+          <div style="display: flex; align-items: flex-end; gap: 10px">
+            <span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; margin-right: auto">{{k.value}}</span>
+            <svg width="88" height="32" viewBox="0 0 88 32" aria-hidden="true"><polyline points="{{k.spark}}" fill="none" stroke="{{k.color}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>
+          </div>
+          <span style="{{k.deltaStyle}}">{{k.delta}}</span>
+        </div>
+      </sc-for>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px">
+      <section style="flex: 2 1 520px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap">
+          <h2 style="margin: 0 auto 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Portfolio growth</h2>
+          <span style="font-size: 13px; color: #5B635E">Outstanding balance, RWF billions</span>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <div style="display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: #5B635E; height: 220px; text-align: right; width: 28px"><span>2.5</span><span>2.0</span><span>1.5</span></div>
+          <div style="flex: 1; min-width: 0; position: relative; height: 220px">
+            <div style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between" aria-hidden="true">
+              <span style="border-top: 1px dashed #E1E4DD"></span><span style="border-top: 1px dashed #E1E4DD"></span><span style="border-top: 1px solid #E1E4DD"></span>
+            </div>
+            <svg role="img" aria-label="{{growthLabel}}" viewBox="0 0 600 220" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%">
+              <polygon points="{{growthArea}}" fill="#C6F432" fill-opacity="0.35"></polygon>
+              <polyline points="{{growthLine}}" fill="none" stroke="#0E3B2E" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+            </svg>
+            <span style="position: absolute; right: 0; top: 0; transform: translateY(-4px); background: #0E3B2E; color: #FFFFFF; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px">2.48B</span>
+          </div>
+        </div>
+        <div style="display: flex; padding-left: 38px">
+          <sc-for list="{{months}}" as="m" hint-placeholder-count="12">
+            <span style="flex: 1; text-align: center; font-size: 11px; color: #5B635E">{{m}}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="flex: 1 1 320px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Portfolio by product</h2>
+          <span style="font-size: 13px; color: #5B635E">Share of RWF 2.48B outstanding</span>
+        </div>
+        <sc-for list="{{products}}" as="p" hint-placeholder-count="5">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; font-size: 13px"><span style="margin-right: auto">{{p.name}}</span><span style="font-weight: 600; font-variant-numeric: tabular-nums">{{p.amt}} · {{p.pct}}%</span></div>
+            <div style="height: 10px; border-radius: 99px; background: #EEF0EA"><div style="{{p.bar}}"></div></div>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px">
+      <section style="flex: 1 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; align-items: baseline; gap: 12px">
+          <h2 style="margin: 0 auto 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Portfolio at risk (30+)</h2>
+          <span style="font-size: 13px; color: #A6420E; font-weight: 600">3.1% · target ≤ 3.0%</span>
+        </div>
+        <div style="position: relative; height: 160px">
+          <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 33.3%; border-top: 1.5px dashed #C2410C"></span>
+          <span style="position: absolute; left: 0; top: 33.3%; transform: translateY(-120%); font-size: 11px; color: #A6420E">Target 3.0%</span>
+          <svg role="img" aria-label="{{parLabel}}" viewBox="0 0 600 160" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%">
+            <polyline points="{{parLine}}" fill="none" stroke="#121614" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+          </svg>
+        </div>
+        <div style="display: flex">
+          <sc-for list="{{months}}" as="m" hint-placeholder-count="12">
+            <span style="flex: 1; text-align: center; font-size: 11px; color: #5B635E">{{m}}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="flex: 2 1 520px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">Loan officer performance</h2>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums">
+            <thead>
+              <tr style="text-align: left; color: #5B635E; font-size: 12px">
+                <th style="font-weight: 500; padding: 8px 8px 10px 0; border-bottom: 1px solid #E1E4DD">Officer</th>
+                <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Active loans</th>
+                <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">Portfolio</th>
+                <th style="font-weight: 500; padding: 8px; border-bottom: 1px solid #E1E4DD; text-align: right">PAR 30</th>
+                <th style="font-weight: 500; padding: 8px 0 10px 8px; border-bottom: 1px solid #E1E4DD">Collection rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{officers}}" as="o" hint-placeholder-count="4">
+                <tr>
+                  <td style="padding: 12px 8px 12px 0; border-bottom: 1px solid #F0F1EC">
+                    <span style="display: flex; align-items: center; gap: 10px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #E3EBDF; color: #0E3B2E; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{o.ini}}</span><span style="font-weight: 500">{{o.name}}</span></span>
+                  </td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right">{{o.loans}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">{{o.port}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right"><span style="{{o.parStyle}}">{{o.par}}</span></td>
+                  <td style="padding: 12px 0 12px 8px; border-bottom: 1px solid #F0F1EC">
+                    <span style="display: flex; align-items: center; gap: 10px"><span style="flex: 1; height: 6px; border-radius: 99px; background: #EEF0EA"><span style="{{o.bar}}"></span></span><span style="font-weight: 600; width: 44px; text-align: right">{{o.rate}}</span></span>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: #121614; color: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.4; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: max-content; max-width: min(440px, calc(100% - 32px)); box-sizing: border-box">
+      <span style="width: 22px; height: 22px; border-radius: 50%; background: #C6F432; display: flex; align-items: center; justify-content: center; flex: none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0E3B2E" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+      <span>{{toast}}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1460}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: 0, period: '12M', ask: null, toast: null };
+  }
+  flash(msg) {
+    var self = this;
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(function () { self.setState({ toast: null }); }, 3500);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    var self = this;
+    var mk = function (rows, max, unit) {
+      return rows.map(function (r, i) {
+        return { label: r[0], value: r[1] + unit, bar: 'display: block; height: 12px; border-radius: 99px; width: ' + Math.round(r[1] / max * 100) + '%; background: ' + (i === 0 ? '#4B2A9B' : '#A693E0') };
+      });
+    };
+    var qs = [
+      { chip: 'Worst late-payment rate by product', text: 'Which product had the highest late-payment rate last quarter?',
+        headline: 'Agri input loans: 4.6% late',
+        body: 'In Aug–Oct, 4.6% of the agri input balance was 30+ days late, against 3.1% for the whole portfolio. Most of it sits in Musanze and Nyabihu, where borrowers mention falling potato prices.',
+        source: 'Based on 1,142 active loans · Aug–Oct 2026', chartLabel: 'Share of balance 30+ days late by product',
+        bars: mk([['Agri input', 4.6], ['Personal', 3.8], ['Asset finance', 2.9], ['SME', 2.4], ['Salary advance', 1.1]], 5, '%') },
+      { chip: 'Fastest-growing branch', text: 'Which branch grew its portfolio fastest this year?',
+        headline: 'Kimironko: +71%',
+        body: 'Kimironko grew fastest, mostly from repeat SME borrowers taking top-ups. Musanze is second but carries the highest late-payment rate, so its growth may need closer review.',
+        source: 'Outstanding balance, Dec 2025 vs Nov 2026', chartLabel: 'Portfolio growth by branch',
+        bars: mk([['Kimironko', 71], ['Musanze', 58], ['Huye', 49], ['Rubavu', 41]], 80, '%') },
+      { chip: 'December collections forecast', text: 'How much will we collect in December?',
+        headline: 'About RWF 268M expected',
+        body: 'Likely range RWF 255–279M. Week 2 is the softest because of salary timing; sending reminders two days before due dates is expected to add roughly RWF 4M.',
+        source: 'Forecast from repayment schedules and past payment behaviour', chartLabel: 'Expected December collections by week, RWF millions',
+        bars: mk([['Week 1', 72], ['Week 2', 64], ['Week 3', 70], ['Week 4', 62]], 80, 'M') }
+    ];
+    var q = qs[this.state.q];
+    var chips = qs.map(function (x, i) {
+      var on = i === self.state.q;
+      return {
+        label: x.chip, pressed: on ? 'true' : 'false',
+        style: 'height: 36px; padding: 0 14px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; ' + (on ? 'border: 1px solid #4B2A9B; background: #F1EDFB; color: #2D1766; font-weight: 600' : 'border: 1px solid #D5D9D0; background: #FFFFFF; color: #3B423E'),
+        pick: function () { self.setState({ q: i, ask: null }); }
+      };
+    });
+    var months = ['Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov'];
+    var line = function (vals, w, h, lo, hi) {
+      var step = w / (vals.length - 1);
+      return vals.map(function (v, i) { return (i * step).toFixed(1) + ',' + (h - (v - lo) / (hi - lo) * h).toFixed(1); }).join(' ');
+    };
+    var period = this.state.period;
+    var from = period === 'Q' ? 9 : (period === 'YTD' ? 1 : 0);
+    var cut = function (a) { return a.slice(from); };
+    var periodName = { Q: 'last 3 months', YTD: 'this year', '12M': '12 months' }[period];
+    var allMonths = months;
+    months = cut(allMonths);
+    var growth = cut([1.58,1.64,1.71,1.77,1.84,1.90,1.97,2.04,2.11,2.19,2.29,2.48]);
+    var growthLine = line(growth, 600, 220, 1.5, 2.5);
+    var par = cut([2.4,2.5,2.3,2.6,2.8,2.7,2.5,2.6,2.8,2.9,2.7,3.1]);
+    var loansS = cut([820,846,871,899,930,958,987,1012,1040,1071,1098,1142]);
+    var avgS = cut([1.93,1.94,1.96,1.97,1.98,1.98,2.0,2.02,2.03,2.04,2.09,2.17]);
+    var yieldS = cut([18.9,18.8,18.8,18.7,18.7,18.6,18.6,18.7,18.6,18.6,18.5,18.6]);
+    var pctDelta = function (a) { var d = Math.round((a[a.length - 1] / a[0] - 1) * 100); return (d >= 0 ? '+' : '−') + Math.abs(d) + '% over ' + periodName; };
+    var yd = Math.round((yieldS[yieldS.length - 1] - yieldS[0]) * 10) / 10;
+    var spark = function (vals) {
+      var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+      var step = 84 / (vals.length - 1);
+      return vals.map(function (v, i) { return (2 + i * step).toFixed(1) + ',' + (30 - (v - lo) / (hi - lo || 1) * 28).toFixed(1); }).join(' ');
+    };
+    var up = 'font-size: 12px; font-weight: 600; color: #1F6B45';
+    var kpis = [
+      { label: 'Outstanding portfolio', value: 'RWF 2.48B', spark: spark(growth), color: '#0E3B2E', delta: pctDelta(growth), deltaStyle: up },
+      { label: 'Active loans', value: '1,142', spark: spark(loansS), color: '#0E3B2E', delta: '+' + (loansS[loansS.length - 1] - loansS[0]) + ' over ' + periodName, deltaStyle: up },
+      { label: 'Average loan size', value: 'RWF 2.17M', spark: spark(avgS), color: '#0E3B2E', delta: pctDelta(avgS), deltaStyle: up },
+      { label: 'Portfolio yield', value: '18.6%', spark: spark(yieldS), color: '#5B635E', delta: (yd > 0 ? '+' : (yd < 0 ? '−' : '±')) + Math.abs(yd).toFixed(1) + ' pts over ' + periodName, deltaStyle: 'font-size: 12px; font-weight: 600; color: #5B635E' }
+    ];
+    var prods = [['SME working capital', '942M', 38], ['Asset finance', '595M', 24], ['Agri input', '422M', 17], ['Personal', '322M', 13], ['Salary advance', '198M', 8]];
+    var products = prods.map(function (p, i) {
+      return { name: p[0], amt: 'RWF ' + p[1], pct: p[2], bar: 'height: 10px; border-radius: 99px; width: ' + Math.round(p[2] / 38 * 100) + '%; background: ' + (i === 0 ? '#0E3B2E' : (i === 1 ? '#2F6B52' : (i === 2 ? '#6E9E3A' : (i === 3 ? '#A9D61C' : '#C6F432')))) };
+    });
+    var off = [['KN', 'Kevin N.', 312, 'RWF 702M', 2.2, 97.8], ['JM', 'Jeanne M.', 288, 'RWF 611M', 2.9, 96.5], ['AM', 'Aimable M.', 274, 'RWF 590M', 3.4, 95.9], ['DR', 'Diane R.', 268, 'RWF 577M', 4.0, 95.1]];
+    var officers = off.map(function (o) {
+      var bad = o[4] > 3.0;
+      return {
+        ini: o[0], name: o[1], loans: o[2], port: o[3], par: o[4].toFixed(1) + '%', rate: o[5].toFixed(1) + '%',
+        parStyle: 'font-weight: 600; padding: 3px 8px; border-radius: 999px; ' + (bad ? 'background: #FBE4DF; color: #8A2412' : 'background: #E2F5C4; color: #2E4A05'),
+        bar: 'display: block; height: 6px; border-radius: 99px; background: #0E3B2E; width: ' + Math.round((o[5] - 90) / 10 * 100) + '%'
+      };
+    });
+    var spans = { Q: 'Sep – Nov 2026', YTD: 'Jan – Nov 2026', '12M': 'Dec 2025 – Nov 2026' };
+    var periods = [['Q', 'Quarter'], ['YTD', 'YTD'], ['12M', '12 months']].map(function (p) {
+      var on = period === p[0];
+      return { label: p[1], pressed: on ? 'true' : 'false', pick: function () { self.setState({ period: p[0] }); },
+        style: 'border: 0; font: inherit; font-size: 13px; padding: 0 14px; height: 36px; border-radius: 9px; cursor: pointer; ' + (on ? 'background: #121614; color: #FFFFFF; font-weight: 600' : 'background: transparent; color: #3B423E') };
+    });
+    var parLo = Math.min.apply(null, par), parHi = Math.max.apply(null, par);
+    return {
+      periods: periods,
+      periodText: spans[period],
+      growthLabel: 'Outstanding portfolio grew from RWF ' + growth[0].toFixed(2) + ' billion in ' + months[0] + ' to RWF 2.48 billion in November',
+      parLabel: 'Portfolio at risk ranged between ' + parLo + ' and ' + parHi + ' percent, ending at 3.1 percent',
+      askText: this.state.ask !== null ? this.state.ask : q.text,
+      editAsk: function (e) { self.setState({ ask: e.target.value }); },
+      ask: function () {
+        var t = (self.state.ask || '').toLowerCase();
+        var hit = -1;
+        if (/late|arrear|par|risk/.test(t)) hit = 0; else if (/branch|grow/.test(t)) hit = 1; else if (/collect|forecast|december/.test(t)) hit = 2;
+        if (self.state.ask === null) return;
+        if (hit >= 0) self.setState({ q: hit, ask: null });
+        else self.flash('In this prototype, try a question about late payments, branch growth or the December forecast.');
+      },
+      exportReport: function () { self.flash('Report for ' + spans[period] + ' exported as PDF and Excel.'); },
+      hasToast: !!this.state.toast,
+      toast: this.state.toast || '',
+      q: q,
+      chips: chips,
+      months: months,
+      kpis: kpis,
+      growthLine: growthLine,
+      growthArea: '0,220 ' + growthLine + ' 600,220',
+      parLine: line(par, 600, 160, 2.0, 3.5),
+      products: products,
+      officers: officers
+    };
+  }
+}
+</script>
+</body>
+</html>

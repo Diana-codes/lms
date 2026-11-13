@@ -1,0 +1,85 @@
+/*
+ * Kora Lend theme for Tailwind CSS v4. Mirrors tokens.ts; tokens.test.ts fails
+ * if the two drift apart. Import after `tailwindcss` in the app's global CSS.
+ */
+@theme {
+  --color-ground: #f4f5f1;
+  --color-surface: #ffffff;
+  --color-line: #e1e4dd;
+  --color-line-soft: #f0f1ec;
+  --color-track: #e9ece5;
+  --color-ink: #121614;
+  --color-ink-soft: #3b423e;
+  --color-ink-muted: #5b635e;
+  --color-forest: #0e3b2e;
+  --color-forest-deep: #08261d;
+  --color-forest-fg: #e8efe9;
+  --color-forest-muted: #b9ccc0;
+  --color-lime: #c6f432;
+  --color-lime-deep: #a9d61c;
+  --color-lime-tint: #f7fbea;
+  --color-amber: #f0a23b;
+  --color-rust: #c2410c;
+  --color-ai: #4b2a9b;
+  --color-ai-tint: #f1edfb;
+  --color-ai-line: #dcd3f5;
+  --color-success-bg: #e2f5c4;
+  --color-success-fg: #2e4a05;
+  --color-info-bg: #e3ecf8;
+  --color-info-fg: #1e3a66;
+  --color-warning-bg: #fff0da;
+  --color-warning-fg: #7a3b06;
+  --color-danger-bg: #fbe4df;
+  --color-danger-fg: #8a2412;
+  --color-neutral-bg: #eef0ea;
+  --color-neutral-fg: #3b423e;
+  --color-avatar-bg: #e3ebdf;
+  --color-positive-fg: #1f6b45;
+  --color-caution-fg: #a6420e;
+  --color-caution-bg: #fff4e5;
+  --color-caution-ink: #5a2a08;
+  --color-board-column: #ebede6;
+  --color-ai-ink: #2d1766;
+  --color-ai-ink-soft: #3e2a78;
+  --color-ai-edge: #b7a6ea;
+  --color-tag-personal-bg: #f1e6f8;
+  --color-tag-personal-fg: #5b1f7a;
+  --color-paid-row: #f2f8e3;
+
+  --font-sans: 'Inter Variable', Inter, system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
+
+  --radius-control: 12px;
+  --radius-nav: 10px;
+  --radius-panel: 14px;
+  --radius-card: 20px;
+  --radius-pill: 999px;
+
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.25);
+  --shadow-card: 0 1px 2px rgba(18, 22, 20, 0.06);
+  --shadow-pop: 0 16px 40px rgba(18, 22, 20, 0.16);
+  --shadow-toast: 0 10px 30px rgba(0, 0, 0, 0.2);
+  --shadow-segment: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+@layer base {
+  body {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  a {
+    color: var(--color-forest);
+  }
+
+  a:hover {
+    color: var(--color-forest-deep);
+  }
+
+  /* A visible focus ring everywhere, for keyboard users. */
+  :focus-visible {
+    outline: 2px solid var(--color-forest);
+    outline-offset: 2px;
+  }
+}

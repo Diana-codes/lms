@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Kora Lend",
+    "slug": "kora-lend",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F4F5F1",
+    "android": { "package": "rw.koralend.borrower" },
+    "ios": { "bundleIdentifier": "rw.koralend.borrower" }
+  }
+}

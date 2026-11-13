@@ -1,0 +1,35 @@
+{
+  "name": "kora-lend",
+  "private": true,
+  "packageManager": "pnpm@10.21.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @kora/api db:migrate",
+    "db:seed": "pnpm --filter @kora/api db:seed",
+    "db:reset": "pnpm --filter @kora/api db:reset",
+    "setup:env": "node scripts/setup-env.mjs",
+    "db:reporting-role": "node scripts/reporting-role.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "latest",
+    "globals": "latest",
+    "prettier": "^3.10.1",
+    "turbo": "^2.11.11",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.72.2"
+  }
+}

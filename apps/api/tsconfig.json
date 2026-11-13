@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strictPropertyInitialization": false,
+    "isolatedModules": true,
+    "sourceMap": true,
+    "incremental": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "src",
+    "prisma",
+    "test",
+    "prisma.config.ts",
+    "vitest.config.mts",
+    "vitest.e2e.config.mts"
+  ]
+}

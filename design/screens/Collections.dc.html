@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Collections</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F1}
+a{color:#0E3B2E}a:hover{color:#08261D}
+input[type=radio]{accent-color:#0E3B2E}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F5F1; font-family: Inter, system-ui, sans-serif; color: #121614">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0E3B2E; color: #E8EFE9; padding: 24px 16px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <div style="width: 32px; height: 32px; border-radius: 9px; background: #C6F432; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0E3B2E">K</div>
+      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #FFFFFF">Kora Lend</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="Pipeline.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Applications</a>
+      <a href="LoanDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg>Loans</a>
+      <a href="Borrower.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Borrowers</a>
+      <a href="Collections.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; background: #C6F432; color: #0E3B2E; text-decoration: none; font-weight: 600; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Collections<span style="margin-left: auto; background: rgba(14,59,46,0.14); border-radius: 999px; padding: 2px 8px; font-size: 12px">121</span></a>
+      <a href="Reports.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Reports</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 4px; margin-right: auto">
+        <span style="font-size: 13px; color: #5B635E">Your queue · Thursday, 12 November</span>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em">Collections</h1>
+      </div>
+      <button style="height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{bulkSms}}">Bulk SMS</button>
+      <button style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{assign}}">Assign accounts</button>
+    </header>
+
+    <section aria-label="Collection metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px">
+      <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Accounts in arrears</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">121</span><span style="font-size: 12px; color: #A6420E; font-weight: 500">+9 this week</span></div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Balance at risk (30+ days)</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">RWF 76.9M</span><span style="font-size: 12px; color: #5B635E">3.1% of portfolio</span></div>
+      <div style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #5B635E">Promises to pay · this week</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">18</span><span style="font-size: 12px; color: #5B635E">RWF 4.2M promised</span></div>
+      <div style="background: #0E3B2E; color: #FFFFFF; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px"><span style="font-size: 12px; color: #B9CCC0">Recovered this month</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; color: #C6F432">RWF 11.6M</span><span style="font-size: 12px; color: #B9CCC0">64% of target</span></div>
+    </section>
+
+    <section aria-label="AI early warning" style="background: #F1EDFB; border: 1px solid #DCD3F5; border-radius: 18px; padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: #4B2A9B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 300px; min-width: 0">
+        <span style="font-size: 14px; font-weight: 600; color: #2D1766">Early warning: 9 borrowers who are up to date are likely to miss their next payment</span>
+        <span style="font-size: 13px; color: #3E2A78">Main signals: MoMo inflows down 30%+ this month (5), a payment made late last cycle (3), farm-gate prices falling (1)</span>
+      </div>
+      <div style="display: flex; align-items: center" aria-label="Examples: Diane K., Paul N., Rose U. and 6 more">
+        <span style="width: 32px; height: 32px; border-radius: 50%; background: #FFFFFF; border: 2px solid #F1EDFB; color: #2D1766; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">DK</span>
+        <span style="width: 32px; height: 32px; border-radius: 50%; background: #FFFFFF; border: 2px solid #F1EDFB; color: #2D1766; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px">PN</span>
+        <span style="width: 32px; height: 32px; border-radius: 50%; background: #FFFFFF; border: 2px solid #F1EDFB; color: #2D1766; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px">RU</span>
+        <span style="width: 32px; height: 32px; border-radius: 50%; background: #4B2A9B; border: 2px solid #F1EDFB; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px">+6</span>
+      </div>
+      <button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: #4B2A9B; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer" onClick="{{checkins}}" disabled="{{checkinsDone}}">{{checkinLabel}}</button>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <section style="flex: 2 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+        <div role="tablist" aria-label="Days past due" style="display: flex; flex-wrap: wrap; gap: 6px">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+            <button role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}<span style="{{t.countStyle}}">{{t.count}}</span></button>
+          </sc-for>
+        </div>
+        <div style="overflow-x: auto">
+          <div style="min-width: 640px; display: flex; flex-direction: column">
+            <div style="display: grid; grid-template-columns: 2.2fr 1.3fr 1.2fr 1.3fr 1fr; gap: 12px; padding: 8px 12px; font-size: 12px; color: #5B635E; border-bottom: 1px solid #E1E4DD">
+              <span>Borrower</span><span>Days late</span><span style="text-align: right">Overdue</span><span>Last contact</span><span>Next step</span>
+            </div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+              <button onClick="{{r.pick}}" aria-pressed="{{r.sel}}" style="{{r.style}}">
+                <span style="display: flex; align-items: center; gap: 10px; min-width: 0">
+                  <span style="width: 34px; height: 34px; border-radius: 50%; background: #E3EBDF; color: #0E3B2E; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">{{r.ini}}</span>
+                  <span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">{{r.name}}</span><span style="font-size: 12px; color: #5B635E">{{r.loan}}</span></span>
+                </span>
+                <span style="display: flex; flex-direction: column; gap: 6px"><span style="font-weight: 600">{{r.days}} days</span><span style="height: 5px; border-radius: 99px; background: #EEF0EA"><span style="{{r.bar}}"></span></span></span>
+                <span style="text-align: right; font-weight: 600; font-variant-numeric: tabular-nums">{{r.overdue}}</span>
+                <span style="font-size: 13px; color: #3B423E">{{r.contact}}</span>
+                <span><span style="{{r.pill}}">{{r.next}}</span></span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <aside aria-label="Selected account" style="flex: 1 1 320px; min-width: 0; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="width: 48px; height: 48px; border-radius: 14px; background: #0E3B2E; color: #C6F432; font-weight: 600; display: flex; align-items: center; justify-content: center">{{cur.ini}}</span>
+          <div style="display: flex; flex-direction: column; margin-right: auto"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">{{cur.name}}</span><span style="font-size: 12px; color: #5B635E">{{cur.loan}} · {{cur.phone}}</span></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <div style="background: #FBE9E1; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #7A2A0E">Overdue</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; color: #5A1C06">{{cur.overdue}}</span></div>
+          <div style="background: #F4F5F1; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #5B635E">Outstanding</span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600">{{cur.outstanding}}</span></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <button style="height: 44px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer" onClick="{{call}}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Call</button>
+          <button style="height: 44px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{openDraft}}">Send SMS</button>
+        </div>
+        <div style="background: #F1EDFB; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; color: #2D1766">
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>AI suggested approach</span>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45">
+            <span><span style="font-weight: 600">Best time:</span> {{cur.aiTime}}</span>
+            <span><span style="font-weight: 600">Offer:</span> {{cur.aiOffer}}</span>
+            <span style="color: #3E2A78">{{cur.aiOdds}}</span>
+          </div>
+          <button style="align-self: flex-start; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #B7A6EA; background: #FFFFFF; color: #2D1766; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer" onClick="{{openDraftRw}}">Draft SMS in Kinyarwanda</button>
+        </div>
+        <sc-if value="{{draftOpen}}" hint-placeholder-val="{{ false }}">
+          <div style="border: 1px solid #D5D9D0; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+            <label for="sms" style="font-size: 12px; color: #5B635E">SMS to {{cur.phone}} · {{draftLang}}</label>
+            <textarea id="sms" rows="4" value="{{draftText}}" onChange="{{editDraft}}" style="font: inherit; font-size: 14px; line-height: 1.45; border: 1px solid #D5D9D0; border-radius: 10px; padding: 10px; resize: vertical"></textarea>
+            <div style="display: flex; gap: 8px; justify-content: flex-end">
+              <button onClick="{{closeDraft}}" style="height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Cancel</button>
+              <button onClick="{{sendDraft}}" style="height: 38px; padding: 0 14px; border-radius: 10px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer">Send SMS</button>
+            </div>
+          </div>
+        </sc-if>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 14px; font-weight: 600">Contact log</h2>
+          <sc-for list="{{cur.log}}" as="l" hint-placeholder-count="2">
+            <div style="display: flex; gap: 10px; font-size: 13px">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #A7ADA3; margin-top: 5px; flex: none"></span>
+              <span style="display: flex; flex-direction: column; gap: 2px"><span>{{l.t}}</span><span style="font-size: 12px; color: #5B635E">{{l.w}}</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <fieldset style="border: 1px solid #E1E4DD; border-radius: 14px; padding: 14px; margin: 0; display: flex; flex-direction: column; gap: 10px">
+          <legend style="font-size: 14px; font-weight: 600; padding: 0 6px">Log outcome</legend>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 13px">
+            <sc-for list="{{outcomes}}" as="o" hint-placeholder-count="4">
+              <label style="display: flex; align-items: center; gap: 8px; min-height: 32px"><input type="radio" name="outcome" checked="{{o.checked}}" onChange="{{o.pick}}">{{o.label}}</label>
+            </sc-for>
+          </div>
+          <sc-if value="{{needsDate}}" hint-placeholder-val="{{ true }}">
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">{{dateLabel}}
+            <input type="date" value="{{promiseDate}}" onChange="{{setDate}}" style="font: inherit; font-size: 14px; color: #121614; height: 42px; border: 1px solid #D5D9D0; border-radius: 10px; padding: 0 10px"></label>
+          </sc-if>
+          <button style="height: 44px; border-radius: 12px; border: 0; background: #C6F432; color: #0E3B2E; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer" onClick="{{saveOutcome}}">Save outcome</button>
+        </fieldset>
+      </aside>
+    </div>
+  </main>
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: #121614; color: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.4; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: max-content; max-width: min(440px, calc(100% - 32px)); box-sizing: border-box">
+      <span style="width: 22px; height: 22px; border-radius: 50%; background: #C6F432; display: flex; align-items: center; justify-content: center; flex: none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0E3B2E" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+      <span>{{toast}}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { bucket: 'all', selected: 'EM', outcome: 'ptp', promiseDate: '2026-11-20', draft: null, draftText: '', draftLang: '', logs: {}, updates: {}, checkinsDone: false, toast: null };
+  }
+  flash(msg) {
+    var self = this;
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(function () { self.setState({ toast: null }); }, 3500);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    var self = this;
+    var pill = function (bg, fg) { return 'display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: ' + bg + '; color: ' + fg; };
+    var accounts = [
+      { id: 'EM', ini: 'EM', name: 'Emmanuel Mutabazi', loan: 'LN-0377-2026', phone: '+250 72• ••• 118', days: 104, overdue: 'RWF 612,400', outstanding: 'RWF 1,980,000', contact: 'No answer · 2 days ago', next: 'Field visit', np: pill('#FBE4DF', '#8A2412'), log: [{ t: 'Call — no answer', w: '10 Nov · Jeanne M.' }, { t: 'Demand letter sent', w: '1 Nov · system' }] },
+      { id: 'SK', ini: 'SK', name: 'Solange Kayitesi', loan: 'LN-0291-2026', phone: '+250 78• ••• 507', days: 67, overdue: 'RWF 248,000', outstanding: 'RWF 920,500', contact: 'Promised 20 Nov', next: 'Follow up', np: pill('#FFF0DA', '#7A3B06'), log: [{ t: 'Promised to pay RWF 248,000 on 20 Nov', w: '11 Nov · Jeanne M.' }, { t: 'SMS reminder sent', w: '5 Nov · auto' }] },
+      { id: 'BH', ini: 'BH', name: 'Bosco Habineza', loan: 'LN-0350-2026', phone: '+250 73• ••• 864', days: 41, overdue: 'RWF 173,900', outstanding: 'RWF 1,310,000', contact: 'Paid part · 6 Nov', next: 'Call', np: pill('#E3ECF8', '#1E3A66'), log: [{ t: 'Paid RWF 80,000 via MoMo', w: '6 Nov' }, { t: 'Call — says harvest sale due', w: '3 Nov · Jeanne M.' }] },
+      { id: 'UN', ini: 'UN', name: 'Uwimana Nadine', loan: 'LN-0402-2026', phone: '+250 78• ••• 230', days: 23, overdue: 'RWF 96,300', outstanding: 'RWF 640,000', contact: 'SMS · yesterday', next: 'Call', np: pill('#E3ECF8', '#1E3A66'), log: [{ t: 'SMS reminder sent', w: '11 Nov · auto' }] },
+      { id: 'TR', ini: 'TR', name: 'Twizere Rice Growers', loan: 'LN-0388-2026', phone: '+250 79• ••• 951', days: 12, overdue: 'RWF 455,000', outstanding: 'RWF 5,400,000', contact: 'Promised 15 Nov', next: 'Wait', np: pill('#EEF0EA', '#3B423E'), log: [{ t: 'Promised to pay on 15 Nov', w: '9 Nov · Kevin N.' }] },
+      { id: 'JH', ini: 'JH', name: 'Jean Hakizimana', loan: 'LN-0415-2026', phone: '+250 72• ••• 664', days: 5, overdue: 'RWF 58,200', outstanding: 'RWF 410,000', contact: 'SMS · 3 days ago', next: 'SMS', np: pill('#EEF0EA', '#3B423E'), log: [{ t: 'SMS reminder sent', w: '9 Nov · auto' }] }
+    ];
+    var aiNotes = {
+      EM: ['Saturday morning at the shop; 0 of 6 weekday calls answered', 'Restructure: 3 smaller payments of RWF 204,133', '38% chance of recovery by phone alone; book the field visit'],
+      SK: ['After 6 pm; answered 4 of 5 evening calls', 'Hold the 20 Nov promise; remind on 19 Nov', '81% chance she pays by 20 Nov'],
+      BH: ['Weekday mornings', 'Split the rest into 2 payments after harvest sale', '72% chance of full recovery within 30 days'],
+      UN: ['Lunchtime, 12–2 pm', 'Pay in full via MoMo link; no restructure needed', '88% chance she pays this week after a call'],
+      TR: ['Call the co-op treasurer, not the chair', 'No action until 15 Nov promise date', '90% chance they pay on 15 Nov'],
+      JH: ['SMS works better than calls for him', 'Gentle SMS with MoMo pay link', '93% chance he pays within 7 days']
+    };
+    var st = this.state;
+    accounts.forEach(function (a) {
+      var n = aiNotes[a.id]; a.aiTime = n[0]; a.aiOffer = n[1]; a.aiOdds = n[2];
+      a.first = a.name.split(' ')[a.id === 'UN' ? 1 : 0];
+      if (a.id === 'TR') a.first = 'Twizere Rice Growers';
+      a.log = (st.logs[a.id] || []).concat(a.log);
+      var u = st.updates[a.id];
+      if (u) { a.contact = u.contact; a.next = u.next; a.np = pill(u.bg, u.fg); }
+    });
+    var inBucket = function (a, b) {
+      if (b === 'all') return true;
+      if (b === 'b1') return a.days <= 30;
+      if (b === 'b2') return a.days > 30 && a.days <= 90;
+      return a.days > 90;
+    };
+    var defs = [['all', 'All', 121], ['b1', '1–30 days', 84], ['b2', '31–90 days', 25], ['b3', '90+ days', 12]];
+    var tabs = defs.map(function (d) {
+      var on = self.state.bucket === d[0];
+      return {
+        label: d[1], count: d[2], sel: on ? 'true' : 'false',
+        style: 'height: 38px; padding: 0 12px; border-radius: 10px; font: inherit; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer; ' + (on ? 'border: 0; background: #0E3B2E; color: #FFFFFF; font-weight: 600' : 'border: 1px solid #E1E4DD; background: #FFFFFF; color: #3B423E'),
+        countStyle: 'font-size: 11px; border-radius: 999px; padding: 1px 7px; ' + (on ? 'background: #C6F432; color: #0E3B2E' : 'background: #EEF0EA; color: #3B423E'),
+        pick: function () { self.setState({ bucket: d[0] }); }
+      };
+    });
+    var shown = accounts.filter(function (a) { return inBucket(a, self.state.bucket); });
+    var rows = shown.map(function (a) {
+      var on = a.id === self.state.selected;
+      var color = a.days > 90 ? '#C2410C' : (a.days > 30 ? '#F0A23B' : '#A9D61C');
+      return {
+        ini: a.ini, name: a.name, loan: a.loan, days: a.days, overdue: a.overdue, contact: a.contact, next: a.next, pill: a.np,
+        sel: on ? 'true' : 'false',
+        bar: 'display: block; height: 5px; border-radius: 99px; background: ' + color + '; width: ' + Math.min(100, Math.round(a.days / 120 * 100)) + '%',
+        style: 'display: grid; grid-template-columns: 2.2fr 1.3fr 1.2fr 1.3fr 1fr; gap: 12px; align-items: center; padding: 12px; border: 0; border-bottom: 1px solid #F0F1EC; font: inherit; font-size: 14px; color: #121614; text-align: left; cursor: pointer; border-radius: 12px; ' + (on ? 'background: #F2F8E3; box-shadow: inset 3px 0 0 #0E3B2E' : 'background: #FFFFFF'),
+        pick: function () { self.setState({ selected: a.id }); }
+      };
+    });
+    var cur = accounts.filter(function (a) { return a.id === self.state.selected; })[0] || accounts[0];
+    var addLog = function (id, t, extra) {
+      var logs = Object.assign({}, self.state.logs);
+      logs[id] = [{ t: t, w: '12 Nov · just now · you' }].concat(logs[id] || []);
+      self.setState(Object.assign({ logs: logs }, extra || {}));
+    };
+    var fmtDate = function (iso) {
+      var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var p = String(iso || '').split('-');
+      return p.length === 3 ? Number(p[2]) + ' ' + m[Number(p[1]) - 1] : iso;
+    };
+    var outcomeDefs = [['ptp', 'Promised to pay'], ['none', 'No answer'], ['part', 'Paid in part'], ['dispute', 'Disputes amount']];
+    var outcomes = outcomeDefs.map(function (o) {
+      return { label: o[1], checked: st.outcome === o[0], pick: function () { self.setState({ outcome: o[0] }); } };
+    });
+    var smsEn = 'Hello ' + cur.first + ', this is Kora Lend. A reminder that ' + cur.overdue + ' on loan ' + cur.loan + ' is overdue. Pay via MoMo Pay [YOUR CODE] or reply to agree a date. Thank you.';
+    var smsRw = 'Muraho ' + cur.first + ', ni Kora Lend. Turakwibutsa ko ' + cur.overdue + ' ku nguzanyo ' + cur.loan + ' bitarishyurwa. Ishyura ukoresheje MoMo Pay [YOUR CODE] cyangwa udusubize tuganire ku itariki. Murakoze.';
+    return {
+      tabs: tabs, rows: rows, cur: cur,
+      outcomes: outcomes,
+      needsDate: st.outcome === 'ptp' || st.outcome === 'none',
+      dateLabel: st.outcome === 'ptp' ? 'Promise date' : 'Call again on',
+      promiseDate: st.promiseDate,
+      setDate: function (e) { self.setState({ promiseDate: e.target.value }); },
+      saveOutcome: function () {
+        var d = fmtDate(self.state.promiseDate);
+        var map = {
+          ptp: ['Promised to pay by ' + d, 'Promised ' + d, 'Follow up', '#FFF0DA', '#7A3B06'],
+          none: ['Call — no answer; retry ' + d, 'No answer · just now', 'Call ' + d, '#E3ECF8', '#1E3A66'],
+          part: ['Paid in part — confirm amount in MoMo', 'Paid part · today', 'Confirm', '#E2F5C4', '#2E4A05'],
+          dispute: ['Borrower disputes the amount — sent to supervisor', 'Dispute · today', 'Supervisor', '#FBE4DF', '#8A2412']
+        }[self.state.outcome];
+        var updates = Object.assign({}, self.state.updates);
+        updates[cur.id] = { contact: map[1], next: map[2], bg: map[3], fg: map[4] };
+        addLog(cur.id, map[0], { updates: updates });
+        self.flash('Outcome saved for ' + cur.name + '.');
+      },
+      call: function () { addLog(cur.id, 'Call started to ' + cur.phone); self.flash('Calling ' + cur.name + '… log the result below when you hang up.'); },
+      draftOpen: st.draft === cur.id,
+      draftText: st.draftText,
+      draftLang: st.draftLang,
+      openDraft: function () { self.setState({ draft: cur.id, draftText: smsEn, draftLang: 'English' }); },
+      openDraftRw: function () { self.setState({ draft: cur.id, draftText: smsRw, draftLang: 'Kinyarwanda · AI draft' }); },
+      editDraft: function (e) { self.setState({ draftText: e.target.value }); },
+      closeDraft: function () { self.setState({ draft: null }); },
+      sendDraft: function () { addLog(cur.id, 'SMS sent (' + self.state.draftLang.split(' ')[0] + ')', { draft: null }); self.flash('SMS sent to ' + cur.name + '.'); },
+      bulkSms: function () { var tc = defs.filter(function (d) { return d[0] === self.state.bucket; })[0][2]; self.flash('Reminder SMS queued for all ' + tc + ' accounts in this tab.'); },
+      assign: function () { self.flash('Accounts auto-assigned: 31 to Jeanne M., 30 each to Kevin N., Aimable M. and Diane R.'); },
+      checkins: function () { self.setState({ checkinsDone: true }); self.flash('Friendly check-in SMS sent to 9 borrowers.'); },
+      checkinsDone: st.checkinsDone,
+      checkinLabel: st.checkinsDone ? 'Check-ins sent' : 'Send friendly check-ins',
+      hasToast: !!st.toast,
+      toast: st.toast || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

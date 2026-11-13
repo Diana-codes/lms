@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Applications pipeline</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F4F5F1}
+a{color:#0E3B2E}a:hover{color:#08261D}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #F4F5F1; font-family: Inter, system-ui, sans-serif; color: #121614">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; max-width: 100%; box-sizing: border-box; background: #0E3B2E; color: #E8EFE9; padding: 24px 16px; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px">
+      <div style="width: 32px; height: 32px; border-radius: 9px; background: #C6F432; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #0E3B2E">K</div>
+      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; color: #FFFFFF">Kora Lend</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</a>
+      <a href="Pipeline.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; background: #C6F432; color: #0E3B2E; text-decoration: none; font-weight: 600; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Applications<span style="margin-left: auto; background: rgba(14,59,46,0.14); border-radius: 999px; padding: 2px 8px; font-size: 12px">24</span></a>
+      <a href="LoanDetail.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 6V4h12v2"/></svg>Loans</a>
+      <a href="Borrower.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Borrowers</a>
+      <a href="Collections.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Collections</a>
+      <a href="Reports.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: #E8EFE9; text-decoration: none; font-size: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>Reports</a>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 20px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 4px; margin-right: auto">
+        <span style="font-size: 13px; color: #5B635E">24 open · RWF 86.4M requested</span>
+        <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em">Applications</h1>
+      </div>
+      <div role="group" aria-label="View" style="display: flex; background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 12px; padding: 3px">
+        <sc-for list="{{views}}" as="v" hint-placeholder-count="2">
+          <button aria-pressed="{{v.pressed}}" onClick="{{v.pick}}" style="{{v.style}}">{{v.label}}</button>
+        </sc-for>
+      </div>
+      <button style="height: 44px; padding: 0 18px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer" onClick="{{openNew}}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New application</button>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+        <button aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.label}}</button>
+      </sc-for>
+      <span style="width: 1px; height: 24px; background: #D5D9D0; margin: 0 4px"></span>
+      <button aria-pressed="{{minePressed}}" onClick="{{toggleMine}}" style="{{mineStyle}}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg>Assigned to me</button>
+      <sc-if value="{{filtered}}" hint-placeholder-val="{{ false }}">
+        <span style="font-size: 13px; color: #5B635E; margin-left: 4px">Showing {{shownCount}} applications · {{shownTotal}}</span>
+        <button onClick="{{clear}}" style="height: 36px; padding: 0 10px; border: 0; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #0E3B2E; text-decoration: underline; cursor: pointer">Clear filters</button>
+      </sc-if>
+    </div>
+
+    <section aria-label="AI pre-screening" style="background: #F1EDFB; border: 1px solid #DCD3F5; border-radius: 18px; padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px">
+      <span style="width: 40px; height: 40px; border-radius: 12px; background: #4B2A9B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex: none">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 360px; min-width: 0">
+        <span style="font-size: 14px; font-weight: 600; color: #2D1766">{{bannerTitle}}</span>
+        <span style="font-size: 13px; color: #3E2A78">{{bannerText}}</span>
+      </div>
+      <button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #B7A6EA; background: #FFFFFF; color: #2D1766; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer" onClick="{{reviewFlagged}}">Review 1 flagged</button>
+      <button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 0; background: #4B2A9B; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer" onClick="{{approveLow}}" disabled="{{approvedDone}}">{{approveLabel}}</button>
+    </section>
+
+    <sc-if value="{{isBoard}}" hint-placeholder-val="{{ true }}">
+    <div style="overflow-x: auto; padding-bottom: 8px">
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(240px, 1fr)); gap: 14px; min-width: 1240px">
+        <sc-for list="{{cols}}" as="col" hint-placeholder-count="5">
+          <section style="background: #EBEDE6; border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 6px 6px">
+              <span style="{{col.dot}}"></span>
+              <h2 style="margin: 0; font-size: 14px; font-weight: 600">{{col.title}}</h2>
+              <span style="font-size: 12px; color: #5B635E; background: #FFFFFF; border-radius: 999px; padding: 2px 8px">{{col.count}}</span>
+              <span style="margin-left: auto; font-size: 12px; color: #5B635E; font-variant-numeric: tabular-nums">{{col.total}}</span>
+            </div>
+            <sc-for list="{{col.cards}}" as="c" hint-placeholder-count="3">
+              <article style="background: #FFFFFF; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 2px rgba(18,22,20,0.06)">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span style="font-size: 11px; color: #5B635E; font-variant-numeric: tabular-nums">{{c.id}}</span>
+                  <span style="{{c.tag}}">{{c.product}}</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-weight: 600; font-size: 14px">{{c.name}}</span>
+                  <span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600; letter-spacing: -0.01em">{{c.amount}}</span>
+                  <span style="font-size: 12px; color: #5B635E">{{c.term}}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <div style="flex: 1; height: 5px; border-radius: 99px; background: #EEF0EA"><div style="{{c.bar}}"></div></div>
+                  <span style="font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums">{{c.score}}</span>
+                </div>
+                <div style="{{c.aiStyle}}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+                  <span style="display: flex; flex-direction: column; gap: 1px"><span style="font-weight: 600">{{c.aiTitle}}</span><span>{{c.aiWhy}}</span></span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; border-top: 1px solid #F0F1EC; padding-top: 10px">
+                  <span style="width: 24px; height: 24px; border-radius: 50%; background: #E3EBDF; color: #0E3B2E; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{c.officer}}</span>
+                  <span style="font-size: 12px; color: #5B635E">{{c.age}}</span>
+                  <span style="margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #5B635E">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>{{c.docs}}</span>
+                </div>
+              </article>
+            </sc-for>
+            <button style="height: 40px; border: 1px dashed #B9BEB4; border-radius: 12px; background: transparent; font: inherit; font-size: 13px; color: #3B423E; cursor: pointer" onClick="{{col.add}}">+ Add</button>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{isList}}" hint-placeholder-val="{{ false }}">
+      <section style="background: #FFFFFF; border: 1px solid #E1E4DD; border-radius: 20px; padding: 8px 20px 12px">
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 900px; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums">
+            <thead>
+              <tr style="text-align: left; color: #5B635E; font-size: 12px">
+                <th style="font-weight: 500; padding: 12px 8px 10px 0; border-bottom: 1px solid #E1E4DD">Applicant</th>
+                <th style="font-weight: 500; padding: 12px 8px 10px; border-bottom: 1px solid #E1E4DD">Product</th>
+                <th style="font-weight: 500; padding: 12px 8px 10px; border-bottom: 1px solid #E1E4DD; text-align: right">Amount</th>
+                <th style="font-weight: 500; padding: 12px 8px 10px; border-bottom: 1px solid #E1E4DD">Stage</th>
+                <th style="font-weight: 500; padding: 12px 8px 10px; border-bottom: 1px solid #E1E4DD">AI recommendation</th>
+                <th style="font-weight: 500; padding: 12px 8px 10px; border-bottom: 1px solid #E1E4DD">Officer</th>
+                <th style="font-weight: 500; padding: 12px 0 10px 8px; border-bottom: 1px solid #E1E4DD">Docs</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{flat}}" as="c" hint-placeholder-count="8">
+                <tr>
+                  <td style="padding: 12px 8px 12px 0; border-bottom: 1px solid #F0F1EC"><span style="display: flex; flex-direction: column"><span style="font-weight: 600">{{c.name}}</span><span style="font-size: 12px; color: #5B635E">{{c.id}} · {{c.term}}</span></span></td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC"><span style="{{c.tagList}}">{{c.product}}</span></td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; text-align: right; font-weight: 600">{{c.amount}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC"><span style="display: flex; align-items: center; gap: 8px"><span style="{{c.stageDot}}"></span>{{c.stage}}</span></td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC; font-size: 13px">{{c.aiTitle}}</td>
+                  <td style="padding: 12px 8px; border-bottom: 1px solid #F0F1EC">{{c.officer}}</td>
+                  <td style="padding: 12px 0 12px 8px; border-bottom: 1px solid #F0F1EC">{{c.docs}}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+      <div style="text-align: center; padding: 24px; font-size: 14px; color: #5B635E">No applications match these filters.</div>
+    </sc-if>
+  </main>
+    <sc-if value="{{newOpen}}" hint-placeholder-val="{{ false }}">
+      <div style="background: rgba(18,22,20,0.45); position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px">
+        <div role="dialog" aria-modal="true" aria-labelledby="new-title" style="background: #FFFFFF; border-radius: 22px; width: 100%; max-width: 460px; box-sizing: border-box; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.25)">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 2px; margin-right: auto"><h2 id="new-title" style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600">New application</h2><span style="font-size: 13px; color: #5B635E">Goes into “{{newCol}}”</span></div>
+            <button aria-label="Close" onClick="{{closeNew}}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E1E4DD; background: #FFFFFF; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#121614" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Applicant or business name
+            <input type="text" value="{{form.name}}" onChange="{{form.setName}}" placeholder="e.g. Claudine Mukamana" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box; background: #FFFFFF"></label>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Product
+              <select onChange="{{form.setProduct}}" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box; background: #FFFFFF">
+                <sc-for list="{{form.products}}" as="p" hint-placeholder-count="4"><option value="{{p.value}}" selected="{{p.selected}}">{{p.label}}</option></sc-for>
+              </select></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Amount (RWF)
+              <input type="text" inputmode="numeric" value="{{form.amount}}" onChange="{{form.setAmount}}" placeholder="1,000,000" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box; background: #FFFFFF"></label>
+          </div>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B635E">Phone (for MoMo)
+            <input type="tel" placeholder="+250 7__ ___ ___" style="font: inherit; font-size: 15px; color: #121614; height: 46px; border: 1px solid #D5D9D0; border-radius: 12px; padding: 0 12px; box-sizing: border-box; background: #FFFFFF"></label>
+          <sc-if value="{{form.error}}" hint-placeholder-val="{{ false }}"><span role="alert" style="font-size: 13px; color: #8A2412">Add a name and an amount to continue.</span></sc-if>
+          <div style="display: flex; gap: 10px; justify-content: flex-end">
+            <button onClick="{{closeNew}}" style="height: 46px; padding: 0 18px; border-radius: 12px; border: 1px solid #D5D9D0; background: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Cancel</button>
+            <button onClick="{{createNew}}" style="height: 46px; padding: 0 20px; border-radius: 12px; border: 0; background: #121614; color: #FFFFFF; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer">Create application</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  <sc-if value="{{hasToast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: #121614; color: #FFFFFF; border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 1.4; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: max-content; max-width: min(440px, calc(100% - 32px)); box-sizing: border-box">
+      <span style="width: 22px; height: 22px; border-radius: 50%; background: #C6F432; display: flex; align-items: center; justify-content: center; flex: none"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0E3B2E" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></span>
+      <span>{{toast}}</span>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { product: 'All', mine: false, view: 'board', flagged: false, approved: false, added: [], newCol: null, fName: '', fProduct: 'SME', fAmount: '', fError: false, toast: null };
+  }
+  flash(msg) {
+    var self = this;
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(function () { self.setState({ toast: null }); }, 3500);
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    var tag = function (bg, fg) { return 'margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: ' + bg + '; color: ' + fg; };
+    var tags = { SME: tag('#E3ECF8', '#1E3A66'), Personal: tag('#F1E6F8', '#5B1F7A'), Agri: tag('#E2F5C4', '#2E4A05'), Asset: tag('#FFF0DA', '#7A3B06') };
+    var bar = function (s) {
+      var pct = Math.round((s - 300) / 550 * 100);
+      var color = s >= 700 ? '#0E3B2E' : (s >= 640 ? '#A9D61C' : '#F0A23B');
+      return 'height: 5px; border-radius: 99px; width: ' + pct + '%; background: ' + color;
+    };
+    var ai = {
+      ok: 'display: flex; gap: 8px; font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: #F1EDFB; color: #2D1766',
+      warn: 'display: flex; gap: 8px; font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: #FFF0DA; color: #5A2D04',
+      flag: 'display: flex; gap: 8px; font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; background: #FBE4DF; color: #6E1C0E'
+    };
+    var notes = {
+      'APP-20934': ['ok', 'Approve · 92% likely to repay', 'Steady MoMo inflows for 14 months'],
+      'APP-20933': ['warn', 'Review · thin credit file', 'First loan; ask for a guarantor'],
+      'APP-20928': ['ok', 'Approve · 86% likely to repay', 'Vehicle value covers 1.3× the loan'],
+      'APP-20921': ['ok', 'Approve · 90% likely to repay', 'Repaid 2 seasonal loans on time'],
+      'APP-20919': ['ok', 'Auto-approve eligible', 'Co-op sales up 22% this year'],
+      'APP-20925': ['ok', 'Approve · 94% likely to repay', 'Salary paid on time 12 months running'],
+      'APP-20914': ['flag', 'Flag · income mismatch', 'Stated revenue 2.4× MoMo inflows'],
+      'APP-20931': ['ok', 'Approved by officer', 'Matched AI recommendation'],
+      'APP-20909': ['ok', 'Approved by officer', 'Matched AI recommendation'],
+      'APP-20902': ['ok', 'First instalment due 1 Dec', 'No early-warning signals']
+    };
+    var card = function (id, name, product, kind, amount, term, score, officer, age, docs) {
+      var n = notes[id];
+      return { id: id, name: name, product: product, tag: tags[kind], amount: amount, term: term, score: 'Score ' + score, bar: bar(score), officer: officer, age: age, docs: docs, aiStyle: ai[n[0]], aiTitle: n[1], aiWhy: n[2] };
+    };
+    var dot = function (c) { return 'width: 8px; height: 8px; border-radius: 50%; background: ' + c; };
+    var cols = [
+      { title: 'New', dot: dot('#7C8580'), count: '6', total: 'RWF 14.2M', cards: [
+        card('APP-20934', 'Moses Tuyisenge', 'SME', 'SME', 'RWF 3,000,000', '12 months · 18% p.a.', 712, 'DR', '2h ago', '2/5'),
+        card('APP-20933', 'Sandrine Iradukunda', 'Personal', 'Personal', 'RWF 850,000', '6 months · 21% p.a.', 668, 'KN', '5h ago', '1/4')
+      ]},
+      { title: 'Under review', dot: dot('#3B6FC2'), count: '7', total: 'RWF 31.5M', cards: [
+        card('APP-20928', 'Jean-Paul Mugisha', 'Asset finance', 'Asset', 'RWF 12,000,000', '36 months · 16% p.a.', 688, 'DR', '1 day in stage', '5/6'),
+        card('APP-20921', 'Eric Niyonzima', 'Agri input', 'Agri', 'RWF 1,850,000', '9 months · 15% p.a.', 701, 'AM', '2 days in stage', '4/4'),
+        card('APP-20919', 'Umurage Coffee Coop', 'SME', 'SME', 'RWF 9,400,000', '24 months · 17% p.a.', 735, 'KN', '3 days in stage', '6/6')
+      ]},
+      { title: 'Credit check', dot: dot('#F0A23B'), count: '4', total: 'RWF 18.9M', cards: [
+        card('APP-20925', 'Grace Ingabire', 'Salary advance', 'Personal', 'RWF 600,000', '3 months · 12% p.a.', 715, 'AM', 'Awaiting CRB', '3/4'),
+        card('APP-20914', 'Bosco Hakizimana', 'Asset finance', 'Asset', 'RWF 7,800,000', '24 months · 16% p.a.', 645, 'DR', '4 days in stage', '6/6')
+      ]},
+      { title: 'Approved', dot: dot('#A9D61C'), count: '5', total: 'RWF 15.6M', cards: [
+        card('APP-20931', 'Aline Uwase', 'SME', 'SME', 'RWF 4,500,000', '18 months · 17% p.a.', 742, 'KN', 'Contract sent', '5/5'),
+        card('APP-20909', 'Fabrice Nshimiyimana', 'Agri input', 'Agri', 'RWF 2,100,000', '12 months · 15% p.a.', 720, 'AM', 'Signed today', '4/4')
+      ]},
+      { title: 'Disbursed', dot: dot('#0E3B2E'), count: '2', total: 'RWF 6.2M', cards: [
+        card('APP-20902', 'Divine Umutoni', 'Personal', 'Personal', 'RWF 1,500,000', '18 months · 20% p.a.', 731, 'DR', 'Sent via MoMo', '4/4')
+      ]}
+    ];
+    var self = this;
+    var st = this.state || {};
+    var base = { New: [6, 14.2e6], 'Under review': [7, 31.5e6], 'Credit check': [4, 18.9e6], Approved: [5, 15.6e6], Disbursed: [2, 6.2e6] };
+    if (st.approved) {
+      base.New = [4, 12.0e6]; base['Under review'] = [4, 18.9e6]; base.Approved = [10, 30.4e6];
+      var coop = cols[1].cards.filter(function (c) { return c.id === 'APP-20919'; })[0];
+      cols[1].cards = cols[1].cards.filter(function (c) { return c.id !== 'APP-20919'; });
+      coop = Object.assign({}, coop, { age: 'Auto-approved just now', aiTitle: 'Approved by policy', aiWhy: 'Officer confirmed AI recommendation' });
+      cols[3].cards = [coop].concat(cols[3].cards);
+    }
+    (st.added || []).forEach(function (a) {
+      cols.forEach(function (col) {
+        if (col.title === a.col) { col.cards = [a.card].concat(col.cards); base[col.title] = [base[col.title][0] + 1, base[col.title][1] + a.amt]; }
+      });
+    });
+    var product = st.product || 'All';
+    var mine = !!st.mine;
+    var view = st.view || 'board';
+    var me = 'DR';
+    var flaggedOnly = !!st.flagged;
+    var filtered = product !== 'All' || mine || flaggedOnly;
+    var kindOf = { SME: 'SME', Personal: 'Personal', Agri: 'Agri', 'Asset finance': 'Asset' };
+    var num = function (s) { return Number(String(s).replace(/[^0-9]/g, '')); };
+    var short = function (n) { if (!n) return '—'; return 'RWF ' + (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : Math.round(n / 1e3) + 'K'); };
+    var keep = function (c) {
+      if (flaggedOnly && c.aiTitle.indexOf('Flag') !== 0) return false;
+      if (mine && c.officer !== me) return false;
+      if (product === 'All') return true;
+      return c.tag === tags[kindOf[product]];
+    };
+    var flat = [], shownTotal = 0;
+    cols.forEach(function (col) {
+      col.count = String(base[col.title][0]);
+      col.total = short(base[col.title][1]);
+      col.add = function () { self.setState({ newCol: col.title, fName: '', fAmount: '', fProduct: 'SME', fError: false }); };
+      var shown = col.cards.filter(keep);
+      if (filtered) {
+        var t = shown.reduce(function (a, c) { return a + num(c.amount); }, 0);
+        col.count = String(shown.length);
+        col.total = short(t);
+      }
+      col.cards = shown;
+      shown.forEach(function (c) {
+        shownTotal += num(c.amount);
+        flat.push(Object.assign({}, c, {
+          stage: col.title,
+          stageDot: col.dot,
+          tagList: c.tag.replace('margin-left: auto; ', '')
+        }));
+      });
+    });
+    var chipStyle = function (on) {
+      return 'height: 36px; padding: 0 14px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; ' + (on ? 'border: 1px solid #0E3B2E; background: #0E3B2E; color: #FFFFFF; font-weight: 600' : 'border: 1px solid #D5D9D0; background: #FFFFFF; color: #121614');
+    };
+    var chips = ['All', 'SME', 'Personal', 'Agri', 'Asset finance'].map(function (p) {
+      return { label: p === 'All' ? 'All products' : p, pressed: product === p ? 'true' : 'false', style: chipStyle(product === p), pick: function () { self.setState({ product: p }); } };
+    });
+    var views = [['board', 'Board'], ['list', 'List']].map(function (v) {
+      var on = view === v[0];
+      return { label: v[1], pressed: on ? 'true' : 'false', pick: function () { self.setState({ view: v[0] }); },
+        style: 'border: 0; font: inherit; font-size: 13px; padding: 0 14px; height: 36px; border-radius: 9px; cursor: pointer; ' + (on ? 'background: #121614; color: #FFFFFF; font-weight: 600' : 'background: transparent; color: #3B423E') };
+    });
+    return {
+      cols: cols,
+      flat: flat,
+      chips: chips,
+      views: views,
+      isBoard: view === 'board',
+      isList: view === 'list' && flat.length > 0,
+      empty: flat.length === 0,
+      filtered: filtered,
+      shownCount: flat.length,
+      shownTotal: short(shownTotal),
+      minePressed: mine ? 'true' : 'false',
+      toggleMine: function () { self.setState({ mine: !self.state || !self.state.mine }); },
+      mineStyle: 'height: 36px; padding: 0 14px; border-radius: 999px; font: inherit; font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer; ' + (mine ? 'border: 1px solid #0E3B2E; background: #E2F5C4; color: #0E3B2E; font-weight: 600' : 'border: 1px dashed #A7ADA3; background: transparent; color: #3B423E'),
+      clear: function () { self.setState({ product: 'All', mine: false, flagged: false }); },
+      bannerTitle: st.approved ? 'Done: 5 low-risk applications approved (RWF 14.8M)' : 'AI pre-screened all 24 open applications',
+      bannerText: st.approved ? 'Borrowers notified by SMS · 1 flagged for a possible income issue · 18 still need an officer’s decision' : '5 meet the auto-approve policy (RWF 14.8M) · 1 flagged for a possible income issue · 18 need an officer’s decision',
+      reviewFlagged: function () { self.setState({ flagged: true, product: 'All', mine: false }); },
+      approveLow: function () { self.setState({ approved: true }); self.flash('5 low-risk applications approved. Borrowers will get an SMS with their contract.'); },
+      approvedDone: !!st.approved,
+      approveLabel: st.approved ? 'Approved' : 'Approve 5 low-risk',
+      openNew: function () { self.setState({ newCol: 'New', fName: '', fAmount: '', fProduct: 'SME', fError: false }); },
+      closeNew: function () { self.setState({ newCol: null }); },
+      newOpen: !!st.newCol,
+      newCol: st.newCol || 'New',
+      form: {
+        name: st.fName, amount: st.fAmount, error: !!st.fError,
+        setName: function (e) { self.setState({ fName: e.target.value }); },
+        setAmount: function (e) { self.setState({ fAmount: e.target.value }); },
+        setProduct: function (e) { self.setState({ fProduct: e.target.value }); },
+        products: [['SME', 'SME working capital'], ['Personal', 'Personal loan'], ['Agri', 'Agri input'], ['Asset', 'Asset finance']].map(function (p) { return { value: p[0], label: p[1], selected: st.fProduct === p[0] }; })
+      },
+      createNew: function () {
+        var s = self.state, amt = num(s.fAmount);
+        if (!s.fName.trim() || !amt) { self.setState({ fError: true }); return; }
+        var names = { SME: 'SME', Personal: 'Personal', Agri: 'Agri input', Asset: 'Asset finance' };
+        var idn = 'APP-' + (20936 + (s.added || []).length);
+        var c = { id: idn, name: s.fName.trim(), product: names[s.fProduct], tag: tags[s.fProduct], amount: 'RWF ' + amt.toLocaleString('en-US'), term: '12 months · 18% p.a.', score: 'Scoring…', bar: 'height: 5px; border-radius: 99px; width: 0%', officer: me, age: 'Just now', docs: '0/4', aiStyle: ai.ok, aiTitle: 'AI scoring in progress', aiWhy: 'Usually takes under a minute' };
+        self.setState({ added: [{ col: s.newCol, card: c, amt: amt }].concat(s.added || []), newCol: null });
+        self.flash(idn + ' created for ' + c.name + '.');
+      },
+      hasToast: !!st.toast,
+      toast: st.toast || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

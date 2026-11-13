@@ -1,0 +1,32 @@
+node_modules/
+dist/
+.next/
+.turbo/
+.expo/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets: never commit real env files
+.env
+.env.*
+!.env.example
+
+# generated
+apps/api/src/generated/
+
+# python
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+.DS_Store
+*.log
+
+# playwright
+apps/web/e2e/.results/
+playwright-report/
+test-results/
+
+uploads/

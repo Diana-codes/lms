@@ -1,0 +1,16 @@
+[project]
+name = "kora-ml"
+version = "1.0.0"
+description = "Kora Lend scoring service: transparent rules now, a trained model later."
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "pydantic>=2.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 200
