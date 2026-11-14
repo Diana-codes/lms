@@ -269,6 +269,35 @@ describe('disbursing under the engine', () => {
   });
 });
 
+describe('Key Facts Statement', () => {
+  it('discloses the BNR items for an application and for the loan it became', async () => {
+    const { loan, app: appCode } = await disburse(1_000_000n);
+    const app = await get(staff.officer, `/applications/${appCode}/key-facts`).expect(200);
+    const kfs = app.body;
+    expect(kfs.summary).toMatchObject({
+      amount: '1000000',
+      durationMonths: 12,
+      amountReceived: '966400',
+    });
+    const interest = BigInt(kfs.cost.totalInterest);
+    // 2% processing + 18% VAT, and 1% insurance (third party); 6,000 + VAT monitoring, spread.
+    expect(kfs.cost.otherFees).toBe('40680');
+    expect(BigInt(kfs.cost.totalCost)).toBe(interest + 40_680n);
+    expect(BigInt(kfs.repayment.totalToPay)).toBe(1_000_000n + interest + 40_680n);
+    expect(kfs.repayment).toMatchObject({ instalments: 12, frequency: 'Monthly' });
+    expect(kfs.fees.upfront.map((f: { name: string }) => f.name)).toEqual([
+      'Processing fee',
+      'Credit life insurance',
+    ]);
+    expect(kfs.fees.recurring[0]).toMatchObject({ name: 'Monitoring fee', perInstalment: '590' });
+    expect(kfs.escalation.sms).toBe('6005');
+
+    const loanKfs = await get(staff.officer, `/loans/${loan}/key-facts`).expect(200);
+    expect(loanKfs.body.cost.aprBps).toBe(kfs.cost.aprBps);
+    expect(loanKfs.body.summary.amountReceived).toBe('966400');
+  });
+});
+
 describe('servicing under the engine', () => {
   it('charges late fees nightly, once a day, on what is overdue only', async () => {
     const { loan: code } = await disburse(1_200_000n);

@@ -659,6 +659,13 @@ export function ProductEditor({
               onChange={(feeBps) => setTerms({ payoff: { ...t.payoff, feeBps } })}
             />
           </div>
+          {t.payoff.feeBps > 0 ? (
+            <p className="m-0 rounded-control bg-caution-bg px-3.5 py-2.5 text-[13px] text-caution-ink">
+              BNR&apos;s Key Facts Statement template tells borrowers they can pay off early without
+              penalties or fees. Check with your compliance officer before charging an early
+              repayment fee.
+            </p>
+          ) : null}
         </Section>
 
         <Section title="Approvals">

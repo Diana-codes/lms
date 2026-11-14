@@ -45,6 +45,11 @@ model Company {
   timezone        String        @default("Africa/Kigali")
   defaultLanguage Language      @default(EN)
 
+  /// Where borrowers ask questions and complain (on the Key Facts Statement).
+  supportPhone String?
+  supportEmail String?
+  address      String?
+
   /// Branding shown in the console and on borrower-facing pages.
   brandName   String?
   brandColor  String?

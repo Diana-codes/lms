@@ -51,6 +51,12 @@ export class LoansController {
     return this.loans.detail(code);
   }
 
+  /** The Key Facts Statement the loan was issued under. */
+  @Get('loans/:code/key-facts')
+  keyFacts(@Param('code', codeParam) code: string) {
+    return this.loans.keyFacts(code);
+  }
+
   @Post('loans/:code/payments')
   @HttpCode(200)
   recordPayment(

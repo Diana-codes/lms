@@ -48,6 +48,12 @@ export class ApplicationsController {
     return this.applications.get(code);
   }
 
+  /** The Key Facts Statement to give the applicant before they sign (BNR Regulation 91/2025). */
+  @Get(':code/key-facts')
+  keyFacts(@Param('code', codeParam) code: string) {
+    return this.applications.keyFacts(code);
+  }
+
   @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
   @Post()
   create(

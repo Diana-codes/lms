@@ -55,6 +55,10 @@ export interface CompanySettings {
   brandColor: string | null;
   accentColor: string | null;
   logoUrl: string | null;
+  /** Shown to borrowers on the Key Facts Statement for questions and complaints. */
+  supportPhone: string | null;
+  supportEmail: string | null;
+  address: string | null;
   features: { ai: boolean; autoApprove: boolean };
   /** Which provider settings are set, by key. Never their values. */
   secrets: Record<string, boolean>;

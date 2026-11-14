@@ -20,6 +20,9 @@ export interface BrandingInput {
   accentColor?: string | null;
   logoUrl?: string | null;
   defaultLanguage?: Language;
+  supportPhone?: string | null;
+  supportEmail?: string | null;
+  address?: string | null;
 }
 
 /**
@@ -54,6 +57,9 @@ export class CompanySettingsService {
       brandColor: company.brandColor,
       accentColor: company.accentColor,
       logoUrl: company.logoUrl,
+      supportPhone: company.supportPhone,
+      supportEmail: company.supportEmail,
+      address: company.address,
       features: { ai: company.aiFeatures, autoApprove: company.autoApprove },
       secrets,
       webhookConfigured: secrets[SECRET.webhookToken],
@@ -70,6 +76,11 @@ export class CompanySettingsService {
         accentColor: input.accentColor,
         logoUrl: input.logoUrl,
         defaultLanguage: input.defaultLanguage,
+        supportPhone:
+          input.supportPhone === undefined ? undefined : input.supportPhone?.trim() || null,
+        supportEmail:
+          input.supportEmail === undefined ? undefined : input.supportEmail?.trim() || null,
+        address: input.address === undefined ? undefined : input.address?.trim() || null,
       },
     });
     this.companies.invalidate();

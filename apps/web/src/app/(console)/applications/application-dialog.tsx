@@ -326,6 +326,13 @@ export function ApplicationDialog({
           </span>
         ) : (
           <>
+            <Link
+              href={`/applications/${card.code}/key-facts`}
+              className="mr-auto text-sm font-semibold"
+              title="BNR Key Facts Statement, to give the applicant before signing"
+            >
+              Key facts statement
+            </Link>
             {card.stage !== 'APPROVED' ? (
               <Button variant="secondary" disabled={busy} onClick={() => setMode('decline')}>
                 Decline

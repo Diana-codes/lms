@@ -8,6 +8,7 @@ import { PRODUCT_NAME } from '@/lib/company';
 import { serverApi } from '@/lib/server-api';
 import type { CompanySettings, Me } from '@/lib/types';
 import { BrandingForm } from './branding-form';
+import { ContactForm } from './contact-form';
 
 export const metadata: Metadata = { title: 'Company settings' };
 export default async function CompanySettingsPage() {
@@ -24,6 +25,7 @@ export default async function CompanySettingsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <BrandingForm settings={s} />
+          <ContactForm settings={s} />
           <Card>
             <CardTitle>Set by {PRODUCT_NAME}</CardTitle>
             <p className="m-0 text-sm text-ink-muted">

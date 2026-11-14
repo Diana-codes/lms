@@ -27,6 +27,9 @@ const brandingSchema = z
     accentColor: hexColour.nullable().optional(),
     logoUrl: logoUrl.nullable().optional(),
     defaultLanguage: z.enum(['EN', 'RW', 'FR']).optional(),
+    supportPhone: optionalText(30),
+    supportEmail: z.email().max(254).nullable().optional(),
+    address: optionalText(200),
   })
   .strict();
 

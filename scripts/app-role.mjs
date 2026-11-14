@@ -71,6 +71,7 @@ try {
   await client.query(`REVOKE UPDATE ON TABLE "Company" FROM ${user}`);
   await client.query(
     `GRANT UPDATE ("brandName", "brandColor", "accentColor", "logoUrl", "defaultLanguage", ` +
+      `"supportPhone", "supportEmail", "address", ` +
       `"webhookTokenHash", "updatedAt") ON TABLE "Company" TO ${user}`,
   );
   // The reporting context: the API registers which company a reporting

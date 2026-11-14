@@ -54,6 +54,12 @@ export function LoanActions({ loan }: { loan: LoanDetail }) {
       >
         Statement
       </Link>
+      <Link
+        href={`/loans/${loan.code}/key-facts`}
+        className={buttonClasses({ variant: 'secondary' })}
+      >
+        Key facts
+      </Link>
       <Button onClick={() => (active ? setModal('pay') : toast('This loan is fully repaid.'))}>
         Record payment
       </Button>

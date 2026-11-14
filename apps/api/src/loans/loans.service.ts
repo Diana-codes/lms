@@ -39,7 +39,8 @@ import type { LoanStatus, PaymentChannel, RestructureType } from '../generated/p
 import { ACCOUNTS } from '../ledger/accounts';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { loanTerms, toLedger } from '../products/terms';
+import { keyFactsStatement } from '../products/kfs';
+import { loanTerms, quoteFor, toLedger } from '../products/terms';
 import { PaymentPoster } from './payment-poster';
 
 export const LOANS_PAGE_SIZE = 25;
@@ -191,6 +192,44 @@ export class LoansService {
         officerName: r.officerFirst ? shortStaffName(r.officerFirst, r.officerLast ?? '') : null,
       })),
     };
+  }
+
+  /** The Key Facts Statement under the loan's own terms, dated the day it was paid out. */
+  async keyFacts(code: string) {
+    const loan = await this.prisma.loan.findFirst({
+      where: { code },
+      include: {
+        application: { select: { amount: true } },
+        borrower: { select: { fullName: true } },
+      },
+    });
+    if (!loan) throw new NotFoundException(`No loan ${code}`);
+    const company = await this.prisma.company.findUniqueOrThrow({ where: { id: loan.companyId } });
+    const on = utcDateToIso(loan.disbursedOn ?? loan.createdAt);
+    const quote = quoteFor({
+      amount: loan.application?.amount ?? loan.principal,
+      termMonths: loan.termMonths,
+      terms: loanTerms(loan),
+      disbursedOn: on,
+    });
+    return keyFactsStatement(
+      quote,
+      loan.termMonths,
+      {
+        lender: {
+          name: company.brandName ?? company.name,
+          legalName: company.legalName,
+          supportPhone: company.supportPhone,
+          supportEmail: company.supportEmail,
+          address: company.address,
+        },
+        borrowerName: loan.borrower.fullName,
+        reference: loan.code,
+        collateral: loan.collateral,
+        collateralKnown: loan.status !== 'PENDING_DISBURSEMENT',
+      },
+      on,
+    );
   }
 
   async detail(code: string) {

@@ -41,7 +41,8 @@ import {
   loanFieldsFrom,
   loanTerms,
 } from '../products/terms';
-import { companyFeatures } from '../tenancy/company-context';
+import { companyFeatures, requireCompanyId } from '../tenancy/company-context';
+import { keyFactsStatement } from '../products/kfs';
 import { ProvidersService } from '../providers/providers.service';
 
 /** Disbursed applications stay on the board for this long, then drop off. */
@@ -175,6 +176,33 @@ export class ApplicationsService {
     private readonly money: MoneyService,
     private readonly scoring: ScoringService,
   ) {}
+
+  /** The Key Facts Statement for an application, as if paid out today. */
+  async keyFacts(code: string) {
+    const app = await this.find(code);
+    const company = await this.prisma.company.findUniqueOrThrow({
+      where: { id: requireCompanyId() },
+    });
+    const today = kigaliDate();
+    return keyFactsStatement(
+      applicationQuote(app, today),
+      app.termMonths,
+      {
+        lender: {
+          name: company.brandName ?? company.name,
+          legalName: company.legalName,
+          supportPhone: company.supportPhone,
+          supportEmail: company.supportEmail,
+          address: company.address,
+        },
+        borrowerName: app.borrower.fullName,
+        reference: app.code,
+        collateral: null,
+        collateralKnown: false,
+      },
+      today,
+    );
+  }
 
   /** Everything on the board: applications in progress, plus recent disbursements. */
   private onBoard(): Prisma.ApplicationWhereInput {
