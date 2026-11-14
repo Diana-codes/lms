@@ -1,6 +1,12 @@
 'use client';
 
-import { PAYMENT_CHANNEL_LABELS, type PaymentChannel, scoreLabel } from '@kora/core';
+import {
+  formatBps,
+  FREQUENCY_LABELS,
+  PAYMENT_CHANNEL_LABELS,
+  type PaymentChannel,
+  scoreLabel,
+} from '@kora/core';
 import {
   AiPanel,
   Button,
@@ -242,16 +248,23 @@ export function ApplicationDialog({
           <p className="m-0 rounded-control bg-paid-row px-3 py-2.5 text-[13px] leading-snug text-success-fg">
             {channel === 'MTN_MOMO' ? (
               <>
-                Sends <Money amount={card.amount} /> to the borrower’s MoMo wallet. The loan starts,
-                and the ledger is posted, once MoMo confirms the transfer.
+                Sends <Money amount={card.netDisbursed} /> to the borrower’s MoMo wallet. The loan
+                starts, and the ledger is posted, once MoMo confirms the transfer.
               </>
             ) : (
               <>
-                Records that <Money amount={card.amount} /> has been sent, creates the loan and its
-                repayment schedule, and posts it to the ledger.
+                Records that <Money amount={card.netDisbursed} /> has been paid out, creates the
+                loan and its repayment schedule, and posts it to the ledger.
               </>
             )}{' '}
-            The first instalment falls due in one month.
+            {card.netDisbursed !== card.amount ? (
+              <>
+                That is the <Money amount={card.amount} /> borrowed less fees taken at payout. The
+                APR is {formatBps(card.aprBps, 2)}.{' '}
+              </>
+            ) : null}
+            {card.instalmentCount} {FREQUENCY_LABELS[card.frequency].toLowerCase()} instalments of{' '}
+            <Money amount={card.instalment} />.
           </p>
         </div>
       ) : null}

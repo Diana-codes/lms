@@ -1,9 +1,16 @@
-import { formatDate } from '@kora/core';
+import {
+  describePenalty,
+  describeRate,
+  formatBps,
+  formatDate,
+  FREQUENCY_LABELS,
+  INTEREST_METHOD_LABELS,
+} from '@kora/core';
 import { buttonClasses, Card, EmptyState, LoansIcon, Money, WarningIcon } from '@kora/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Breadcrumb } from '@/components/list-tools';
-import { dateTime, rate } from '@/lib/format';
+import { dateTime } from '@/lib/format';
 import { serverApi } from '@/lib/server-api';
 import type { LoanDetail, Me } from '@/lib/types';
 import { LoanActions, RestructureBanner } from './loan-actions';
@@ -175,7 +182,10 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
             </dl>
           </section>
 
-          <ScheduleTable rows={loan.schedule} />
+          <ScheduleTable
+            rows={loan.schedule}
+            subtitle={`${INTEREST_METHOD_LABELS[terms.interestMethod]} · ${FREQUENCY_LABELS[terms.frequency].toLowerCase()}`}
+          />
         </div>
 
         <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
@@ -185,15 +195,78 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
               <Term label="Principal">
                 <Money amount={terms.principal} />
               </Term>
-              <Term label="Interest rate">{rate(terms.annualRateBps)} p.a.</Term>
-              <Term label="Term">{terms.termMonths} months</Term>
+              <Term label="Interest">{describeRate(terms)}</Term>
+              <Term label="Term">
+                {terms.termMonths} months · {FREQUENCY_LABELS[terms.frequency].toLowerCase()}
+              </Term>
+              {terms.aprBps != null ? <Term label="APR">{formatBps(terms.aprBps, 2)}</Term> : null}
+              {terms.netDisbursed != null ? (
+                <Term label="Paid out">
+                  <Money amount={terms.netDisbursed} />
+                </Term>
+              ) : null}
               <Term label="Disbursed">
                 {terms.disbursedOn ? formatDate(terms.disbursedOn) : 'Not yet'}
               </Term>
               <Term label="Channel">{terms.channel ?? '—'}</Term>
               <Term label="Collateral">{terms.collateral ?? 'None recorded'}</Term>
+              <Term label="Late charges">{describePenalty(terms.penalty)}</Term>
+              {terms.fees.length ? (
+                <Term label="Fees">
+                  {terms.fees
+                    .map(
+                      (f) =>
+                        (f.basis === 'PERCENT'
+                          ? `${f.name} ${formatBps(f.value, f.value % 100 ? 2 : 0)}`
+                          : `${f.name} RWF ${f.value.toLocaleString('en-US')}`) +
+                        (f.vat ? ' + VAT' : '') +
+                        (f.thirdParty ? ' (third party)' : ''),
+                    )
+                    .join(' · ')}
+                </Term>
+              ) : null}
             </dl>
           </Card>
+
+          {figures.payoff ? (
+            <Card className="gap-3 p-[22px]">
+              <h2 className="m-0 font-display text-base font-semibold">Pay off today</h2>
+              <p className="m-0 font-display text-2xl font-semibold tabular-nums">
+                <Money amount={figures.payoff.total} />
+              </p>
+              <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+                <dt className="text-ink-muted">Principal</dt>
+                <dd className="m-0 text-right tabular-nums">
+                  <Money amount={figures.payoff.principal} />
+                </dd>
+                <dt className="text-ink-muted">Interest</dt>
+                <dd className="m-0 text-right tabular-nums">
+                  <Money amount={figures.payoff.interest} />
+                </dd>
+                {figures.payoff.fees !== '0' ? (
+                  <>
+                    <dt className="text-ink-muted">Fees</dt>
+                    <dd className="m-0 text-right tabular-nums">
+                      <Money amount={figures.payoff.fees} />
+                    </dd>
+                  </>
+                ) : null}
+                {figures.payoff.penalties !== '0' ? (
+                  <>
+                    <dt className="text-ink-muted">Late charges</dt>
+                    <dd className="m-0 text-right tabular-nums">
+                      <Money amount={figures.payoff.penalties} />
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              {figures.payoff.waived !== '0' ? (
+                <p className="m-0 text-[13px] text-ink-muted">
+                  Saves <Money amount={figures.payoff.waived} /> of scheduled interest and fees.
+                </p>
+              ) : null}
+            </Card>
+          ) : null}
 
           <Card className="gap-3.5 p-[22px]">
             <h2 className="m-0 font-display text-base font-semibold">Borrower</h2>

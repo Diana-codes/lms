@@ -96,6 +96,14 @@ export const KitIcon = make(
   </>,
 );
 
+export const ProductsIcon = make(
+  <>
+    <path d="M21 8 12 3 3 8l9 5 9-5z" />
+    <path d="M3 8v8l9 5 9-5V8" />
+    <path d="M12 13v8" />
+  </>,
+);
+
 export const StaffIcon = make(
   <>
     <circle cx="9" cy="8" r="3.5" />

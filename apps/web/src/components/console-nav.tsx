@@ -9,6 +9,7 @@ import {
   KitIcon,
   LoansIcon,
   OverviewIcon,
+  ProductsIcon,
   ReportsIcon,
   ShieldIcon,
   Sidebar,
@@ -89,6 +90,16 @@ export function ConsoleNav({
               >
                 <SettingsIcon />
                 Company
+              </Link>
+            ) : null}
+            {me.role === 'ADMIN' || me.role === 'MANAGER' ? (
+              <Link
+                href="/settings/products"
+                className={footerLink}
+                aria-current={isActive('/settings/products') ? 'page' : undefined}
+              >
+                <ProductsIcon />
+                Products
               </Link>
             ) : null}
             {me.role === 'ADMIN' || me.role === 'MANAGER' ? (

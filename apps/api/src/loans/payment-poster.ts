@@ -121,30 +121,43 @@ export class PaymentPoster {
     // 2. Anything more: close the loan, pay ahead, or repay principal early.
     let payoff: PayoffQuote | null = null;
     let prepay = 0n;
+    /** The instalments a principal prepayment recalculates. */
+    let prepaid: typeof future = [];
     if (left > 0n && future.length) {
       const quote = payoffQuote(
         future.map((r) => r.led),
         terms,
         input.receivedOn,
       );
-      const futurePrincipal = future.reduce((s, r) => s + owing(r.led).PRINCIPAL, 0n);
-      const untouched = future.every(
-        (r) => r.led.principalPaid + r.led.interestPaid + r.led.feePaid === 0n,
-      );
       if (left >= quote.total) {
         payoff = quote;
         left -= quote.total;
-      } else if (terms.overpayment === 'PAY_AHEAD' || left >= futurePrincipal || !untouched) {
-        const ahead = allocate(
-          future.map((r) => r.led),
-          left,
-          terms.allocationOrder,
-        );
-        allocations = [...allocations, ...ahead.allocations];
-        left = ahead.left;
       } else {
-        prepay = left;
-        left = 0n;
+        // Paying before the due date pays the next instalment first, as the
+        // borrower expects; only money beyond it is an overpayment.
+        const next = allocate([future[0]!.led], left, terms.allocationOrder);
+        allocations = [...allocations, ...next.allocations];
+        left = next.left;
+        const later = future.slice(1);
+        const laterPrincipal = later.reduce((s, r) => s + owing(r.led).PRINCIPAL, 0n);
+        const untouched = later.every(
+          (r) => r.led.principalPaid + r.led.interestPaid + r.led.feePaid === 0n,
+        );
+        if (left > 0n && later.length) {
+          if (terms.overpayment === 'PAY_AHEAD' || left >= laterPrincipal || !untouched) {
+            const ahead = allocate(
+              later.map((r) => r.led),
+              left,
+              terms.allocationOrder,
+            );
+            allocations = [...allocations, ...ahead.allocations];
+            left = ahead.left;
+          } else {
+            prepay = left;
+            prepaid = later;
+            left = 0n;
+          }
+        }
       }
     }
 
@@ -213,9 +226,9 @@ export class PaymentPoster {
     let rescheduled: { count: number; instalment: bigint } | null = null;
     if (prepay > 0n) {
       totals.PRINCIPAL += prepay;
-      const balance = future.reduce((s, r) => s + owing(r.led).PRINCIPAL, 0n) - prepay;
+      const balance = prepaid.reduce((s, r) => s + owing(r.led).PRINCIPAL, 0n) - prepay;
       const newRows = reschedule(
-        future.map((r) => ({
+        prepaid.map((r) => ({
           number: r.led.number,
           periodStart: r.led.periodStart,
           dueDate: r.led.dueDate,
@@ -229,7 +242,7 @@ export class PaymentPoster {
       );
       const version = loan.scheduleVersion + 1;
       await tx.scheduleInstalment.updateMany({
-        where: { id: { in: future.map((r) => r.db.id) } },
+        where: { id: { in: prepaid.map((r) => r.db.id) } },
         data: { supersededAt: new Date() },
       });
       await tx.scheduleInstalment.createMany({

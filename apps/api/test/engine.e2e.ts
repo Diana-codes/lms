@@ -307,24 +307,46 @@ describe('servicing under the engine', () => {
     expect(by(ACCOUNTS.FEE_INCOME.code, 'CREDIT')).toBe(500n);
   });
 
-  it('extra money repays principal early and shortens the loan', async () => {
+  it('paying early clears the next instalment, not principal', async () => {
+    const { loan: code } = await disburse(1_200_000n);
+    const before = await prisma.loan.findFirstOrThrow({
+      where: { code },
+      include: { instalments: { orderBy: { number: 'asc' } } },
+    });
+    const first = before.instalments[0]!;
+    await pay(code, first.principalDue + first.interestDue + first.feeDue).expect(200);
+    const after = await prisma.loan.findFirstOrThrow({
+      where: { code },
+      include: { instalments: { where: { supersededAt: null }, orderBy: { number: 'asc' } } },
+    });
+    expect(after.scheduleVersion).toBe(before.scheduleVersion);
+    expect(after.instalments[0]!.status).toBe('PAID');
+    expect(after.instalments).toHaveLength(12);
+  });
+
+  it('money beyond the next instalment repays principal early and shortens the loan', async () => {
     const { loan: code } = await disburse(1_200_000n);
     const before = await prisma.loan.findFirstOrThrow({
       where: { code },
       include: { instalments: { where: { supersededAt: null }, orderBy: { number: 'asc' } } },
     });
-    await pay(code, 300_000n).expect(200);
+    const first = before.instalments[0]!;
+    const next = first.principalDue + first.interestDue + first.feeDue;
+    await pay(code, next + 300_000n).expect(200);
     const after = await prisma.loan.findFirstOrThrow({
       where: { code },
       include: { instalments: { where: { supersededAt: null }, orderBy: { number: 'asc' } } },
     });
     expect(after.scheduleVersion).toBe(before.scheduleVersion + 1);
+    expect(after.instalments[0]!.status).toBe('PAID');
     expect(after.instalments.length).toBeLessThan(before.instalments.length);
-    const principalLeft = after.instalments.reduce((s, i) => s + i.principalDue, 0n);
-    expect(principalLeft).toBe(1_200_000n - 300_000n);
+    const principalLeft = after.instalments
+      .filter((i) => i.status !== 'PAID')
+      .reduce((s, i) => s + i.principalDue, 0n);
+    expect(principalLeft).toBe(1_200_000n - first.principalDue - 300_000n);
     // The instalment stays the same (principal + interest); the loan just ends sooner.
-    const was = before.instalments[0]!;
-    const now = after.instalments[0]!;
+    const was = before.instalments[1]!;
+    const now = after.instalments[1]!;
     expect(now.principalDue + now.interestDue).toBe(was.principalDue + was.interestDue);
   });
 

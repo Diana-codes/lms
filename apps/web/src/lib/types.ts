@@ -2,6 +2,7 @@ import type {
   ApplicationStage,
   DpdBucket,
   InstalmentState,
+  LoanTerms,
   PaymentTiming,
   ProductKind,
   StaffRole,
@@ -58,6 +59,83 @@ export interface CompanySettings {
   /** Which provider settings are set, by key. Never their values. */
   secrets: Record<string, boolean>;
   webhookConfigured: boolean;
+}
+
+export type ProductStatus = 'DRAFT' | 'PUBLISHED' | 'RETIRED';
+
+/** GET /products/manage. */
+export interface ProductSummary {
+  code: string;
+  name: string;
+  shortName: string;
+  kind: ProductKind;
+  status: ProductStatus;
+  version: number;
+  annualRateBps: number;
+  terms: LoanTerms;
+  minAmount: string;
+  maxAmount: string;
+  minTermMonths: number;
+  maxTermMonths: number;
+  activeLoans: number;
+  updatedAt: string;
+}
+
+/** GET /products/:code. */
+export interface ProductDetail {
+  code: string;
+  name: string;
+  shortName: string;
+  description: string | null;
+  kind: ProductKind;
+  status: ProductStatus;
+  version: number;
+  terms: LoanTerms;
+  minAmount: string;
+  maxAmount: string;
+  minTermMonths: number;
+  maxTermMonths: number;
+  affordabilityBps: number;
+  autoApproveMinScore: number | null;
+  autoApproveMaxAmount: string | null;
+  secondApprovalAbove: string | null;
+  loans: number;
+  applications: number;
+  versions: Array<{ version: number; createdAt: string }>;
+}
+
+/** POST /products/quote. Money as digit strings. */
+export interface QuoteResult {
+  amount: string;
+  principal: string;
+  netDisbursed: string;
+  instalment: string;
+  instalmentCount: number;
+  totalInterest: string;
+  totalFees: string;
+  totalThirdParty: string;
+  totalVat: string;
+  totalCostOfCredit: string;
+  totalRepayable: string;
+  aprBps: number;
+  effectiveAnnualBps: number;
+  fees: Array<{
+    code: string;
+    name: string;
+    timing: string;
+    thirdParty: boolean;
+    amount: string;
+    vat: string;
+  }>;
+  rows: Array<{
+    number: number;
+    dueDate: string;
+    principal: string;
+    interest: string;
+    fee: string;
+    payment: string;
+    balanceAfter: string;
+  }>;
 }
 
 /** GET /branches. */
@@ -177,6 +255,12 @@ export interface ApplicationCard {
   termMonths: number;
   annualRateBps: number;
   instalment: string;
+  frequency: LoanTerms['frequency'];
+  instalmentCount: number;
+  /** Paid to the borrower after fees taken at disbursement. */
+  netDisbursed: string;
+  totalFees: string;
+  aprBps: number;
   score: number | null;
   ai: {
     tone: 'ok' | 'warn' | 'flag';
@@ -250,6 +334,10 @@ export interface ScheduleRow {
   dueDate: string;
   principal: string;
   interest: string;
+  /** Fees collected with the instalment, VAT included. */
+  fee: string;
+  /** Late charges on it so far. */
+  penalty: string;
   payment: string;
   paid: string;
   remaining: string;
@@ -287,11 +375,39 @@ export interface LoanDetail {
     maturityDate: string;
     channel: string | null;
     collateral: string | null;
+    interestMethod: LoanTerms['interestMethod'];
+    frequency: LoanTerms['frequency'];
+    rateBps: number;
+    ratePeriod: LoanTerms['ratePeriod'];
+    /** Null for loans issued before products had terms. */
+    aprBps: number | null;
+    netDisbursed: string | null;
+    productVersion: number | null;
+    fees: Array<{
+      name: string;
+      basis: 'PERCENT' | 'FIXED';
+      value: number;
+      timing: string;
+      vat: boolean;
+      thirdParty: boolean;
+    }>;
+    penalty: LoanTerms['penalty'];
+    overpayment: LoanTerms['overpayment'];
+    payoffInterest: LoanTerms['payoff']['interest'];
   };
   figures: {
     outstandingPrincipal: string;
     totalRepaid: string;
     totalRemaining: string;
+    /** What closes the loan today, under its payoff rule. Null unless active. */
+    payoff: {
+      total: string;
+      principal: string;
+      interest: string;
+      fees: string;
+      penalties: string;
+      waived: string;
+    } | null;
     repaidPercent: number;
     paidCount: number;
     lateCount: number;

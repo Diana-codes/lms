@@ -16,8 +16,9 @@ const PILL: Record<InstalmentState, string> = {
 /** How many rows show before "Show all". */
 const COLLAPSED_ROWS = 9;
 
-export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
+export function ScheduleTable({ rows, subtitle }: { rows: ScheduleRow[]; subtitle: string }) {
   const [all, setAll] = useState(false);
+  const hasFees = rows.some((r) => r.fee !== '0');
   const shown = all ? rows : rows.slice(0, COLLAPSED_ROWS);
   const th = 'border-b border-line p-2 font-medium first:pl-0 last:pr-0';
   const td = 'border-b border-line-soft px-2 py-[11px] first:pl-0 last:pr-0';
@@ -26,7 +27,7 @@ export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
     <Card className="gap-3.5">
       <div className="flex items-center gap-3">
         <CardTitle className="mr-auto">Repayment schedule</CardTitle>
-        <span className="text-xs text-ink-muted">Reducing balance · monthly · RWF</span>
+        <span className="text-xs text-ink-muted">{subtitle} · RWF</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[600px] border-collapse text-sm tabular-nums">
@@ -44,6 +45,11 @@ export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
               <th scope="col" className={cx(th, 'text-right')}>
                 Interest
               </th>
+              {hasFees ? (
+                <th scope="col" className={cx(th, 'text-right')}>
+                  Fees
+                </th>
+              ) : null}
               <th scope="col" className={cx(th, 'text-right')}>
                 Instalment
               </th>
@@ -75,6 +81,11 @@ export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
                 <td className={cx(td, 'text-right text-ink-muted')}>
                   <Money amount={r.interest} bare />
                 </td>
+                {hasFees ? (
+                  <td className={cx(td, 'text-right text-ink-muted')}>
+                    <Money amount={r.fee} bare />
+                  </td>
+                ) : null}
                 <td className={cx(td, 'text-right font-semibold')}>
                   <Money amount={r.payment} bare />
                 </td>
@@ -93,6 +104,11 @@ export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
                   {r.state === 'PARTIAL' || (r.state === 'OVERDUE' && r.paid !== '0') ? (
                     <span className="mt-0.5 block text-xs text-ink-muted">
                       <Money amount={r.remaining} bare /> left
+                    </span>
+                  ) : null}
+                  {r.penalty !== '0' ? (
+                    <span className="mt-0.5 block text-xs text-danger-fg">
+                      + <Money amount={r.penalty} bare /> late charges
                     </span>
                   ) : null}
                 </td>
