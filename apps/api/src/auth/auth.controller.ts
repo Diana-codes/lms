@@ -15,7 +15,8 @@ import { ZodPipe } from '../common/zod.pipe';
 import { ENV, type Env } from '../config/env';
 import { AuthService, type PublicUser, type RequestMeta, type SessionTokens } from './auth.service';
 import { ACCESS_COOKIE, type AuthUser, REFRESH_COOKIE } from './auth.types';
-import { CurrentUser, Public } from './decorators';
+import { AllowWhilePasswordChange, CurrentUser, Public } from './decorators';
+import { MIN_PASSWORD_LENGTH } from './password';
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email()).pipe(z.string().max(254)),
@@ -26,6 +27,13 @@ const twoFactorSchema = z.object({ challengeToken: z.string().min(1), code: code
 const enableSchema = z.object({ code: codeSchema });
 const disableSchema = z.object({ password: z.string().min(1).max(200), code: codeSchema });
 const refreshSchema = z.object({ refreshToken: z.string().min(1).optional() }).optional();
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`)
+    .max(200),
+});
 
 const meta = (req: Request): RequestMeta => ({ ip: req.ip, userAgent: req.get('user-agent') });
 
@@ -85,6 +93,7 @@ export class AuthController {
     }
   }
 
+  @AllowWhilePasswordChange()
   @Post('logout')
   @HttpCode(204)
   async logout(
@@ -96,6 +105,25 @@ export class AuthController {
     this.clearCookies(res);
   }
 
+  /** Change your own password. Other sessions are signed out. */
+  @AllowWhilePasswordChange()
+  @Post('password')
+  @HttpCode(204)
+  async changePassword(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(passwordSchema)) body: z.infer<typeof passwordSchema>,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.auth.changePassword(
+      user.id,
+      user.sessionId,
+      body.currentPassword,
+      body.newPassword,
+      meta(req),
+    );
+  }
+
+  @AllowWhilePasswordChange()
   @Get('me')
   me(@CurrentUser() user: AuthUser): Omit<AuthUser, 'sessionId'> {
     const { sessionId: _sessionId, ...rest } = user;

@@ -74,6 +74,20 @@ async function createCompany(key: 'a' | 'b', aiFeatures = false): Promise<Compan
     .set('x-company', slug)
     .send({ email: SHARED_EMAIL, password: PASSWORD[key] })
     .expect(200);
+  // The platform admin chose this password, so the company admin replaces it first.
+  expect(login.body.user.mustChangePassword).toBe(true);
+  await http()
+    .get('/applications')
+    .set('x-company', slug)
+    .set('Cookie', cookiesOf(login))
+    .expect(403);
+  await http()
+    .post('/auth/password')
+    .set('x-company', slug)
+    .set('Cookie', cookiesOf(login))
+    .set('Origin', process.env.WEB_ORIGIN ?? 'http://localhost:3000')
+    .send({ currentPassword: PASSWORD[key], newPassword: `${PASSWORD[key]}-own` })
+    .expect(204);
   const db = testPrisma(id);
   await db.product.create({
     data: {

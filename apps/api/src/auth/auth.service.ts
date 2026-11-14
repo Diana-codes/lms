@@ -16,7 +16,7 @@ import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { currentCompanyId } from '../tenancy/company-context';
 import type { AccessTokenClaims, TwoFactorChallengeClaims } from './auth.types';
-import { hashPassword, verifyPassword } from './password';
+import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from './password';
 import { generateTotpSecret, totpUri, verifyTotp } from './totp';
 
 export const MAX_FAILED_LOGINS = 5;
@@ -50,6 +50,7 @@ export interface PublicUser {
   role: User['role'];
   branchId: string | null;
   twoFactorEnabled: boolean;
+  mustChangePassword: boolean;
 }
 
 export function toPublicUser(user: User): PublicUser {
@@ -61,6 +62,7 @@ export function toPublicUser(user: User): PublicUser {
     role: user.role,
     branchId: user.branchId,
     twoFactorEnabled: user.totpEnabledAt != null,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 
@@ -223,6 +225,50 @@ export class AuthService {
         refreshExpiresAt,
       },
     };
+  }
+
+  /**
+   * A user changes their own password. Other sessions are signed out; the
+   * current one carries on.
+   */
+  async changePassword(
+    userId: string,
+    sessionId: string,
+    current: string,
+    next: string,
+    meta: RequestMeta,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!(await verifyPassword(user.passwordHash, current))) {
+      await this.registerFailure(user, 'bad_password_on_change', meta);
+      throw new UnauthorizedException('Your current password is incorrect');
+    }
+    if (next.length < MIN_PASSWORD_LENGTH) {
+      throw new BadRequestException(`Use at least ${MIN_PASSWORD_LENGTH} characters`);
+    }
+    if (await verifyPassword(user.passwordHash, next)) {
+      throw new BadRequestException('Choose a password different from the current one');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await hashPassword(next),
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
+        failedLoginCount: 0,
+      },
+    });
+    await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null, id: { not: sessionId } },
+      data: { revokedAt: new Date() },
+    });
+    await this.audit.record({
+      action: 'auth.password.changed',
+      actorId: userId,
+      entityType: 'User',
+      entityId: userId,
+      ...meta,
+    });
   }
 
   async logout(sessionId: string, userId: string, meta: RequestMeta): Promise<void> {

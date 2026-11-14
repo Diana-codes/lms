@@ -14,6 +14,7 @@ import {
   Sidebar,
   type SidebarItem,
   SignOutIcon,
+  StaffIcon,
 } from '@kora/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -79,10 +80,20 @@ export function ConsoleNav({
               <KitIcon />
               UI kit
             </Link>
+            {me.role === 'ADMIN' || me.role === 'MANAGER' ? (
+              <Link
+                href="/settings/staff"
+                className={footerLink}
+                aria-current={isActive('/settings/staff') ? 'page' : undefined}
+              >
+                <StaffIcon />
+                Staff
+              </Link>
+            ) : null}
             <Link
               href="/settings/security"
               className={footerLink}
-              aria-current={isActive('/settings') ? 'page' : undefined}
+              aria-current={isActive('/settings/security') ? 'page' : undefined}
             >
               <ShieldIcon />
               Security

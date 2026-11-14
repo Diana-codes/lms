@@ -11,6 +11,8 @@ export interface AuthUser {
   branchId: string | null;
   sessionId: string;
   twoFactorEnabled: boolean;
+  /** An administrator set the password; the user must choose a new one first. */
+  mustChangePassword: boolean;
 }
 
 export interface AccessTokenClaims {

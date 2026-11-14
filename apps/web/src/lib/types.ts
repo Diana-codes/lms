@@ -15,6 +15,33 @@ export interface Me {
   role: StaffRole;
   branchId: string | null;
   twoFactorEnabled: boolean;
+  /** An administrator set the password; the console asks for a new one first. */
+  mustChangePassword: boolean;
+}
+
+/** GET /users. */
+export interface StaffMember {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: StaffRole;
+  branchId: string | null;
+  branch: string | null;
+  phone: string | null;
+  isActive: boolean;
+  twoFactorEnabled: boolean;
+  mustChangePassword: boolean;
+  lockedUntil: string | null;
+  lastLoginAt: string | null;
+}
+
+/** GET /branches. */
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+  district: string;
 }
 
 /** GET /system/stats. Money arrives as digit strings (see @kora/core parseRwf). */

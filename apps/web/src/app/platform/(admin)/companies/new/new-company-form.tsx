@@ -102,8 +102,9 @@ export function NewCompanyForm({ platformHost }: { platformHost: string | null }
           </div>
         ) : null}
         <p className="m-0 text-sm text-ink-muted">
-          Give the administrator their password over a separate channel. Next: add the
-          company&apos;s MoMo and SMS keys on its page.
+          Give the administrator their initial password over a separate channel; they replace it at
+          first sign-in, then add their staff. Next: add the company&apos;s MoMo and SMS keys on its
+          page.
         </p>
         <div className="flex gap-3">
           <Link href={`/platform/companies/${created.company.id}`} className="font-semibold">
@@ -217,7 +218,7 @@ export function NewCompanyForm({ platformHost }: { platformHost: string | null }
             label="Initial password"
             type="password"
             autoComplete="new-password"
-            hint="At least 12 characters"
+            hint="At least 12 characters. They choose their own at first sign-in."
             required
             value={form.adminPassword}
             onChange={(e) => set('adminPassword')(e.target.value)}

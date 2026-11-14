@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { serverApi } from '@/lib/server-api';
 import type { Me } from '@/lib/types';
+import { PasswordCard } from './password-card';
 import { TwoFactorCard } from './two-factor-card';
 
 export const metadata: Metadata = { title: 'Security' };
@@ -15,6 +16,7 @@ export default async function SecurityPage() {
     <>
       <PageHeader eyebrow={me.data.email} title="Security" />
       <TwoFactorCard enabled={me.data.twoFactorEnabled} />
+      <PasswordCard />
     </>
   );
 }

@@ -41,6 +41,7 @@ import { SystemController } from './system/system.controller';
 import { PlatformModule } from './platform/platform.module';
 import { CompanyController } from './tenancy/company.controller';
 import { TenancyModule } from './tenancy/tenancy.module';
+import { StaffService } from './users/staff.service';
 import { UsersController } from './users/users.controller';
 
 @Module({
@@ -92,6 +93,7 @@ import { UsersController } from './users/users.controller';
     AiClient,
     AiService,
     ScoringService,
+    StaffService,
   ],
 })
 export class AppModule {}

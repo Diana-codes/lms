@@ -13,7 +13,7 @@ import { CompaniesService } from '../tenancy/companies.service';
 import { companyContext } from '../tenancy/company-context';
 import { AuthService } from './auth.service';
 import { ACCESS_COOKIE, type AuthUser } from './auth.types';
-import { IS_PUBLIC, ROLES } from './decorators';
+import { ALLOW_WHILE_PASSWORD_CHANGE, IS_PUBLIC, ROLES } from './decorators';
 
 type AuthedRequest = Request & { user?: AuthUser; authVia?: 'cookie' | 'bearer' };
 
@@ -115,8 +115,17 @@ export class JwtAuthGuard implements CanActivate {
       branchId: u.branchId,
       sessionId: session.id,
       twoFactorEnabled: u.totpEnabledAt != null,
+      mustChangePassword: u.mustChangePassword,
     };
     req.authVia = viaCookie ? 'cookie' : 'bearer';
+
+    if (u.mustChangePassword) {
+      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_WHILE_PASSWORD_CHANGE, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
+      if (!allowed) throw new ForbiddenException('Choose a new password first');
+    }
     return true;
   }
 }

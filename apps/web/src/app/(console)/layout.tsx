@@ -12,6 +12,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
     getCompany(),
   ]);
   if (!me.ok) redirect('/login');
+  if (me.data.mustChangePassword) redirect('/change-password');
 
   return (
     <div className="flex min-h-screen flex-wrap bg-ground">

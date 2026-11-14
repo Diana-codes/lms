@@ -134,6 +134,7 @@ export class PlatformService {
         firstName: input.admin.firstName.trim(),
         lastName: input.admin.lastName.trim(),
         role: 'ADMIN',
+        mustChangePassword: true,
       },
       select: { id: true, email: true },
     });
