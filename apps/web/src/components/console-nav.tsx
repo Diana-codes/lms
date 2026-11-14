@@ -33,7 +33,16 @@ const NAV = [
 const footerLink =
   'flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-nav border-0 bg-transparent px-3 text-left text-sm text-forest-fg no-underline hover:bg-white/10 hover:text-white aria-[current=page]:bg-white/15 aria-[current=page]:text-white';
 
-export function ConsoleNav({ me, openApplications }: { me: Me; openApplications: number | null }) {
+export function ConsoleNav({
+  me,
+  openApplications,
+  brand,
+}: {
+  me: Me;
+  openApplications: number | null;
+  /** The lender's name, shown at the top of the sidebar. */
+  brand: string;
+}) {
   const pathname = usePathname();
   const [leaving, setLeaving] = useState(false);
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
@@ -56,6 +65,7 @@ export function ConsoleNav({ me, openApplications }: { me: Me; openApplications:
 
   return (
     <Sidebar
+      brand={brand}
       items={items}
       LinkComponent={Link}
       footer={

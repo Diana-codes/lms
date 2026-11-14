@@ -38,6 +38,8 @@ import { SmsService } from './sms/sms.service';
 import { ProductsController } from './products/products.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { SystemController } from './system/system.controller';
+import { PlatformModule } from './platform/platform.module';
+import { CompanyController } from './tenancy/company.controller';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { UsersController } from './users/users.controller';
 
@@ -51,9 +53,11 @@ import { UsersController } from './users/users.controller';
     AuthModule,
     LedgerModule,
     ProvidersModule,
+    PlatformModule,
   ],
   controllers: [
     HealthController,
+    CompanyController,
     UsersController,
     SystemController,
     ProductsController,

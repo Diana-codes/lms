@@ -1126,6 +1126,8 @@ enum ActorType {
   STAFF
   BORROWER
   SYSTEM
+  /// An Orin Tech House platform admin (actorId is a PlatformAdmin id).
+  PLATFORM
 }
 
 /// Who did what and when. Append-only: a trigger blocks UPDATE and DELETE.

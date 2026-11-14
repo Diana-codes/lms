@@ -17,25 +17,37 @@ Loan management for lenders in Rwanda: a web console for staff and a mobile app 
 
 ## Getting started
 
-You need Node 22 (`nvm use` reads `.nvmrc`), pnpm 10 and Docker with the compose plugin.
+You need Node 22 (`nvm use` reads `.nvmrc`), pnpm 10, Python 3.12+ and Docker with the compose plugin.
 
 ```bash
 nvm use
 pnpm install
 pnpm setup:env      # creates apps/api/.env and apps/web/.env.local with fresh secrets
 pnpm db:up          # Postgres on :5433 and Redis on :6380, in Docker
-pnpm db:migrate
-pnpm db:seed        # sample data that matches the designs
-(cd services/ml && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]')   # once
-(cd services/ml && .venv/bin/uvicorn app.main:app --port 8000) &                # scoring service
+pnpm db:migrate     # also creates the company-scoped and reporting database logins
+pnpm build          # the seed needs the built packages and the Prisma client
+pnpm db:seed        # sample data that matches the designs, in the "demo" company
+(cd services/ml && python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]')   # once
+(cd services/ml && .venv/bin/uvicorn app.main:app --port 8000) &                # scoring service (match ML_URL)
 pnpm dev            # API on :4000, console on :3000
 ```
 
 **Borrower app:** `cd apps/mobile && pnpm start`, then open it in Expo Go or an Android emulator. Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's address (the emulator uses `http://10.0.2.2:4000`). Sign in with a seeded borrower's phone number; with no SMS key the code is not texted; in development the API log prints it ("Development sign-in code for …"). The easiest way in: create an application in the console with your own phone number, then sign in to the app with that number.
 
-**Providers:** with no MoMo or Africa's Talking keys in `apps/api/.env`, the API uses local simulators (it logs which). In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. Add the keys to switch to the real sandboxes. With no `ANTHROPIC_API_KEY`, the Claude-written features (summaries, collections advice, Ask your data) say they are not configured; scoring still works.
+**Providers:** each company brings its own MoMo and Africa's Talking keys, set by a platform admin on the company's page. A company without them uses the local simulators in development (the API logs which); in production MoMo and SMS stay off for it. In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. Keys still in `apps/api/.env` from older setups are copied into the demo company by `pnpm db:seed`. With no `ANTHROPIC_API_KEY`, the Claude-written features (summaries, collections advice, Ask your data) say they are not configured; scoring still works.
 
-Open http://localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password.
+Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
+
+## Companies (multi-tenancy)
+
+Kora Lend runs many lenders on one installation. Each company has its own address (`<slug>.<APP_BASE_DOMAIN>`, e.g. `bf.koralend.rw`), staff, borrowers, products, ledger, provider accounts and branding.
+
+- **Isolation is enforced by Postgres**, not only by the code. The API connects with `APP_DATABASE_URL`, a login that owns nothing, and row-level security limits every query (raw SQL included) to the company of the request. With no company set it sees nothing. Migrations, the seed and the platform admin use the owner login (`DATABASE_URL`). `test/tenancy.e2e.ts` checks this table by table.
+- **Finding the company:** from the subdomain (the console proxy passes it to the API as `x-company`). Sign-in tokens carry their company and are refused on another company's address. The borrower app sends `x-company` too.
+- **Platform admin** (Orin Tech House): http://admin.localhost:3000, signed in as `platform@koralend.test` (same seed password). Create companies and their first administrator, set branding and optional features, add MoMo and SMS keys, issue webhook secrets, suspend a company, and see daily usage.
+- **Optional features** (AI assistance, bulk approve) are off for a new company until switched on.
+- **Background jobs** run company by company; the nightly run happens at 01:00 in each company's time zone and records the day's usage for billing.
+- **Adding a table:** give it a `companyId` (copy an existing model), and add it to the row-level security list in a migration. The tenancy tests fail if a table with a `companyId` has no policy.
 
 `pnpm db:seed` wipes the database and rebuilds it "as of today", so days past due are always correct. It refuses to run with `NODE_ENV=production`.
 

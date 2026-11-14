@@ -5,6 +5,8 @@ import {
   COMPANY_HEADER,
   companyHeaders,
   companySlugFromHost,
+  isPlatformHost,
+  PLATFORM_COOKIE,
   REFRESH_COOKIE,
 } from './lib/config';
 
@@ -15,7 +17,10 @@ import {
  * the console was opened at (bf.koralend.rw → "bf"), replacing anything the
  * browser sent. The API checks that the session belongs to that company.
  *
- * For pages it only decides where to send people:
+ * admin.<domain> is the platform admin console and serves nothing else;
+ * company addresses never serve it.
+ *
+ * For company pages it only decides where to send people:
  *  - a live session carries on;
  *  - an expired access token is renewed with the refresh token, then the
  *    same page is requested again with the new cookies;
@@ -33,8 +38,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     if (slug) forwarded.set(COMPANY_HEADER, slug);
     return NextResponse.next({ request: { headers: forwarded } });
   }
-  if (pathname === '/login') return NextResponse.next();
 
+  if (isPlatformHost(host)) {
+    if (!pathname.startsWith('/platform')) {
+      return NextResponse.redirect(new URL('/platform', request.url));
+    }
+    if (pathname === '/platform/login' || request.cookies.has(PLATFORM_COOKIE)) {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(new URL('/platform/login', request.url));
+  }
+  if (pathname.startsWith('/platform')) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (pathname === '/login') return NextResponse.next();
   if (request.cookies.has(ACCESS_COOKIE)) return NextResponse.next();
 
   const login = new URL('/login', request.url);

@@ -6,6 +6,8 @@ export const APP_BASE_DOMAIN = (process.env.APP_BASE_DOMAIN ?? 'localhost').toLo
 
 export const ACCESS_COOKIE = 'kl_access';
 export const REFRESH_COOKIE = 'kl_refresh';
+/** Platform admin session (Orin Tech House), set by the API on admin.<domain>. */
+export const PLATFORM_COOKIE = 'kp_access';
 
 /** Header that tells the API which company a request is for. */
 export const COMPANY_HEADER = 'x-company';
@@ -26,6 +28,12 @@ export function companySlugFromHost(host: string | null | undefined): string | n
   const label = name.slice(0, -(APP_BASE_DOMAIN.length + 1));
   if (label.includes('.') || RESERVED.has(label) || !SLUG.test(label)) return null;
   return label;
+}
+
+/** The platform admin console (Orin Tech House) lives at admin.<APP_BASE_DOMAIN>. */
+export function isPlatformHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  return host.toLowerCase().replace(/:\d+$/, '') === `admin.${APP_BASE_DOMAIN}`;
 }
 
 /** Headers naming the company, for calls the console server makes to the API. */

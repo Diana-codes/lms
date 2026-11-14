@@ -1,0 +1,332 @@
+import { randomInt, randomUUID } from 'node:crypto';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { PrismaPg } from '@prisma/adapter-pg';
+import request from 'supertest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AiService } from '../src/ai/ai.service';
+import { AppModule } from '../src/app.module';
+import { setupApp } from '../src/app.setup';
+import { hashPassword } from '../src/auth/password';
+import { PrismaClient } from '../src/generated/prisma/client';
+import { runAsCompany } from '../src/tenancy/company-context';
+import { testPrisma } from './test-db';
+
+/**
+ * Company isolation, end to end. Two companies are created through the
+ * platform API, each with data, and every layer is checked: the API, the
+ * database login itself, the reporting views, webhooks, suspension and the
+ * optional features.
+ */
+const run = randomUUID().slice(0, 6);
+const PLATFORM_EMAIL = `platform-${run}@orintech.test`;
+const PLATFORM_PASSWORD = `platform-${randomUUID()}`;
+const SHARED_EMAIL = `admin-${run}@lender.test`;
+const PASSWORD = { a: `alpha-${randomUUID()}`, b: `beta-${randomUUID()}` };
+
+let app: INestApplication;
+let owner: PrismaClient;
+let platformCookie: string[];
+
+type Company = {
+  id: string;
+  slug: string;
+  cookies: string[];
+  webhookToken: string;
+  db: PrismaClient;
+};
+const co = {} as Record<'a' | 'b', Company>;
+
+const http = () => request(app.getHttpServer());
+const cookiesOf = (res: request.Response): string[] =>
+  ([] as string[]).concat(res.get('Set-Cookie') ?? []).map((c) => c.split(';')[0]!);
+const as = (c: Company) => ({
+  get: (path: string) => http().get(path).set('x-company', c.slug).set('Cookie', c.cookies),
+  post: (path: string, body: object = {}) =>
+    http().post(path).set('x-company', c.slug).set('Cookie', c.cookies).send(body),
+});
+const phone = () => `078${randomInt(1_000_000, 9_999_999)}`;
+
+async function createCompany(key: 'a' | 'b', aiFeatures = false): Promise<Company> {
+  const slug = `${key === 'a' ? 'alpha' : 'beta'}-${run}`;
+  const res = await http()
+    .post('/platform/companies')
+    .set('Cookie', platformCookie)
+    .send({
+      slug,
+      name: key === 'a' ? 'Alpha Lending' : 'Beta Credit',
+      aiFeatures,
+      // The same email at both lenders: accounts are per company.
+      admin: {
+        email: SHARED_EMAIL,
+        firstName: 'Ada',
+        lastName: key.toUpperCase(),
+        password: PASSWORD[key],
+      },
+    })
+    .expect(201);
+  const id = res.body.company.id as string;
+  const login = await http()
+    .post('/auth/login')
+    .set('x-company', slug)
+    .send({ email: SHARED_EMAIL, password: PASSWORD[key] })
+    .expect(200);
+  const db = testPrisma(id);
+  await db.product.create({
+    data: {
+      code: `T-${run}`,
+      name: 'Tenancy test loan',
+      shortName: 'Test',
+      kind: 'SME',
+      annualRateBps: 1800,
+      minTermMonths: 3,
+      maxTermMonths: 24,
+      minAmount: 100_000n,
+      maxAmount: 10_000_000n,
+    },
+  });
+  return { id, slug, cookies: cookiesOf(login), webhookToken: res.body.webhookToken, db };
+}
+
+beforeAll(async () => {
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  app = moduleRef.createNestApplication();
+  setupApp(app);
+  await app.init();
+  owner = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+  });
+  await owner.platformAdmin.create({
+    data: {
+      email: PLATFORM_EMAIL,
+      name: 'Test platform admin',
+      passwordHash: await hashPassword(PLATFORM_PASSWORD),
+    },
+  });
+  const res = await http()
+    .post('/platform/auth/login')
+    .send({ email: PLATFORM_EMAIL, password: PLATFORM_PASSWORD })
+    .expect(200);
+  platformCookie = cookiesOf(res);
+  co.a = await createCompany('a');
+  co.b = await createCompany('b');
+});
+
+afterAll(async () => {
+  await owner.company.updateMany({
+    where: { id: { in: [co.a?.id, co.b?.id].filter(Boolean) as string[] } },
+    data: { status: 'SUSPENDED' },
+  });
+  await owner.platformAdmin.updateMany({
+    where: { email: PLATFORM_EMAIL },
+    data: { isActive: false },
+  });
+  await Promise.all([owner.$disconnect(), co.a?.db.$disconnect(), co.b?.db.$disconnect()]);
+  await app.close();
+});
+
+describe('platform administration', () => {
+  it('needs a platform session, which staff sessions are not', async () => {
+    await http().get('/platform/companies').expect(401);
+    await http().get('/platform/companies').set('Cookie', co.a.cookies).expect(401);
+    await http()
+      .post('/platform/auth/login')
+      .send({ email: PLATFORM_EMAIL, password: 'wrong-password-here' })
+      .expect(401);
+    const list = await http().get('/platform/companies').set('Cookie', platformCookie).expect(200);
+    expect(list.body.map((c: { slug: string }) => c.slug)).toEqual(
+      expect.arrayContaining([co.a.slug, co.b.slug]),
+    );
+  });
+
+  it('refuses reserved or taken addresses', async () => {
+    const body = (slug: string) => ({
+      slug,
+      name: 'Nope',
+      admin: { email: 'x@y.test', firstName: 'X', lastName: 'Y', password: 'long-enough-password' },
+    });
+    await http()
+      .post('/platform/companies')
+      .set('Cookie', platformCookie)
+      .send(body('admin'))
+      .expect(400);
+    await http()
+      .post('/platform/companies')
+      .set('Cookie', platformCookie)
+      .send(body(co.a.slug))
+      .expect(409);
+  });
+
+  it('gives each new company its own chart of accounts', async () => {
+    const accounts = await owner.ledgerAccount.groupBy({
+      by: ['companyId'],
+      where: { companyId: { in: [co.a.id, co.b.id] } },
+      _count: true,
+    });
+    expect(accounts.map((a) => a._count)).toEqual([13, 13]);
+  });
+});
+
+describe('isolation through the API', () => {
+  it('a session only works at its own company', async () => {
+    await as(co.a).get('/auth/me').expect(200);
+    // Company A's cookies presented at company B.
+    await http()
+      .get('/auth/me')
+      .set('x-company', co.b.slug)
+      .set('Cookie', co.a.cookies)
+      .expect(401);
+    // The shared email signs in to each company with that company's own password only.
+    await http()
+      .post('/auth/login')
+      .set('x-company', co.b.slug)
+      .send({ email: SHARED_EMAIL, password: PASSWORD.a })
+      .expect(401);
+  });
+
+  it("one company never sees another's applications, borrowers or loans", async () => {
+    const samePhone = phone();
+    const created = await as(co.a)
+      .post('/applications', {
+        name: 'Isolation Test',
+        phone: samePhone,
+        productCode: `T-${run}`,
+        amount: '500000',
+        termMonths: 6,
+      })
+      .expect(201);
+    // The same person can borrow from both lenders.
+    const other = await as(co.b)
+      .post('/applications', {
+        name: 'Isolation Test',
+        phone: samePhone,
+        productCode: `T-${run}`,
+        amount: '700000',
+        termMonths: 6,
+      })
+      .expect(201);
+    // Reference numbers run per company.
+    expect(created.body.code).toBe(other.body.code);
+
+    await as(co.b).get(`/borrowers/${created.body.borrowerCode}`).expect(200); // B's own BR- of the same number
+    const bApp = (await as(co.b).get(`/applications/${created.body.code}`).expect(200)).body;
+    expect(bApp.amount).toBe('700000');
+
+    const bList = (await as(co.b).get('/borrowers').expect(200)).body;
+    const bRows = JSON.stringify(bList);
+    expect(bRows).not.toContain('500000');
+  });
+});
+
+describe('isolation in the database', () => {
+  it('every table with a companyId has row-level security and a policy', async () => {
+    const rows = await owner.$queryRaw<Array<{ table: string; rls: boolean; policies: bigint }>>`
+      SELECT c.relname AS table, c.relrowsecurity AS rls,
+             (SELECT count(*) FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies
+      FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND EXISTS (SELECT 1 FROM information_schema.columns col
+                    WHERE col.table_schema = 'public' AND col.table_name = c.relname AND col.column_name = 'companyId')`;
+    expect(rows.length).toBeGreaterThanOrEqual(35);
+    expect(rows.filter((r) => !r.rls || r.policies < 1n).map((r) => r.table)).toEqual([]);
+  });
+
+  it("the company login cannot read another company's rows, in any table", async () => {
+    const tables = await owner.$queryRaw<Array<{ table: string }>>`
+      SELECT table_name AS table FROM information_schema.columns
+      WHERE table_schema = 'public' AND column_name = 'companyId'`;
+    for (const { table } of tables) {
+      const rows = await co.b.db.$queryRawUnsafe<Array<{ n: bigint }>>(
+        `SELECT count(*) AS n FROM "${table}" WHERE "companyId" = $1::uuid`,
+        co.a.id,
+      );
+      expect(rows[0]?.n, table).toBe(0n);
+    }
+  });
+
+  it('the company login cannot write into another company', async () => {
+    const product = await co.a.db.product.findFirstOrThrow({ where: { code: `T-${run}` } });
+    await expect(
+      co.b.db
+        .$executeRaw`UPDATE "Product" SET "name" = 'hijacked' WHERE "id" = ${product.id}::uuid`,
+    ).resolves.toBe(0);
+    await expect(
+      co.b.db.$executeRaw`INSERT INTO "Branch" ("id", "companyId", "code", "name", "district")
+        VALUES (gen_random_uuid(), ${co.a.id}::uuid, 'X', 'X', 'X')`,
+    ).rejects.toThrow(/row-level security/);
+    expect((await co.a.db.product.findFirstOrThrow({ where: { id: product.id } })).name).not.toBe(
+      'hijacked',
+    );
+  });
+
+  it('with no company set, the company login sees nothing', async () => {
+    const none = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: process.env.APP_DATABASE_URL! }),
+    });
+    try {
+      expect(await none.loan.count()).toBe(0);
+      expect(await none.user.count()).toBe(0);
+      await expect(none.platformAdmin.count()).rejects.toThrow(/permission denied/);
+    } finally {
+      await none.$disconnect();
+    }
+  });
+
+  it('reporting views only show the company asking', async () => {
+    if (!process.env.REPORTING_DATABASE_URL) return;
+    const ai = app.get(AiService);
+    const count = (id: string) =>
+      runAsCompany(id, () => ai.run('SELECT count(*)::int AS n FROM applications'));
+    const [a] = await count(co.a.id);
+    const [b] = await count(co.b.id);
+    expect(a).toEqual({ n: await co.a.db.application.count() });
+    expect(b).toEqual({ n: await co.b.db.application.count() });
+  });
+});
+
+describe('webhooks', () => {
+  it("a company's webhook secret only works for that company", async () => {
+    await http().post(`/webhooks/momo/collection/${co.a.webhookToken}`).send({}).expect(200);
+    await http()
+      .post(`/webhooks/momo/collection/${randomUUID()}${randomUUID()}`)
+      .send({})
+      .expect(401);
+    expect(co.a.webhookToken).not.toBe(co.b.webhookToken);
+  });
+});
+
+describe('features and suspension', () => {
+  it('optional features are off for a new company', async () => {
+    const status = (await as(co.a).get('/ai/status').expect(200)).body;
+    expect(status.configured).toBe(false);
+    await as(co.a).post('/applications/auto-approve').expect(403);
+    const profile = (await http().get('/company').set('x-company', co.a.slug).expect(200)).body;
+    expect(profile).toMatchObject({ slug: co.a.slug, features: { ai: false, autoApprove: false } });
+  });
+
+  it('a suspended company is locked out, and the other is not affected', async () => {
+    await http()
+      .patch(`/platform/companies/${co.b.id}`)
+      .set('Cookie', platformCookie)
+      .send({ status: 'SUSPENDED' })
+      .expect(200);
+    await as(co.b).get('/auth/me').expect(403);
+    await as(co.a).get('/auth/me').expect(200);
+    await http()
+      .patch(`/platform/companies/${co.b.id}`)
+      .set('Cookie', platformCookie)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+    await as(co.b).get('/auth/me').expect(200);
+  });
+
+  it('records every platform action in the audit log', async () => {
+    const actions = await owner.auditLog.findMany({
+      where: { actorType: 'PLATFORM', companyId: co.b.id },
+      select: { action: true },
+    });
+    expect(actions.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['platform.company.create', 'platform.company.update']),
+    );
+  });
+});

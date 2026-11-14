@@ -124,6 +124,35 @@ export class CompaniesService {
     return row ? toInfo(row) : null;
   }
 
+  /** What the console shows for a company before and after sign-in: its name and branding. */
+  async publicProfile(id: string) {
+    const c = await this.prisma.company.findUnique({
+      where: { id },
+      select: {
+        slug: true,
+        name: true,
+        brandName: true,
+        brandColor: true,
+        accentColor: true,
+        logoUrl: true,
+        defaultLanguage: true,
+        aiFeatures: true,
+        autoApprove: true,
+      },
+    });
+    if (!c) return null;
+    return {
+      slug: c.slug,
+      name: c.name,
+      displayName: c.brandName?.trim() || c.name,
+      brandColor: c.brandColor,
+      accentColor: c.accentColor,
+      logoUrl: c.logoUrl,
+      defaultLanguage: c.defaultLanguage,
+      features: { ai: c.aiFeatures, autoApprove: c.autoApprove },
+    };
+  }
+
   /** Every active company, for background jobs. */
   async active(): Promise<CompanyInfo[]> {
     const rows = await this.prisma.company.findMany({
