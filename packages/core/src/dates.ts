@@ -66,6 +66,15 @@ export function kigaliDate(instant: Date = new Date()): IsoDate {
   return build(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
 }
 
+/**
+ * The instant a calendar day starts in Kigali (its local midnight). Use this,
+ * not `isoToUtcDate`, to compare against timestamp columns such as `createdAt`.
+ */
+export function kigaliDayStart(date: IsoDate): Date {
+  const [y, m, d] = parts(date);
+  return new Date(Date.UTC(y, m - 1, d) - KIGALI_OFFSET_MINUTES * 60_000);
+}
+
 /** A Date at UTC midnight, the form Prisma expects for DATE columns. */
 export function isoToUtcDate(date: IsoDate): Date {
   const [y, m, d] = parts(date);

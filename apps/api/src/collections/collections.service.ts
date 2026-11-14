@@ -9,6 +9,7 @@ import {
   instalmentRemaining,
   isoToUtcDate,
   kigaliDate,
+  kigaliDayStart,
   maskPhone,
   ratioBps,
   shortStaffName,
@@ -368,7 +369,7 @@ export class CollectionsService {
           where: {
             template: 'reminder.overdue',
             loanId: { in: loans.map((l) => l.loanId) },
-            createdAt: { gte: isoToUtcDate(kigaliDate()) },
+            createdAt: { gte: kigaliDayStart(kigaliDate()) },
           },
           select: { loanId: true },
         })

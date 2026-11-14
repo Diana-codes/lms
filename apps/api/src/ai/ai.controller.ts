@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
-import { addDays, isoToUtcDate, kigaliDate, formatDate, utcDateToIso } from '@kora/core';
+import { addDays, kigaliDate, kigaliDayStart, formatDate, utcDateToIso } from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
@@ -80,7 +80,7 @@ export class AiController {
     const sent = await this.prisma.smsMessage.count({
       where: {
         template: 'checkin',
-        createdAt: { gte: isoToUtcDate(addDays(kigaliDate(), -7)) },
+        createdAt: { gte: kigaliDayStart(addDays(kigaliDate(), -7)) },
         loanId: { in: result.flagged.map((f) => f.loanId) },
       },
     });
@@ -106,7 +106,7 @@ export class AiController {
         where: {
           loanId: f.loanId,
           template: 'checkin',
-          createdAt: { gte: isoToUtcDate(addDays(kigaliDate(), -7)) },
+          createdAt: { gte: kigaliDayStart(addDays(kigaliDate(), -7)) },
         },
       });
       if (recent) continue;
