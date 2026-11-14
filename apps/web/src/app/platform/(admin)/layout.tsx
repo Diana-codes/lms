@@ -9,6 +9,8 @@ import { PlatformSignOut } from './sign-out';
 export default async function PlatformLayout({ children }: { children: ReactNode }) {
   const me = await serverApi<{ admin: PlatformAdmin }>('/platform/auth/me');
   if (!me.ok) redirect('/platform/login');
+  // Two-factor is required before anything else.
+  if (!me.data.admin.twoFactorEnabled) redirect('/platform/two-factor');
 
   return (
     <div className="flex min-h-screen flex-col bg-ground">

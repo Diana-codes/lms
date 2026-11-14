@@ -19,7 +19,7 @@ import { requestMeta } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import { SLUG_PATTERN } from '../tenancy/companies.service';
 import { PLATFORM_COOKIE, PlatformAuthService } from './platform-auth.service';
-import { PlatformGuard, type PlatformRequest } from './platform.guard';
+import { AllowBeforeTwoFactor, PlatformGuard, type PlatformRequest } from './platform.guard';
 import { PlatformService, SETTABLE_SECRETS } from './platform.service';
 
 const companyId = new ZodPipe(z.uuid());
@@ -35,6 +35,8 @@ const timezone = z.string().refine((tz) => {
 }, 'Not a known time zone');
 
 const loginSchema = z.object({ email: z.string().trim().min(3), password: z.string().min(1) });
+const codeSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code') });
+const challengeSchema = codeSchema.extend({ challengeToken: z.string().min(20) });
 
 const createSchema = z.object({
   slug: z
@@ -106,12 +108,30 @@ export class PlatformController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { token, admin } = await this.auth.login(body.email, body.password, requestMeta(req));
+    const result = await this.auth.login(body.email, body.password, requestMeta(req));
+    if (result.status === 'TOTP_REQUIRED') return result;
+    res.cookie(PLATFORM_COOKIE, result.token, this.auth.cookieOptions());
+    return { status: 'OK' as const, admin: result.admin };
+  }
+
+  @Post('auth/2fa/verify')
+  @HttpCode(200)
+  async verifyTwoFactor(
+    @Body(new ZodPipe(challengeSchema)) body: z.infer<typeof challengeSchema>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { token, admin } = await this.auth.completeTwoFactor(
+      body.challengeToken,
+      body.code,
+      requestMeta(req),
+    );
     res.cookie(PLATFORM_COOKIE, token, this.auth.cookieOptions());
-    return { admin };
+    return { status: 'OK' as const, admin };
   }
 
   @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
   @Post('auth/logout')
   @HttpCode(204)
   async logout(@Req() req: PlatformRequest, @Res({ passthrough: true }) res: Response) {
@@ -121,10 +141,30 @@ export class PlatformController {
   }
 
   @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
   @Get('auth/me')
   me(@Req() req: PlatformRequest) {
     const { sessionId: _session, ...admin } = req.platformAdmin!;
     return { admin };
+  }
+
+  @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
+  @Post('auth/2fa/setup')
+  @HttpCode(200)
+  setupTwoFactor(@Req() req: PlatformRequest) {
+    return this.auth.beginTwoFactorSetup(req.platformAdmin!.id);
+  }
+
+  @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
+  @Post('auth/2fa/enable')
+  @HttpCode(204)
+  async enableTwoFactor(
+    @Body(new ZodPipe(codeSchema)) body: z.infer<typeof codeSchema>,
+    @Req() req: PlatformRequest,
+  ) {
+    await this.auth.enableTwoFactor(req.platformAdmin!.id, body.code, requestMeta(req));
   }
 
   @UseGuards(PlatformGuard)

@@ -3,8 +3,10 @@ import {
   type ExecutionContext,
   ForbiddenException,
   Injectable,
+  SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { CompaniesService } from '../tenancy/companies.service';
 import {
@@ -18,17 +20,23 @@ export type PlatformRequest = Request & {
 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const BEFORE_TWO_FACTOR = 'platform:beforeTwoFactor';
+
+/** Routes a platform admin may use before turning on two-factor (to turn it on). */
+export const AllowBeforeTwoFactor = () => SetMetadata(BEFORE_TWO_FACTOR, true);
 
 /**
  * For /platform routes (marked @Public for the staff guard). Requires a
- * platform admin session. Writes must come from the console (CSRF defence,
- * on top of the strict SameSite cookie).
+ * platform admin session, and two-factor sign-in turned on: until it is, only
+ * the setup routes work. Writes must come from the console (CSRF defence, on
+ * top of the strict SameSite cookie).
  */
 @Injectable()
 export class PlatformGuard implements CanActivate {
   constructor(
     private readonly auth: PlatformAuthService,
     private readonly companies: CompaniesService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -42,7 +50,16 @@ export class PlatformGuard implements CanActivate {
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[PLATFORM_COOKIE];
     if (!token) throw new UnauthorizedException('Sign in to continue');
-    req.platformAdmin = await this.auth.verify(token);
+    const admin = await this.auth.verify(token);
+    req.platformAdmin = admin;
+
+    const allowed = this.reflector.getAllAndOverride<boolean>(BEFORE_TWO_FACTOR, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!admin.twoFactorEnabled && !allowed) {
+      throw new ForbiddenException('Turn on two-factor sign-in first');
+    }
     return true;
   }
 }

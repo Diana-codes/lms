@@ -8,6 +8,8 @@ import { AiService } from '../src/ai/ai.service';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
+import { generateTotpSecret, totpCode, totpStep } from '../src/auth/totp';
+import { PiiCrypto } from '../src/common/pii-crypto';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { runAsCompany } from '../src/tenancy/company-context';
 import { testPrisma } from './test-db';
@@ -21,6 +23,7 @@ import { testPrisma } from './test-db';
 const run = randomUUID().slice(0, 6);
 const PLATFORM_EMAIL = `platform-${run}@orintech.test`;
 const PLATFORM_PASSWORD = `platform-${randomUUID()}`;
+const PLATFORM_TOTP = generateTotpSecret();
 const SHARED_EMAIL = `admin-${run}@lender.test`;
 const PASSWORD = { a: `alpha-${randomUUID()}`, b: `beta-${randomUUID()}` };
 
@@ -96,16 +99,26 @@ beforeAll(async () => {
   owner = new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
   });
+  // A platform admin with two-factor already on (setting it up is tested below).
+  const crypto = app.get(PiiCrypto);
   await owner.platformAdmin.create({
     data: {
       email: PLATFORM_EMAIL,
       name: 'Test platform admin',
       passwordHash: await hashPassword(PLATFORM_PASSWORD),
+      totpSecretEnc: crypto.encrypt(PLATFORM_TOTP),
+      totpEnabledAt: new Date(),
     },
   });
-  const res = await http()
+  const first = await http()
     .post('/platform/auth/login')
     .send({ email: PLATFORM_EMAIL, password: PLATFORM_PASSWORD })
+    .expect(200);
+  expect(first.body.status).toBe('TOTP_REQUIRED');
+  expect(first.get('Set-Cookie')).toBeUndefined();
+  const res = await http()
+    .post('/platform/auth/2fa/verify')
+    .send({ challengeToken: first.body.challengeToken, code: totpCode(PLATFORM_TOTP, totpStep()) })
     .expect(200);
   platformCookie = cookiesOf(res);
   co.a = await createCompany('a');
@@ -137,6 +150,40 @@ describe('platform administration', () => {
     expect(list.body.map((c: { slug: string }) => c.slug)).toEqual(
       expect.arrayContaining([co.a.slug, co.b.slug]),
     );
+  });
+
+  it('requires two-factor: a new admin can only set it up, then signs in with a code', async () => {
+    const email = `new-platform-${run}@orintech.test`;
+    const password = `platform-${randomUUID()}`;
+    await owner.platformAdmin.create({
+      data: { email, name: 'New admin', passwordHash: await hashPassword(password) },
+    });
+    const login = await http().post('/platform/auth/login').send({ email, password }).expect(200);
+    expect(login.body).toMatchObject({ status: 'OK', admin: { twoFactorEnabled: false } });
+    const cookie = cookiesOf(login);
+    // Nothing but the setup works yet.
+    await http().get('/platform/companies').set('Cookie', cookie).expect(403);
+    const setup = await http().post('/platform/auth/2fa/setup').set('Cookie', cookie).expect(200);
+    expect(setup.body.otpauthUrl).toContain('otpauth://totp/');
+    await http()
+      .post('/platform/auth/2fa/enable')
+      .set('Cookie', cookie)
+      .send({ code: '000000' })
+      .expect(400);
+    await http()
+      .post('/platform/auth/2fa/enable')
+      .set('Cookie', cookie)
+      .send({ code: totpCode(setup.body.secret, totpStep()) })
+      .expect(204);
+    await http().get('/platform/companies').set('Cookie', cookie).expect(200);
+    // From now on the password alone is not enough.
+    const again = await http().post('/platform/auth/login').send({ email, password }).expect(200);
+    expect(again.body.status).toBe('TOTP_REQUIRED');
+    await http()
+      .post('/platform/auth/2fa/verify')
+      .send({ challengeToken: again.body.challengeToken, code: '123456' })
+      .expect(401);
+    await owner.platformAdmin.updateMany({ where: { email }, data: { isActive: false } });
   });
 
   it('refuses reserved or taken addresses', async () => {

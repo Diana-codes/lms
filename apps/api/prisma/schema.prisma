@@ -126,6 +126,13 @@ model PlatformAdmin {
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())
 
+  /// TOTP secret, encrypted. Two-factor is required: until it is on, the
+  /// admin can only set it up.
+  totpSecretEnc String?
+  totpEnabledAt DateTime?
+  /// Last accepted TOTP time step, to stop a code being replayed.
+  totpLastStep  Int?
+
   sessions PlatformSession[]
 }
 
@@ -189,11 +196,15 @@ model User {
   /// Last accepted TOTP time step, to stop a code being replayed.
   totpLastStep  Int?
 
-  failedLoginCount Int       @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  /// Set when an administrator sets the password: the user must choose a
+  /// new one before doing anything else.
+  mustChangePassword Boolean   @default(false)
+  passwordChangedAt  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   branch   Branch?   @relation(fields: [branchId], references: [id])
   sessions Session[]
