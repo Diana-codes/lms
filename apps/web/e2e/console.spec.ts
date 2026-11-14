@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { PASSWORD, signIn, STAFF } from './helpers';
+import { PASSWORD, signIn, STAFF, submitWithTextedCode } from './helpers';
 
 test.describe('signing in', () => {
   test('sends signed-out visitors to the sign-in page, then back where they were going', async ({
@@ -17,9 +17,9 @@ test.describe('signing in', () => {
     );
     await expect(page).toHaveURL(/\/login/);
 
-    // Signing in from here lands on the page they first asked for.
+    // Signing in from here (password, then the texted code) lands on the page they first asked for.
     await page.getByLabel('Password').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await submitWithTextedCode(page);
     await expect(page).toHaveURL(/\/kit$/);
     await expect(page.getByRole('heading', { name: 'UI kit', level: 1 })).toBeVisible();
   });
@@ -149,11 +149,13 @@ test.describe('console shell', () => {
     );
   });
 
-  test('two-factor setup shows a QR code and a key to type', async ({ page }) => {
+  test('signed in by text, staff can move to an authenticator app', async ({ page }) => {
     await signIn(page, STAFF.collections);
     await page.getByRole('link', { name: 'Security' }).click();
-    await expect(page.getByText('Off', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Set up two-factor' }).click();
+    await expect(page.getByText('Text message', { exact: true })).toBeVisible();
+    await expect(page.getByText(/we text a 6-digit code to \+250 78• ••• \d{3}/)).toBeVisible();
+    await page.getByRole('button', { name: 'Use an authenticator app instead' }).click();
+    await page.getByRole('button', { name: 'Show the QR code' }).click();
     await expect(
       page.getByRole('img', { name: 'QR code for your authenticator app' }),
     ).toBeVisible();
@@ -162,6 +164,8 @@ test.describe('console shell', () => {
     await page.getByRole('button', { name: 'Turn on' }).click();
     await expect(page.locator('form').getByRole('alert')).toHaveText('That code is not valid');
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('button', { name: 'Set up two-factor' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Use an authenticator app instead' }),
+    ).toBeVisible();
   });
 });

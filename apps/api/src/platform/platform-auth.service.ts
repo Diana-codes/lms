@@ -9,14 +9,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { maskPhone, normaliseRwPhone } from '@kora/core';
 import { redactDeep } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
+import { type TwoFactorMethod, twoFactorMethod, twoFactorView } from '../auth/auth.types';
 import { hashPassword, verifyPassword } from '../auth/password';
+import { CODE_TTL_MINUTES, TextCodes } from '../auth/text-codes';
 import { generateTotpSecret, totpUri, verifyTotp } from '../auth/totp';
 import { PiiCrypto } from '../common/pii-crypto';
 import { ENV, type Env } from '../config/env';
-import type { Prisma } from '../generated/prisma/client';
+import type { PlatformAdmin, Prisma } from '../generated/prisma/client';
 import { PlatformPrismaService } from '../prisma/prisma.service';
+import { ProvidersService } from '../providers/providers.service';
+import { PRODUCT_NAME } from '../tenancy/company-context';
 
 export const PLATFORM_COOKIE = 'kp_access';
 export const PLATFORM_SESSION_HOURS = 8;
@@ -33,9 +38,11 @@ export interface PlatformClaims {
 interface PlatformChallengeClaims {
   sub: string;
   typ: 'platform-2fa';
+  m: TwoFactorMethod;
 }
 
 const CHALLENGE_TTL_SECONDS = 300;
+const EXPIRED = 'Sign-in expired. Start again.';
 
 export interface PlatformAdminView {
   id: string;
@@ -43,11 +50,27 @@ export interface PlatformAdminView {
   name: string;
   /** Two-factor is required: without it the admin can only set it up. */
   twoFactorEnabled: boolean;
+  twoFactorMethod: TwoFactorMethod | null;
+  verifiedPhone: string | null;
 }
 
 export type PlatformLoginResult =
   | { status: 'OK'; token: string; admin: PlatformAdminView }
-  | { status: 'TOTP_REQUIRED'; challengeToken: string };
+  | {
+      status: 'TWO_FACTOR_REQUIRED';
+      method: TwoFactorMethod;
+      challengeToken: string;
+      sentTo?: string;
+    };
+
+type Admin = PlatformAdmin;
+
+const view = (admin: Admin): PlatformAdminView => ({
+  id: admin.id,
+  email: admin.email,
+  name: admin.name,
+  ...twoFactorView(admin),
+});
 
 /**
  * Sign-in for platform admins (Orin Tech House). Separate from company staff:
@@ -57,13 +80,22 @@ export type PlatformLoginResult =
 @Injectable()
 export class PlatformAuthService {
   private dummyHash: Promise<string> | null = null;
+  private readonly codes: TextCodes;
 
   constructor(
     private readonly db: PlatformPrismaService,
     private readonly jwt: JwtService,
     private readonly crypto: PiiCrypto,
+    providers: ProvidersService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) {
+    this.codes = new TextCodes(
+      () => this.db.platformCode,
+      crypto,
+      () => providers.platformSms(),
+      env.NODE_ENV === 'development',
+    );
+  }
 
   async login(email: string, password: string, meta: RequestMeta): Promise<PlatformLoginResult> {
     const admin = await this.db.platformAdmin.findUnique({
@@ -86,49 +118,111 @@ export class PlatformAuthService {
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
-    if (admin.totpEnabledAt) {
-      const claims: PlatformChallengeClaims = { sub: admin.id, typ: 'platform-2fa' };
+    const method = twoFactorMethod(admin);
+    if (method) {
+      const sent = method === 'sms' ? await this.sendSignInCode(admin) : undefined;
+      const claims: PlatformChallengeClaims = { sub: admin.id, typ: 'platform-2fa', m: method };
       return {
-        status: 'TOTP_REQUIRED',
+        status: 'TWO_FACTOR_REQUIRED',
+        method,
         challengeToken: await this.jwt.signAsync(claims, { expiresIn: CHALLENGE_TTL_SECONDS }),
+        sentTo: sent?.sentTo,
       };
     }
     return { status: 'OK', ...(await this.startSession(admin.id, meta)) };
   }
 
-  /** Second sign-in step, with a code from the authenticator app. */
+  /** Second sign-in step: a code from the authenticator app or a text message. */
   async completeTwoFactor(
     challengeToken: string,
     code: string,
     meta: RequestMeta,
   ): Promise<{ token: string; admin: PlatformAdminView }> {
+    const { admin, method } = await this.challengedAdmin(challengeToken);
+    this.assertNotLocked(admin);
+    if (method === 'app') {
+      const step = verifyTotp(this.crypto.decrypt(admin.totpSecretEnc!), code, {
+        afterStep: admin.totpLastStep,
+      });
+      if (step == null) {
+        await this.registerFailure(admin.id, admin.failedLoginCount, 'bad_totp', meta);
+        throw new UnauthorizedException('That code is not valid');
+      }
+      await this.db.platformAdmin.update({ where: { id: admin.id }, data: { totpLastStep: step } });
+    } else if (!(await this.codes.verify(admin.id, 'SIGN_IN', code))) {
+      await this.registerFailure(admin.id, admin.failedLoginCount, 'bad_sms_code', meta);
+      throw new UnauthorizedException('That code is not valid or has expired');
+    }
+    return this.startSession(admin.id, meta);
+  }
+
+  async resendSignInCode(challengeToken: string): Promise<{ sentTo: string }> {
+    const { admin, method } = await this.challengedAdmin(challengeToken);
+    if (method !== 'sms') throw new BadRequestException('Use the code from your authenticator app');
+    this.assertNotLocked(admin);
+    return this.sendSignInCode(admin, true);
+  }
+
+  /** Texted codes, step one: send a code to the number to confirm it. */
+  async startPhoneVerification(adminId: string, input: string): Promise<{ sentTo: string }> {
+    const phone = normaliseRwPhone(input);
+    if (!phone) throw new BadRequestException('Enter a Rwandan mobile number, e.g. 078 812 3412');
+    return this.codes.send(
+      adminId,
+      'VERIFY_PHONE',
+      phone,
+      (code) =>
+        `${PRODUCT_NAME} platform: ${code} is your code to confirm this phone for sign-in. It expires in ${CODE_TTL_MINUTES} minutes.`,
+    );
+  }
+
+  /** Texted codes, step two: the number is confirmed and sign-in codes go there. */
+  async confirmPhone(adminId: string, code: string, meta: RequestMeta): Promise<PlatformAdminView> {
+    const row = await this.codes.verify(adminId, 'VERIFY_PHONE', code);
+    if (!row) throw new BadRequestException('That code is not valid or has expired');
+    const admin = await this.db.platformAdmin.update({
+      where: { id: adminId },
+      data: { phone: row.phone, phoneVerifiedAt: new Date() },
+    });
+    await this.audit('platform.2fa.phone_verified', adminId, { phone: maskPhone(row.phone) }, meta);
+    return view(admin);
+  }
+
+  private async challengedAdmin(
+    challengeToken: string,
+  ): Promise<{ admin: Admin; method: TwoFactorMethod }> {
     let claims: PlatformChallengeClaims;
     try {
       claims = await this.jwt.verifyAsync<PlatformChallengeClaims>(challengeToken);
     } catch {
-      throw new UnauthorizedException('Sign-in expired. Start again.');
+      throw new UnauthorizedException(EXPIRED);
     }
-    if (claims.typ !== 'platform-2fa')
-      throw new UnauthorizedException('Sign-in expired. Start again.');
+    if (claims.typ !== 'platform-2fa') throw new UnauthorizedException(EXPIRED);
     const admin = await this.db.platformAdmin.findUnique({ where: { id: claims.sub } });
-    if (!admin || !admin.isActive || !admin.totpEnabledAt || !admin.totpSecretEnc) {
-      throw new UnauthorizedException('Sign-in expired. Start again.');
+    if (!admin || !admin.isActive || twoFactorMethod(admin) !== claims.m) {
+      throw new UnauthorizedException(EXPIRED);
     }
+    return { admin, method: claims.m };
+  }
+
+  private sendSignInCode(admin: Admin, resend = false): Promise<{ sentTo: string }> {
+    return this.codes.send(
+      admin.id,
+      'SIGN_IN',
+      admin.phone!,
+      (code) =>
+        `${PRODUCT_NAME} platform: your sign-in code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Never share it with anyone.`,
+      { resend },
+    );
+  }
+
+  private assertNotLocked(admin: Admin): void {
     if (admin.lockedUntil && admin.lockedUntil > new Date()) {
       throw new HttpException(
         `Too many failed attempts. Try again in ${LOCKOUT_MINUTES} minutes.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    const step = verifyTotp(this.crypto.decrypt(admin.totpSecretEnc), code, {
-      afterStep: admin.totpLastStep,
-    });
-    if (step == null) {
-      await this.registerFailure(admin.id, admin.failedLoginCount, 'bad_totp', meta);
-      throw new UnauthorizedException('That code is not valid');
-    }
-    await this.db.platformAdmin.update({ where: { id: admin.id }, data: { totpLastStep: step } });
-    return this.startSession(admin.id, meta);
   }
 
   /** Start two-factor setup: a new secret for the admin's authenticator app. */
@@ -194,20 +288,12 @@ export class PlatformAuthService {
       where: { id: admin.id },
       data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
     });
-    await this.audit('platform.login', admin.id, { twoFactor: admin.totpEnabledAt != null }, meta);
+    await this.audit('platform.login', admin.id, { twoFactor: twoFactorMethod(admin) }, meta);
     const claims: PlatformClaims = { sub: admin.id, sid: session.id, typ: 'platform' };
     const token = await this.jwt.signAsync(claims, {
       expiresIn: PLATFORM_SESSION_HOURS * 3600,
     });
-    return {
-      token,
-      admin: {
-        id: admin.id,
-        email: admin.email,
-        name: admin.name,
-        twoFactorEnabled: admin.totpEnabledAt != null,
-      },
-    };
+    return { token, admin: view(admin) };
   }
 
   /** The admin behind a token, if its session is still open. */
@@ -232,13 +318,7 @@ export class PlatformAuthService {
     ) {
       throw new UnauthorizedException('Session expired');
     }
-    return {
-      id: session.admin.id,
-      email: session.admin.email,
-      name: session.admin.name,
-      twoFactorEnabled: session.admin.totpEnabledAt != null,
-      sessionId: session.id,
-    };
+    return { ...view(session.admin), sessionId: session.id };
   }
 
   async logout(sessionId: string, adminId: string, meta: RequestMeta): Promise<void> {

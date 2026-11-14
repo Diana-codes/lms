@@ -19,6 +19,14 @@ export const ALLOW_WHILE_PASSWORD_CHANGE = 'kora:allowWhilePasswordChange';
  */
 export const AllowWhilePasswordChange = () => SetMetadata(ALLOW_WHILE_PASSWORD_CHANGE, true);
 
+export const ALLOW_WITHOUT_TWO_FACTOR = 'kora:allowWithoutTwoFactor';
+
+/**
+ * Routes a user may use before they have set up two-factor sign-in, which
+ * is required: seeing who they are, signing out, and setting it up.
+ */
+export const AllowWithoutTwoFactor = () => SetMetadata(ALLOW_WITHOUT_TWO_FACTOR, true);
+
 export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext) => {
   return ctx.switchToHttp().getRequest<{ user?: AuthUser }>().user;
 });

@@ -15,7 +15,7 @@ export interface CompanyProfile {
   features: { ai: boolean; autoApprove: boolean };
 }
 
-export const PRODUCT_NAME = 'Kora Lend';
+export { PRODUCT_NAME } from './config';
 
 /** Once per request: the company named by the address the console was opened at. */
 export const getCompany = cache(async (): Promise<CompanyProfile | null> => {

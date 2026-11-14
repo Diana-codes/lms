@@ -2,16 +2,21 @@
 
 import { Button, Card, FormError, TextField } from '@kora/ui';
 import { type FormEvent, useState } from 'react';
+import { codeStepHint, ResendCode } from '@/components/sign-in-code';
+import { codeInputProps } from '@/components/two-factor-setup';
 import { api, ApiError } from '@/lib/api';
+import { PRODUCT_NAME } from '@/lib/config';
+import type { TwoFactorChallenge } from '@/lib/types';
 
-type LoginResult = { status: 'OK' } | { status: 'TOTP_REQUIRED'; challengeToken: string };
+type LoginResult = { status: 'OK' } | TwoFactorChallenge;
 
 export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [challenge, setChallenge] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(
     apiDown ? 'The server is not responding. Try again in a moment.' : null,
   );
@@ -24,7 +29,7 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
       const result = challenge
         ? await api<LoginResult>('/platform/auth/2fa/verify', {
             method: 'POST',
-            body: { challengeToken: challenge, code },
+            body: { challengeToken: challenge.challengeToken, code },
             retryOnUnauthorized: false,
           })
         : await api<LoginResult>('/platform/auth/login', {
@@ -32,8 +37,8 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
             body: { email, password },
             retryOnUnauthorized: false,
           });
-      if (result.status === 'TOTP_REQUIRED') {
-        setChallenge(result.challengeToken);
+      if (result.status === 'TWO_FACTOR_REQUIRED') {
+        setChallenge(result);
         setPassword('');
         setBusy(false);
         return;
@@ -53,7 +58,7 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
         </h1>
         {challenge ? (
           <p className="m-0 text-sm text-ink-muted">
-            Open your authenticator app and enter the 6-digit code for the Kora Lend platform.
+            {codeStepHint(challenge, `the ${PRODUCT_NAME} platform`)}
           </p>
         ) : null}
       </div>
@@ -62,14 +67,10 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
           <TextField
             key="code"
             label="6-digit code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
             autoFocus
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            {...codeInputProps}
           />
         ) : (
           <>
@@ -94,6 +95,11 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
             />
           </>
         )}
+        {notice && !error ? (
+          <p role="status" className="m-0 text-sm text-ink-muted">
+            {notice}
+          </p>
+        ) : null}
         <FormError>{error}</FormError>
         <Button
           type="submit"
@@ -104,17 +110,30 @@ export function PlatformLoginForm({ apiDown }: { apiDown: boolean }) {
           {busy ? 'Signing in…' : challenge ? 'Verify and sign in' : 'Sign in'}
         </Button>
         {challenge ? (
-          <Button
-            variant="ghost"
-            block
-            onClick={() => {
-              setChallenge(null);
-              setCode('');
-              setError(null);
-            }}
-          >
-            Start again
-          </Button>
+          <>
+            <ResendCode
+              path="/platform/auth/2fa/resend"
+              challenge={challenge}
+              onSent={(sentTo) => {
+                setError(null);
+                setCode('');
+                setNotice(`A new code is on its way to ${sentTo}.`);
+              }}
+              onError={setError}
+            />
+            <Button
+              variant="ghost"
+              block
+              onClick={() => {
+                setChallenge(null);
+                setCode('');
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              Start again
+            </Button>
+          </>
         ) : null}
       </form>
     </Card>

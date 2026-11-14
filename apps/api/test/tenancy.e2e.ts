@@ -11,7 +11,9 @@ import { hashPassword } from '../src/auth/password';
 import { generateTotpSecret, totpCode, totpStep } from '../src/auth/totp';
 import { PiiCrypto } from '../src/common/pii-crypto';
 import { PrismaClient } from '../src/generated/prisma/client';
+import { ProvidersService } from '../src/providers/providers.service';
 import { runAsCompany } from '../src/tenancy/company-context';
+import { lastCodeTo, testPhone } from './sign-in';
 import { testPrisma } from './test-db';
 
 /**
@@ -88,6 +90,18 @@ async function createCompany(key: 'a' | 'b', aiFeatures = false): Promise<Compan
     .set('Origin', process.env.WEB_ORIGIN ?? 'http://localhost:3000')
     .send({ currentPassword: PASSWORD[key], newPassword: `${PASSWORD[key]}-own` })
     .expect(204);
+  // Then two-factor, which is required: texted codes on a confirmed phone.
+  const adminPhone = testPhone();
+  const asAdmin = (path: string) =>
+    http()
+      .post(path)
+      .set('x-company', slug)
+      .set('Cookie', cookiesOf(login))
+      .set('Origin', process.env.WEB_ORIGIN ?? 'http://localhost:3000');
+  await asAdmin('/auth/2fa/sms/start').send({ phone: adminPhone }).expect(200);
+  await asAdmin('/auth/2fa/sms/confirm')
+    .send({ code: lastCodeTo(app, adminPhone) })
+    .expect(200);
   const db = testPrisma(id);
   await db.product.create({
     data: {
@@ -128,7 +142,7 @@ beforeAll(async () => {
     .post('/platform/auth/login')
     .send({ email: PLATFORM_EMAIL, password: PLATFORM_PASSWORD })
     .expect(200);
-  expect(first.body.status).toBe('TOTP_REQUIRED');
+  expect(first.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'app' });
   expect(first.get('Set-Cookie')).toBeUndefined();
   const res = await http()
     .post('/platform/auth/2fa/verify')
@@ -192,11 +206,50 @@ describe('platform administration', () => {
     await http().get('/platform/companies').set('Cookie', cookie).expect(200);
     // From now on the password alone is not enough.
     const again = await http().post('/platform/auth/login').send({ email, password }).expect(200);
-    expect(again.body.status).toBe('TOTP_REQUIRED');
+    expect(again.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'app' });
     await http()
       .post('/platform/auth/2fa/verify')
       .send({ challengeToken: again.body.challengeToken, code: '123456' })
       .expect(401);
+    await owner.platformAdmin.updateMany({ where: { email }, data: { isActive: false } });
+  });
+
+  it('platform admins can use texted codes instead', async () => {
+    const email = `sms-platform-${run}@orintech.test`;
+    const password = `platform-${randomUUID()}`;
+    await owner.platformAdmin.create({
+      data: { email, name: 'SMS admin', passwordHash: await hashPassword(password) },
+    });
+    const cookie = cookiesOf(
+      await http().post('/platform/auth/login').send({ email, password }).expect(200),
+    );
+    const adminPhone = testPhone();
+    await http()
+      .post('/platform/auth/2fa/sms/start')
+      .set('Cookie', cookie)
+      .send({ phone: adminPhone })
+      .expect(200);
+    const confirmed = await http()
+      .post('/platform/auth/2fa/sms/confirm')
+      .set('Cookie', cookie)
+      .send({ code: lastCodeTo(app, adminPhone) })
+      .expect(200);
+    expect(confirmed.body).toMatchObject({ twoFactorEnabled: true, twoFactorMethod: 'sms' });
+    await http().get('/platform/companies').set('Cookie', cookie).expect(200);
+
+    const next = await http().post('/platform/auth/login').send({ email, password }).expect(200);
+    expect(next.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'sms' });
+    // The message names the platform, not a lender.
+    const outbox = app.get(ProvidersService).platformSmsSimulator.outbox;
+    expect(outbox.at(-1)!.message).toMatch(/^Kora Lend platform: your sign-in code is \d{6}\./);
+    await http()
+      .post('/platform/auth/2fa/verify')
+      .send({ challengeToken: next.body.challengeToken, code: lastCodeTo(app, adminPhone) })
+      .expect(200);
+    // Platform codes are out of reach of the company database login.
+    await expect(co.a.db.$queryRawUnsafe('SELECT count(*) FROM "PlatformCode"')).rejects.toThrow(
+      /permission denied/,
+    );
     await owner.platformAdmin.updateMany({ where: { email }, data: { isActive: false } });
   });
 

@@ -28,7 +28,9 @@ export class ProvidersService {
   private readonly momoGateways = new Map<string, { key: string; gateway: MomoGateway }>();
   private readonly smsGateways = new Map<string, { key: string; gateway: SmsGateway }>();
   private readonly momoSimulator: MomoSimulator;
-  private readonly smsSimulator = new SmsSimulator();
+  private readonly smsSimulator: SmsSimulator;
+  readonly platformSmsSimulator: SmsSimulator;
+  private platformGateway: SmsGateway | null = null;
 
   constructor(
     @Inject(ENV) private readonly env: Env,
@@ -37,6 +39,9 @@ export class ProvidersService {
     private readonly secrets: CompanySecretsService,
   ) {
     this.momoSimulator = new MomoSimulator(prisma);
+    const outboxFile = env.NODE_ENV === 'production' ? undefined : env.SMS_OUTBOX_FILE;
+    this.smsSimulator = new SmsSimulator(outboxFile);
+    this.platformSmsSimulator = new SmsSimulator(outboxFile);
   }
 
   /** The current company's MoMo account, or the simulator outside production. */
@@ -97,6 +102,20 @@ export class ProvidersService {
     });
     this.smsGateways.set(companyId, { key, gateway });
     return gateway;
+  }
+
+  /**
+   * The platform's own SMS account (Orin Tech House), used for sign-in codes
+   * only. Not tied to any company.
+   */
+  platformSms(): SmsGateway {
+    if (!this.env.PLATFORM_SMS_API_KEY) return this.platformSmsSimulator;
+    this.platformGateway ??= new AfricasTalkingGateway({
+      username: this.env.PLATFORM_SMS_USERNAME,
+      apiKey: this.env.PLATFORM_SMS_API_KEY,
+      senderId: this.env.PLATFORM_SMS_SENDER_ID,
+    });
+    return this.platformGateway;
   }
 
   /** The merchant code quoted in reminders ("MoMo Pay 123456"), if the company has one. */

@@ -14,7 +14,11 @@ export interface Me {
   lastName: string;
   role: StaffRole;
   branchId: string | null;
+  /** Required: until it is set up, the console only offers the setup page. */
   twoFactorEnabled: boolean;
+  twoFactorMethod: TwoFactorMethod | null;
+  /** The confirmed number for texted codes, masked. */
+  verifiedPhone: string | null;
   /** An administrator set the password; the console asks for a new one first. */
   mustChangePassword: boolean;
 }
@@ -31,6 +35,7 @@ export interface StaffMember {
   phone: string | null;
   isActive: boolean;
   twoFactorEnabled: boolean;
+  twoFactorMethod: TwoFactorMethod | null;
   mustChangePassword: boolean;
   lockedUntil: string | null;
   lastLoginAt: string | null;
@@ -63,8 +68,18 @@ export interface SystemStats {
   ledger: { entries: string; totalDebits: string; totalCredits: string; balanced: boolean };
 }
 
-export type LoginResponse =
-  { status: 'OK'; user: Me } | { status: 'TOTP_REQUIRED'; challengeToken: string };
+/** How someone proves it is them after their password. */
+export type TwoFactorMethod = 'app' | 'sms';
+
+/** The second sign-in step: which code to ask for, and where a texted one went. */
+export interface TwoFactorChallenge {
+  status: 'TWO_FACTOR_REQUIRED';
+  method: TwoFactorMethod;
+  challengeToken: string;
+  sentTo?: string;
+}
+
+export type LoginResponse = { status: 'OK'; user: Me } | TwoFactorChallenge;
 
 // ── Phase 1: lending ────────────────────────────────────────────────────
 // Shapes returned by the API. Money is always a string of digits.

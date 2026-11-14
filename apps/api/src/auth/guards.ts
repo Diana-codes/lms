@@ -12,8 +12,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompaniesService } from '../tenancy/companies.service';
 import { companyContext } from '../tenancy/company-context';
 import { AuthService } from './auth.service';
-import { ACCESS_COOKIE, type AuthUser } from './auth.types';
-import { ALLOW_WHILE_PASSWORD_CHANGE, IS_PUBLIC, ROLES } from './decorators';
+import { ACCESS_COOKIE, type AuthUser, twoFactorView } from './auth.types';
+import {
+  ALLOW_WHILE_PASSWORD_CHANGE,
+  ALLOW_WITHOUT_TWO_FACTOR,
+  IS_PUBLIC,
+  ROLES,
+} from './decorators';
 
 type AuthedRequest = Request & { user?: AuthUser; authVia?: 'cookie' | 'bearer' };
 
@@ -114,19 +119,26 @@ export class JwtAuthGuard implements CanActivate {
       role: u.role,
       branchId: u.branchId,
       sessionId: session.id,
-      twoFactorEnabled: u.totpEnabledAt != null,
+      ...twoFactorView(u),
       mustChangePassword: u.mustChangePassword,
     };
     req.authVia = viaCookie ? 'cookie' : 'bearer';
 
-    if (u.mustChangePassword) {
-      const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_WHILE_PASSWORD_CHANGE, [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      if (!allowed) throw new ForbiddenException('Choose a new password first');
+    // First a password of their own, then two-factor, then everything else.
+    if (u.mustChangePassword && !this.allows(context, ALLOW_WHILE_PASSWORD_CHANGE)) {
+      throw new ForbiddenException('Choose a new password first');
+    }
+    if (!req.user.twoFactorEnabled && !this.allows(context, ALLOW_WITHOUT_TWO_FACTOR)) {
+      throw new ForbiddenException('Turn on two-factor sign-in first');
     }
     return true;
+  }
+
+  private allows(context: ExecutionContext, key: string): boolean {
+    return !!this.reflector.getAllAndOverride<boolean>(key, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
   }
 }
 

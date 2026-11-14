@@ -172,12 +172,14 @@ function StatusPills({ member }: { member: StaffMember }) {
     );
   }
   pills.push(
-    member.twoFactorEnabled ? (
+    member.twoFactorMethod ? (
       <Pill key="2fa" tone="success">
-        Two-factor on
+        {member.twoFactorMethod === 'app' ? 'Code: app' : 'Code: text'}
       </Pill>
     ) : (
-      <Pill key="2fa">Two-factor off</Pill>
+      <Pill key="2fa" tone="warning">
+        Two-factor not set up
+      </Pill>
     ),
   );
   return <>{pills}</>;
@@ -523,7 +525,7 @@ function ResetAccess({ member, onClose }: { member: StaffMember; onClose: () => 
     setError(null);
     try {
       await api(`/users/${member.id}/reset-two-factor`, { method: 'POST' });
-      toast(`Two-factor is off for ${member.firstName}. They can set it up again.`);
+      toast(`${member.firstName} will set up two-factor again at their next sign-in.`);
       router.refresh();
       onClose();
     } catch (err) {
@@ -560,10 +562,11 @@ function ResetAccess({ member, onClose }: { member: StaffMember; onClose: () => 
           </section>
           {member.twoFactorEnabled ? (
             <section className="flex flex-col gap-2">
-              <h3 className="m-0 text-sm font-semibold">Lost phone</h3>
+              <h3 className="m-0 text-sm font-semibold">Lost or new phone</h3>
               <p className="m-0 text-sm text-ink-muted">
-                Turns two-factor sign-in off so they can set it up on a new phone. Check it is
-                really them first.
+                Clears their confirmed number and authenticator app and signs them out. They set
+                two-factor up again, on the new phone, at their next sign-in. Check it is really
+                them first.
               </p>
               <Button
                 variant="secondary"
@@ -571,7 +574,7 @@ function ResetAccess({ member, onClose }: { member: StaffMember; onClose: () => 
                 loading={busy === '2fa'}
                 onClick={resetTwoFactor}
               >
-                Turn off two-factor
+                Reset two-factor
               </Button>
             </section>
           ) : null}

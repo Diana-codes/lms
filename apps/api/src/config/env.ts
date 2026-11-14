@@ -50,6 +50,21 @@ const schema = z.object({
   MOMO_CURRENCY: z.string().default('EUR'),
   /** Public https address MTN can call back, e.g. https://api.example.rw. Optional: we also poll. */
   PUBLIC_API_URL: optional,
+  /**
+   * The platform's own Africa's Talking account (Orin Tech House). It sends
+   * every sign-in code, for staff and platform admins alike, so a company's
+   * own SMS account running dry never locks its staff out. Username
+   * "sandbox" uses the Africa's Talking sandbox. Without a key, development
+   * and tests use the simulator; production refuses to start.
+   */
+  PLATFORM_SMS_USERNAME: z.string().default('sandbox'),
+  PLATFORM_SMS_API_KEY: optional,
+  PLATFORM_SMS_SENDER_ID: optional,
+  /**
+   * Development only: the SMS simulator also appends each text (with any
+   * code in it) to this file, so browser tests can sign in. Never in production.
+   */
+  SMS_OUTBOX_FILE: optional,
   /** Background jobs (status polling, nightly run). Off in tests. */
   JOBS_ENABLED: flag('true'),
 
@@ -87,6 +102,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (parsed.data.NODE_ENV === 'production' && parsed.data.DEFAULT_COMPANY_SLUG) {
     throw new Error('DEFAULT_COMPANY_SLUG must be empty in production');
+  }
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.SMS_OUTBOX_FILE) {
+    throw new Error('SMS_OUTBOX_FILE must be empty in production');
+  }
+  if (parsed.data.NODE_ENV === 'production' && !parsed.data.PLATFORM_SMS_API_KEY) {
+    throw new Error('PLATFORM_SMS_API_KEY is required in production: it sends sign-in codes');
   }
   if (parsed.data.APP_DATABASE_URL === parsed.data.DATABASE_URL) {
     throw new Error('APP_DATABASE_URL must use a different login from DATABASE_URL');

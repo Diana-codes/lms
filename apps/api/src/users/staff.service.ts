@@ -7,7 +7,7 @@ import {
 import { maskPhone, normaliseRwPhone, type StaffRole } from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
-import type { AuthUser } from '../auth/auth.types';
+import { type AuthUser, twoFactorView } from '../auth/auth.types';
 import { hashPassword } from '../auth/password';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -58,7 +58,7 @@ export class StaffService {
       branch: u.branch?.name ?? null,
       phone: maskPhone(u.phone),
       isActive: u.isActive,
-      twoFactorEnabled: u.totpEnabledAt != null,
+      ...twoFactorView(u),
       mustChangePassword: u.mustChangePassword,
       lockedUntil: u.lockedUntil && u.lockedUntil > new Date() ? u.lockedUntil : null,
       lastLoginAt: u.lastLoginAt,
@@ -115,6 +115,9 @@ export class StaffService {
       throw new BadRequestException('The company needs at least one active administrator');
     }
     if (changes.branchId !== undefined) await this.assertBranch(changes.branchId);
+    const phone = changes.phone === undefined ? undefined : this.phone(changes.phone);
+    // Sign-in codes go to the phone, so a new number must be confirmed by its owner.
+    const phoneChanged = phone !== undefined && phone !== user.phone;
 
     await this.prisma.user.update({
       where: { id },
@@ -123,12 +126,17 @@ export class StaffService {
         lastName: changes.lastName?.trim(),
         role: changes.role,
         branchId: changes.branchId,
-        phone: changes.phone === undefined ? undefined : this.phone(changes.phone),
+        phone,
+        ...(phoneChanged ? { phoneVerifiedAt: null } : {}),
         isActive: changes.isActive,
       },
     });
-    // Deactivation and role changes take effect at once: end their sessions.
-    if (changes.isActive === false || (changes.role && changes.role !== user.role)) {
+    // Deactivation, role changes and a new sign-in phone take effect at once: end their sessions.
+    if (
+      changes.isActive === false ||
+      (changes.role && changes.role !== user.role) ||
+      (phoneChanged && user.phoneVerifiedAt)
+    ) {
       await this.endSessions(id);
     }
     await this.audit.record({
@@ -168,12 +176,21 @@ export class StaffService {
     });
   }
 
-  /** For a lost phone: turn two-factor off so the person can set it up again. */
+  /**
+   * For a lost or changed phone: clear the authenticator app and the
+   * confirmed number, so the person sets two-factor up again at next sign-in.
+   */
   async resetTwoFactor(id: string, actor: AuthUser, meta: RequestMeta) {
     await this.find(id);
+    if (id === actor.id) throw new BadRequestException('Ask another administrator to do this');
     await this.prisma.user.update({
       where: { id },
-      data: { totpEnabledAt: null, totpSecretEnc: null, totpLastStep: null },
+      data: {
+        totpEnabledAt: null,
+        totpSecretEnc: null,
+        totpLastStep: null,
+        phoneVerifiedAt: null,
+      },
     });
     await this.endSessions(id);
     await this.audit.record({

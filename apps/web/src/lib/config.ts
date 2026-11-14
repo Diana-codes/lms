@@ -1,3 +1,6 @@
+/** The platform's own name, shown where no lender is known. */
+export const PRODUCT_NAME = 'Kora Lend';
+
 /** Server-side only: where the API lives. The browser uses /api instead. */
 export const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 

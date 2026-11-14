@@ -9,14 +9,23 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { maskPhone, normaliseRwPhone } from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import { PiiCrypto } from '../common/pii-crypto';
 import { ENV, type Env } from '../config/env';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { currentCompanyId } from '../tenancy/company-context';
-import type { AccessTokenClaims, TwoFactorChallengeClaims } from './auth.types';
+import { ProvidersService } from '../providers/providers.service';
+import { companyDisplayName, currentCompanyId } from '../tenancy/company-context';
+import {
+  type AccessTokenClaims,
+  type TwoFactorChallengeClaims,
+  type TwoFactorMethod,
+  twoFactorMethod,
+  twoFactorView,
+} from './auth.types';
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from './password';
+import { CODE_TTL_MINUTES, TextCodes } from './text-codes';
 import { generateTotpSecret, totpUri, verifyTotp } from './totp';
 
 export const MAX_FAILED_LOGINS = 5;
@@ -38,9 +47,17 @@ export interface SessionTokens {
   refreshExpiresAt: Date;
 }
 
+/** The second sign-in step: which code to ask for, and where a texted one went. */
+export interface TwoFactorChallenge {
+  status: 'TWO_FACTOR_REQUIRED';
+  method: TwoFactorMethod;
+  challengeToken: string;
+  /** For texted codes: the number it went to, masked. */
+  sentTo?: string;
+}
+
 export type LoginResult =
-  | { status: 'OK'; tokens: SessionTokens; user: PublicUser }
-  | { status: 'TOTP_REQUIRED'; challengeToken: string };
+  { status: 'OK'; tokens: SessionTokens; user: PublicUser } | TwoFactorChallenge;
 
 export interface PublicUser {
   id: string;
@@ -50,6 +67,8 @@ export interface PublicUser {
   role: User['role'];
   branchId: string | null;
   twoFactorEnabled: boolean;
+  twoFactorMethod: TwoFactorMethod | null;
+  verifiedPhone: string | null;
   mustChangePassword: boolean;
 }
 
@@ -61,7 +80,7 @@ export function toPublicUser(user: User): PublicUser {
     lastName: user.lastName,
     role: user.role,
     branchId: user.branchId,
-    twoFactorEnabled: user.totpEnabledAt != null,
+    ...twoFactorView(user),
     mustChangePassword: user.mustChangePassword,
   };
 }
@@ -76,14 +95,23 @@ const BAD_CREDENTIALS = 'Email or password is incorrect';
 export class AuthService {
   /** A real hash to verify against when the email is unknown, to even out timing. */
   private dummyHash: Promise<string> | null = null;
+  private readonly codes: TextCodes;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly crypto: PiiCrypto,
+    providers: ProvidersService,
     @Inject(ENV) private readonly env: Env,
-  ) {}
+  ) {
+    this.codes = new TextCodes(
+      () => this.prisma.staffCode,
+      crypto,
+      () => providers.platformSms(),
+      env.NODE_ENV === 'development',
+    );
+  }
 
   async login(email: string, password: string, meta: RequestMeta): Promise<LoginResult> {
     const user = await this.prisma.user.findFirst({
@@ -108,48 +136,85 @@ export class AuthService {
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
-    if (user.totpEnabledAt) {
-      const claims: TwoFactorChallengeClaims = { sub: user.id, cid: user.companyId, typ: '2fa' };
-      const challengeToken = await this.jwt.signAsync(claims, {
-        expiresIn: CHALLENGE_TTL_SECONDS,
-      });
-      return { status: 'TOTP_REQUIRED', challengeToken };
+    const method = twoFactorMethod(user);
+    if (method) {
+      const sent = method === 'sms' ? await this.sendSignInCode(user) : undefined;
+      return {
+        status: 'TWO_FACTOR_REQUIRED',
+        method,
+        challengeToken: await this.challengeToken(user, method),
+        sentTo: sent?.sentTo,
+      };
     }
 
+    // No second factor yet. Two-factor is required, so the session can only
+    // be used to set it up (see JwtAuthGuard).
     return { status: 'OK', ...(await this.startSession(user, meta)) };
   }
 
-  /** Second step of sign-in for accounts with two-factor turned on. */
+  /** Second step of sign-in: a code from the authenticator app or a text message. */
   async completeTwoFactor(
     challengeToken: string,
     code: string,
     meta: RequestMeta,
   ): Promise<{ tokens: SessionTokens; user: PublicUser }> {
-    let claims: TwoFactorChallengeClaims;
-    try {
-      claims = await this.jwt.verifyAsync<TwoFactorChallengeClaims>(challengeToken);
-    } catch {
-      throw new UnauthorizedException('Sign-in expired. Start again.');
-    }
-    if (claims.typ !== '2fa' || claims.cid !== currentCompanyId()) {
-      throw new UnauthorizedException('Sign-in expired. Start again.');
-    }
-
-    const user = await this.prisma.user.findUnique({ where: { id: claims.sub } });
-    if (!user || !user.isActive || !user.totpEnabledAt || !user.totpSecretEnc) {
-      throw new UnauthorizedException('Sign-in expired. Start again.');
-    }
+    const { user, method } = await this.challengedUser(challengeToken);
     this.assertNotLocked(user);
 
-    const step = verifyTotp(this.crypto.decrypt(user.totpSecretEnc), code, {
-      afterStep: user.totpLastStep,
-    });
-    if (step == null) {
-      await this.registerFailure(user, 'bad_totp', meta);
-      throw new UnauthorizedException('That code is not valid');
+    if (method === 'app') {
+      const step = verifyTotp(this.crypto.decrypt(user.totpSecretEnc!), code, {
+        afterStep: user.totpLastStep,
+      });
+      if (step == null) {
+        await this.registerFailure(user, 'bad_totp', meta);
+        throw new UnauthorizedException('That code is not valid');
+      }
+      await this.prisma.user.update({ where: { id: user.id }, data: { totpLastStep: step } });
+    } else if (!(await this.codes.verify(user.id, 'SIGN_IN', code))) {
+      await this.registerFailure(user, 'bad_sms_code', meta);
+      throw new UnauthorizedException('That code is not valid or has expired');
     }
-    await this.prisma.user.update({ where: { id: user.id }, data: { totpLastStep: step } });
     return this.startSession(user, meta);
+  }
+
+  /** Text a new sign-in code, for someone waiting at the code step. */
+  async resendSignInCode(challengeToken: string): Promise<{ sentTo: string }> {
+    const { user, method } = await this.challengedUser(challengeToken);
+    if (method !== 'sms') throw new BadRequestException('Use the code from your authenticator app');
+    this.assertNotLocked(user);
+    return this.sendSignInCode(user, true);
+  }
+
+  /** Step one of setting up texted codes: send a code to the number given. */
+  async startPhoneVerification(userId: string, input: string): Promise<{ sentTo: string }> {
+    const phone = normaliseRwPhone(input);
+    if (!phone) throw new BadRequestException('Enter a Rwandan mobile number, e.g. 078 812 3412');
+    return this.codes.send(
+      userId,
+      'VERIFY_PHONE',
+      phone,
+      (code) =>
+        `${companyDisplayName()}: ${code} is your code to confirm this phone for sign-in. It expires in ${CODE_TTL_MINUTES} minutes.`,
+    );
+  }
+
+  /** Step two: the code arrived, so the number is theirs. Sign-in codes go there from now on. */
+  async confirmPhone(userId: string, code: string, meta: RequestMeta): Promise<PublicUser> {
+    const row = await this.codes.verify(userId, 'VERIFY_PHONE', code);
+    if (!row) throw new BadRequestException('That code is not valid or has expired');
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { phone: row.phone, phoneVerifiedAt: new Date() },
+    });
+    await this.audit.record({
+      action: 'auth.2fa.phone_verified',
+      actorId: userId,
+      entityType: 'User',
+      entityId: userId,
+      metadata: { phone: maskPhone(row.phone) },
+      ...meta,
+    });
+    return toPublicUser(user);
   }
 
   /**
@@ -313,7 +378,11 @@ export class AuthService {
     });
   }
 
-  /** Turning two-factor off needs the password and a current code. */
+  /**
+   * Stop using the authenticator app; codes then come by text. Needs the
+   * password and a current app code, and a verified phone (two-factor is
+   * required, so it cannot simply be switched off).
+   */
   async disableTwoFactor(
     userId: string,
     password: string,
@@ -322,7 +391,12 @@ export class AuthService {
   ): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!user.totpEnabledAt || !user.totpSecretEnc) {
-      throw new BadRequestException('Two-factor is not on');
+      throw new BadRequestException('The authenticator app is not in use');
+    }
+    if (!user.phone || !user.phoneVerifiedAt) {
+      throw new BadRequestException(
+        'Confirm a phone number for text-message codes first. Two-factor sign-in is required.',
+      );
     }
     const passwordOk = await verifyPassword(user.passwordHash, password);
     const step = verifyTotp(this.crypto.decrypt(user.totpSecretEnc), code, {
@@ -351,6 +425,44 @@ export class AuthService {
   }
 
   // ── internals ──────────────────────────────────────────────────────────
+
+  private challengeToken(user: User, method: TwoFactorMethod): Promise<string> {
+    const claims: TwoFactorChallengeClaims = {
+      sub: user.id,
+      cid: user.companyId,
+      typ: '2fa',
+      m: method,
+    };
+    return this.jwt.signAsync(claims, { expiresIn: CHALLENGE_TTL_SECONDS });
+  }
+
+  /** The user a sign-in challenge is for, if it is still valid and their method unchanged. */
+  private async challengedUser(
+    challengeToken: string,
+  ): Promise<{ user: User; method: TwoFactorMethod }> {
+    const expired = new UnauthorizedException('Sign-in expired. Start again.');
+    let claims: TwoFactorChallengeClaims;
+    try {
+      claims = await this.jwt.verifyAsync<TwoFactorChallengeClaims>(challengeToken);
+    } catch {
+      throw expired;
+    }
+    if (claims.typ !== '2fa' || claims.cid !== currentCompanyId()) throw expired;
+    const user = await this.prisma.user.findUnique({ where: { id: claims.sub } });
+    if (!user || !user.isActive || twoFactorMethod(user) !== claims.m) throw expired;
+    return { user, method: claims.m };
+  }
+
+  private sendSignInCode(user: User, resend = false): Promise<{ sentTo: string }> {
+    return this.codes.send(
+      user.id,
+      'SIGN_IN',
+      user.phone!,
+      (code) =>
+        `${companyDisplayName()}: your sign-in code is ${code}. It expires in ${CODE_TTL_MINUTES} minutes. Never share it with anyone.`,
+      { resend },
+    );
+  }
 
   private assertNotLocked(user: User): void {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -410,7 +522,7 @@ export class AuthService {
       actorId: user.id,
       entityType: 'User',
       entityId: user.id,
-      metadata: { twoFactor: user.totpEnabledAt != null },
+      metadata: { twoFactor: twoFactorMethod(user) },
       ...meta,
     });
     return {

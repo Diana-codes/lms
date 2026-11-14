@@ -90,6 +90,7 @@ model Company {
   credentials        ProviderCredential[]
   simulatedTransfers SimulatedTransfer[]
   otpChallenges      OtpChallenge[]
+  staffCodes         StaffCode[]
   borrowerSessions   BorrowerSession[]
   offers             LoanOffer[]
   momoInflows        MomoInflowMonth[]
@@ -133,7 +134,33 @@ model PlatformAdmin {
   /// Last accepted TOTP time step, to stop a code being replayed.
   totpLastStep  Int?
 
+  /// For sign-in codes by text, once verified.
+  phone           String?
+  phoneVerifiedAt DateTime?
+
   sessions PlatformSession[]
+  codes    PlatformCode[]
+}
+
+enum CodePurpose {
+  SIGN_IN
+  VERIFY_PHONE
+}
+
+/// One-time codes texted to a platform admin. Only an HMAC of the code is kept.
+model PlatformCode {
+  id         String        @id @default(uuid(7)) @db.Uuid
+  subjectId  String        @db.Uuid
+  admin      PlatformAdmin @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  purpose    CodePurpose
+  phone      String
+  codeHash   String
+  attempts   Int           @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([subjectId, createdAt])
 }
 
 model PlatformSession {
@@ -203,11 +230,15 @@ model User {
   /// new one before doing anything else.
   mustChangePassword Boolean   @default(false)
   passwordChangedAt  DateTime?
+  /// When the user proved `phone` receives texts. Sign-in codes are sent there
+  /// unless they use an authenticator app. Cleared when the number changes.
+  phoneVerifiedAt    DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  branch   Branch?   @relation(fields: [branchId], references: [id])
+  branch   Branch?     @relation(fields: [branchId], references: [id])
   sessions Session[]
+  codes    StaffCode[]
 
   borrowers            Borrower[]          @relation("BorrowerOfficer")
   applications         Application[]       @relation("ApplicationOfficer")
@@ -1222,6 +1253,26 @@ model OtpChallenge {
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+  @@index([companyId])
+}
+
+/// One-time codes texted to staff: second step of sign-in, or proving a phone
+/// number. Separate from borrower codes, so one can never stand in for the other.
+model StaffCode {
+  id         String      @id @default(uuid(7)) @db.Uuid
+  companyId  String      @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company     @relation(fields: [companyId], references: [id])
+  subjectId  String      @db.Uuid
+  user       User        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  purpose    CodePurpose
+  phone      String
+  codeHash   String
+  attempts   Int         @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime    @default(now())
+
+  @@index([subjectId, createdAt])
   @@index([companyId])
 }
 

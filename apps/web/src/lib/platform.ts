@@ -1,10 +1,14 @@
 /** Shapes returned by the API's /platform routes. */
 
+import type { TwoFactorMethod } from './types';
+
 export interface PlatformAdmin {
   id: string;
   email: string;
   name: string;
   twoFactorEnabled: boolean;
+  twoFactorMethod: TwoFactorMethod | null;
+  verifiedPhone: string | null;
 }
 
 export interface UsageDay {

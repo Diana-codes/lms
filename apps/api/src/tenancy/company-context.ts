@@ -18,9 +18,11 @@ export interface CompanyContext {
   timezone?: string;
 }
 
+export const PRODUCT_NAME = 'Kora Lend';
+
 /** The lender's name for messages and documents; the product name when none is known. */
 export function companyDisplayName(): string {
-  return storage.getStore()?.displayName ?? 'Kora Lend';
+  return storage.getStore()?.displayName ?? PRODUCT_NAME;
 }
 
 export interface CompanyFeatures {

@@ -23,7 +23,7 @@ export function ForcedChange() {
       <ChangePasswordForm
         currentLabel="Temporary password"
         submitLabel="Save and continue"
-        onDone={() => window.location.assign('/')}
+        onDone={() => window.location.assign('/two-factor')}
       />
       <Button variant="ghost" className="self-start" onClick={signOut} loading={leaving}>
         Sign out

@@ -14,6 +14,7 @@ import { hashPassword } from '../src/auth/password';
 import { totpCode, totpStep } from '../src/auth/totp';
 import type { StaffRole } from '../src/generated/prisma/client';
 import type { PrismaClient } from '../src/generated/prisma/client';
+import { lastCodeTo, signInWithSms, smsTwoFactor, testPhone } from './sign-in';
 import { testPrisma } from './test-db';
 
 /**
@@ -27,17 +28,33 @@ let app: INestApplication;
 let prisma: PrismaClient;
 let passwordHash: string;
 
-async function makeUser(role: StaffRole): Promise<{ id: string; email: string }> {
+interface TestUser {
+  id: string;
+  email: string;
+  phone: string;
+}
+
+/** A staff member with texted sign-in codes on a confirmed phone, unless `withoutTwoFactor`. */
+async function makeUser(role: StaffRole, withoutTwoFactor = false): Promise<TestUser> {
   const email = `e2e-${role.toLowerCase()}-${randomUUID()}@koralend.test`;
+  const factor = smsTwoFactor();
   const user = await prisma.user.create({
-    data: { email, passwordHash, firstName: 'E2E', lastName: role, role },
+    data: {
+      email,
+      passwordHash,
+      firstName: 'E2E',
+      lastName: role,
+      role,
+      ...(withoutTwoFactor ? {} : factor),
+    },
   });
-  return { id: user.id, email };
+  return { id: user.id, email, phone: factor.phone };
 }
 
 const http = () => request(app.getHttpServer());
 const login = (email: string, password = PASSWORD) =>
   http().post('/auth/login').send({ email, password });
+const signIn = (user: TestUser) => signInWithSms(app, user, PASSWORD);
 const cookiesOf = (res: request.Response): string[] =>
   ([] as string[]).concat(res.get('Set-Cookie') ?? []).map((c) => c.split(';')[0]!);
 
@@ -73,9 +90,22 @@ describe('sign-in', () => {
     await http().get('/system/stats').expect(401);
   });
 
-  it('signs in with httpOnly cookies and returns the profile', async () => {
+  it('texts a code after the password, then signs in with httpOnly cookies', async () => {
     const user = await makeUser('LOAN_OFFICER');
-    const res = await login(user.email.toUpperCase()).expect(200);
+    const first = await login(user.email.toUpperCase()).expect(200);
+    expect(first.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'sms' });
+    expect(first.body.sentTo).toMatch(/^\+250 78• ••• \d{3}$/);
+    expect(first.get('Set-Cookie')).toBeUndefined();
+    // The challenge token is not a session.
+    await http()
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${first.body.challengeToken}`)
+      .expect(401);
+
+    const res = await http()
+      .post('/auth/2fa/verify')
+      .send({ challengeToken: first.body.challengeToken, code: lastCodeTo(app, user.phone) })
+      .expect(200);
     expect(res.body.status).toBe('OK');
     expect(res.body.user).toMatchObject({ email: user.email, role: 'LOAN_OFFICER' });
     expect(JSON.stringify(res.body)).not.toContain('passwordHash');
@@ -88,11 +118,64 @@ describe('sign-in', () => {
     }
 
     const me = await http().get('/auth/me').set('Cookie', cookiesOf(res)).expect(200);
-    expect(me.body).toMatchObject({ id: user.id, role: 'LOAN_OFFICER', twoFactorEnabled: false });
+    expect(me.body).toMatchObject({
+      id: user.id,
+      role: 'LOAN_OFFICER',
+      twoFactorEnabled: true,
+      twoFactorMethod: 'sms',
+    });
     expect(me.body.sessionId).toBeUndefined();
 
     // The mobile app will use the same token as a Bearer header.
     await http().get('/auth/me').set('Authorization', `Bearer ${res.body.accessToken}`).expect(200);
+  });
+
+  it('a texted code works once, and wrong codes count towards the lockout', async () => {
+    const user = await makeUser('LOAN_OFFICER');
+    const first = await login(user.email).expect(200);
+    const challengeToken: string = first.body.challengeToken;
+    const code = lastCodeTo(app, user.phone);
+    const wrong = code === '000000' ? '111111' : '000000';
+    await http().post('/auth/2fa/verify').send({ challengeToken, code: wrong }).expect(401);
+    await http().post('/auth/2fa/verify').send({ challengeToken, code }).expect(200);
+    await http().post('/auth/2fa/verify').send({ challengeToken, code }).expect(401);
+
+    const fails = await prisma.auditLog.count({
+      where: { actorId: user.id, action: 'auth.login.failed' },
+    });
+    // The wrong code and the replayed one.
+    expect(fails).toBe(2);
+  });
+
+  it('resends a code, but not straight away', async () => {
+    const user = await makeUser('LOAN_OFFICER');
+    const first = await login(user.email).expect(200);
+    const challengeToken: string = first.body.challengeToken;
+    const res = await http().post('/auth/2fa/resend').send({ challengeToken }).expect(429);
+    expect(res.body.message).toMatch(/^Wait \d+ seconds/);
+
+    // Pretend the first code went out a minute ago.
+    await prisma.staffCode.updateMany({
+      where: { subjectId: user.id },
+      data: { createdAt: new Date(Date.now() - 60_000) },
+    });
+    const old = lastCodeTo(app, user.phone);
+    await http().post('/auth/2fa/resend').send({ challengeToken }).expect(200);
+    const fresh = lastCodeTo(app, user.phone);
+    // Only the newest code counts.
+    if (old !== fresh) {
+      await http().post('/auth/2fa/verify').send({ challengeToken, code: old }).expect(401);
+    }
+    await http().post('/auth/2fa/verify').send({ challengeToken, code: fresh }).expect(200);
+  });
+
+  it('stores codes only as keyed hashes', async () => {
+    const user = await makeUser('LOAN_OFFICER');
+    await login(user.email).expect(200);
+    const code = lastCodeTo(app, user.phone);
+    const row = await prisma.staffCode.findFirstOrThrow({ where: { subjectId: user.id } });
+    expect(row.codeHash).not.toContain(code);
+    expect(row.purpose).toBe('SIGN_IN');
   });
 
   it('gives the same answer for a wrong password and an unknown email', async () => {
@@ -123,7 +206,7 @@ describe('sign-in', () => {
 
   it('refuses deactivated staff, including sessions they already hold', async () => {
     const user = await makeUser('LOAN_OFFICER');
-    const res = await login(user.email).expect(200);
+    const res = await signIn(user);
     await prisma.user.update({ where: { id: user.id }, data: { isActive: false } });
     await http().get('/auth/me').set('Cookie', cookiesOf(res)).expect(401);
     await login(user.email).expect(401);
@@ -131,7 +214,7 @@ describe('sign-in', () => {
 
   it('rotates refresh tokens and signs out', async () => {
     const user = await makeUser('LOAN_OFFICER');
-    const first = await login(user.email).expect(200);
+    const first = await signIn(user);
     const firstCookies = cookiesOf(first);
 
     const refreshed = await http().post('/auth/refresh').set('Cookie', firstCookies).expect(200);
@@ -153,7 +236,7 @@ describe('sign-in', () => {
 
   it('ends the session if a replaced refresh token turns up after the grace window', async () => {
     const user = await makeUser('LOAN_OFFICER');
-    const first = await login(user.email).expect(200);
+    const first = await signIn(user);
     const refreshed = await http()
       .post('/auth/refresh')
       .set('Cookie', cookiesOf(first))
@@ -173,7 +256,7 @@ describe('sign-in', () => {
 
   it('blocks cookie-authenticated writes from another site', async () => {
     const user = await makeUser('LOAN_OFFICER');
-    const res = await login(user.email).expect(200);
+    const res = await signIn(user);
     await http()
       .post('/auth/logout')
       .set('Cookie', cookiesOf(res))
@@ -188,7 +271,7 @@ describe('sign-in', () => {
 
   it('writes sign-ins to the audit log', async () => {
     const user = await makeUser('MANAGER');
-    await login(user.email).expect(200);
+    await signIn(user);
     await login(user.email, 'wrong').expect(401);
     const actions = (
       await prisma.auditLog.findMany({ where: { actorId: user.id }, orderBy: { createdAt: 'asc' } })
@@ -206,7 +289,7 @@ describe('roles', () => {
       ['COLLECTIONS_AGENT', 403],
     ] as const) {
       const user = await makeUser(role);
-      const session = await login(user.email).expect(200);
+      const session = await signIn(user);
       const res = await http().get('/users').set('Cookie', cookiesOf(session)).expect(status);
       if (status === 200) {
         expect(JSON.stringify(res.body)).not.toContain('passwordHash');
@@ -218,7 +301,7 @@ describe('roles', () => {
 
   it('applies a role change straight away, without a new sign-in', async () => {
     const user = await makeUser('MANAGER');
-    const session = await login(user.email).expect(200);
+    const session = await signIn(user);
     await http().get('/users').set('Cookie', cookiesOf(session)).expect(200);
     await prisma.user.update({ where: { id: user.id }, data: { role: 'LOAN_OFFICER' } });
     await http().get('/users').set('Cookie', cookiesOf(session)).expect(403);
@@ -226,8 +309,55 @@ describe('roles', () => {
 });
 
 describe('two-factor sign-in', () => {
-  it('sets up, then requires a code at sign-in, and refuses a replayed code', async () => {
-    const user = await makeUser('MANAGER');
+  it('is required: until it is set up, a session can only set it up', async () => {
+    const user = await makeUser('MANAGER', true);
+    const session = await login(user.email).expect(200);
+    expect(session.body.status).toBe('OK');
+    const cookies = cookiesOf(session);
+    const post = (path: string) => http().post(path).set('Cookie', cookies).set('Origin', ORIGIN);
+
+    const me = await http().get('/auth/me').set('Cookie', cookies).expect(200);
+    expect(me.body).toMatchObject({ twoFactorEnabled: false, twoFactorMethod: null });
+    const blocked = await http().get('/users').set('Cookie', cookies).expect(403);
+    expect(blocked.body.message).toBe('Turn on two-factor sign-in first');
+
+    await post('/auth/2fa/sms/start').send({ phone: '12345' }).expect(400);
+    const phone = testPhone();
+    const sent = await post('/auth/2fa/sms/start')
+      .send({ phone: `0${phone.slice(4)}` })
+      .expect(200);
+    expect(sent.body.sentTo).toMatch(/\d{3}$/);
+    await post('/auth/2fa/sms/confirm').send({ code: '000000' }).expect(400);
+    const confirmed = await post('/auth/2fa/sms/confirm')
+      .send({ code: lastCodeTo(app, phone) })
+      .expect(200);
+    expect(confirmed.body).toMatchObject({ twoFactorEnabled: true, twoFactorMethod: 'sms' });
+
+    await http().get('/users').set('Cookie', cookies).expect(200);
+    // From now on, sign-in texts a code to the confirmed number.
+    const next = await login(user.email).expect(200);
+    expect(next.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'sms' });
+    await signInWithSms(app, { email: user.email, phone }, PASSWORD);
+  });
+
+  it('switching from the app back to texts needs a confirmed phone', async () => {
+    const user = await makeUser('MANAGER', true);
+    const cookies = cookiesOf(await login(user.email).expect(200));
+    const post = (path: string) => http().post(path).set('Cookie', cookies).set('Origin', ORIGIN);
+    const setup = await post('/auth/2fa/setup').expect(200);
+    const secret: string = setup.body.secret;
+    const step = totpStep();
+    await post('/auth/2fa/enable')
+      .send({ code: totpCode(secret, step) })
+      .expect(204);
+    const refused = await post('/auth/2fa/disable')
+      .send({ password: PASSWORD, code: totpCode(secret, step + 1) })
+      .expect(400);
+    expect(refused.body.message).toContain('Confirm a phone number');
+  });
+
+  it('sets up an authenticator app, then requires its code, and refuses a replayed code', async () => {
+    const user = await makeUser('MANAGER', true);
     const session = await login(user.email).expect(200);
     const cookies = cookiesOf(session);
 
@@ -252,7 +382,7 @@ describe('two-factor sign-in', () => {
       .expect(204);
 
     const challenge = await login(user.email).expect(200);
-    expect(challenge.body.status).toBe('TOTP_REQUIRED');
+    expect(challenge.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'app' });
     expect(challenge.get('Set-Cookie')).toBeUndefined();
     const challengeToken: string = challenge.body.challengeToken;
 

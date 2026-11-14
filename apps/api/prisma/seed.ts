@@ -1930,7 +1930,13 @@ async function seedCompany(passwordHash: string): Promise<void> {
     data: { id: ids.branch, code: 'KGL-01', name: 'Kigali – Kimironko', district: 'Gasabo' },
   });
 
-  for (const s of STAFF) {
+  // Seeded staff sign in with texted codes on made-up numbers, which is only
+  // safe while texts are simulated or go to the Africa's Talking sandbox. With
+  // a live platform SMS account they confirm their own phones at first sign-in.
+  const simulatedSms =
+    !process.env.PLATFORM_SMS_API_KEY?.trim() ||
+    (process.env.PLATFORM_SMS_USERNAME?.trim() || 'sandbox') === 'sandbox';
+  for (const [i, s] of STAFF.entries()) {
     const id = uuid();
     ids.staff.set(s.key, id);
     await prisma.user.create({
@@ -1942,7 +1948,8 @@ async function seedCompany(passwordHash: string): Promise<void> {
         lastName: s.last,
         role: s.role,
         branchId: ids.branch,
-        phone: phone('78'),
+        phone: `+250788${100_001 + i}`,
+        phoneVerifiedAt: simulatedSms ? new Date() : null,
       },
     });
   }
@@ -2089,8 +2096,10 @@ Company: ${DEMO_COMPANY.name}, at http://${DEMO_COMPANY.slug}.${env.APP_BASE_DOM
 
 Staff sign-ins (password: SEED_STAFF_PASSWORD in apps/api/.env):
 ${STAFF.map((s) => `  ${s.role.padEnd(18)} ${s.email}`).join('\n')}
+Then a texted code: with the SMS simulator it appears in the API log.
 
 Platform admin (same password): ${PLATFORM_ADMIN_EMAIL}
+It sets up two-factor at first sign-in.
 `);
 
   const problems: string[] = [];

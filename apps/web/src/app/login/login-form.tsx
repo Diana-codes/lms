@@ -2,15 +2,27 @@
 
 import { Button, Card, TextField } from '@kora/ui';
 import { type FormEvent, useState } from 'react';
+import { codeStepHint, ResendCode } from '@/components/sign-in-code';
+import { codeInputProps } from '@/components/two-factor-setup';
 import { api, ApiError } from '@/lib/api';
-import type { LoginResponse } from '@/lib/types';
+import type { LoginResponse, TwoFactorChallenge } from '@/lib/types';
 
-export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean }) {
+export function LoginForm({
+  next,
+  apiDown,
+  appName,
+}: {
+  next: string;
+  apiDown: boolean;
+  /** The lender's name, as the authenticator app shows it. */
+  appName: string;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [challenge, setChallenge] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<TwoFactorChallenge | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(
     apiDown ? 'The server is not responding. Try again in a moment.' : null,
   );
@@ -23,7 +35,7 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
       const result = challenge
         ? await api<LoginResponse>('/auth/2fa/verify', {
             method: 'POST',
-            body: { challengeToken: challenge, code },
+            body: { challengeToken: challenge.challengeToken, code },
             retryOnUnauthorized: false,
           })
         : await api<LoginResponse>('/auth/login', {
@@ -32,8 +44,8 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
             retryOnUnauthorized: false,
           });
 
-      if (result.status === 'TOTP_REQUIRED') {
-        setChallenge(result.challengeToken);
+      if (result.status === 'TWO_FACTOR_REQUIRED') {
+        setChallenge(result);
         setPassword('');
         setBusy(false);
         return;
@@ -50,6 +62,7 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
     setChallenge(null);
     setCode('');
     setError(null);
+    setNotice(null);
   }
 
   return (
@@ -59,9 +72,7 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
           {challenge ? 'Enter your code' : 'Sign in'}
         </h1>
         <p className="m-0 text-sm text-ink-muted">
-          {challenge
-            ? 'Open your authenticator app and enter the 6-digit code for Kora Lend.'
-            : 'Use your work email and password.'}
+          {challenge ? codeStepHint(challenge, appName) : 'Use your work email and password.'}
         </p>
       </div>
 
@@ -71,14 +82,10 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
             key="code"
             label="6-digit code"
             name="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
             autoFocus
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            {...codeInputProps}
           />
         ) : (
           <>
@@ -104,6 +111,11 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
           </>
         )}
 
+        {notice && !error ? (
+          <p role="status" className="m-0 text-sm text-ink-muted">
+            {notice}
+          </p>
+        ) : null}
         {error ? (
           <p
             role="alert"
@@ -122,9 +134,21 @@ export function LoginForm({ next, apiDown }: { next: string; apiDown: boolean })
           {busy ? 'Signing in…' : challenge ? 'Verify and sign in' : 'Sign in'}
         </Button>
         {challenge ? (
-          <Button variant="ghost" block onClick={startOver}>
-            Use a different account
-          </Button>
+          <>
+            <ResendCode
+              path="/auth/2fa/resend"
+              challenge={challenge}
+              onSent={(sentTo) => {
+                setError(null);
+                setCode('');
+                setNotice(`A new code is on its way to ${sentTo}.`);
+              }}
+              onError={setError}
+            />
+            <Button variant="ghost" block onClick={startOver}>
+              Use a different account
+            </Button>
+          </>
         ) : null}
       </form>
     </Card>

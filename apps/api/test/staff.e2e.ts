@@ -7,6 +7,7 @@ import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
 import type { PrismaClient, StaffRole } from '../src/generated/prisma/client';
+import { lastCodeTo, smsTwoFactor, testPhone } from './sign-in';
 import { testPrisma } from './test-db';
 
 /** Staff management by company administrators, and password changes. */
@@ -22,17 +23,34 @@ const cookiesOf = (res: request.Response): string[] =>
   ([] as string[]).concat(res.get('Set-Cookie') ?? []).map((c) => c.split(';')[0]!);
 const email = (tag: string) => `e2e-staff-${tag}-${randomUUID()}@koralend.test`;
 
+/** Confirmed sign-in phones, by email. */
+const phones = new Map<string, string>();
+
 async function makeUser(role: StaffRole) {
   const address = email(role.toLowerCase());
+  const factor = smsTwoFactor();
   const user = await prisma.user.create({
-    data: { email: address, passwordHash, firstName: 'E2E', lastName: role, role },
+    data: { email: address, passwordHash, firstName: 'E2E', lastName: role, role, ...factor },
   });
+  phones.set(address, factor.phone);
   return { id: user.id, email: address };
 }
 
-/** Signs in and returns a client that sends the session cookies and origin. */
+/**
+ * Signs in (with the texted code, for accounts that have a confirmed phone)
+ * and returns a client that sends the session cookies and origin.
+ */
 async function signIn(address: string, password = PASSWORD) {
-  const res = await http().post('/auth/login').send({ email: address, password }).expect(200);
+  let res = await http().post('/auth/login').send({ email: address, password }).expect(200);
+  if (res.body.status === 'TWO_FACTOR_REQUIRED') {
+    res = await http()
+      .post('/auth/2fa/verify')
+      .send({
+        challengeToken: res.body.challengeToken,
+        code: lastCodeTo(app, phones.get(address)!),
+      })
+      .expect(200);
+  }
   const cookies = cookiesOf(res);
   return {
     body: res.body as { user: { mustChangePassword: boolean } },
@@ -79,8 +97,11 @@ describe('staff management', () => {
 
     const newcomer = await signIn(address, temporary);
     expect(newcomer.body.user.mustChangePassword).toBe(true);
-    await newcomer.get('/applications').expect(403);
+    const blocked = await newcomer.get('/applications').expect(403);
+    expect(blocked.body.message).toBe('Choose a new password first');
     await newcomer.get('/auth/me').expect(200);
+    // Two-factor setup waits until the password is their own.
+    await newcomer.post('/auth/2fa/sms/start').send({ phone: testPhone() }).expect(403);
 
     await newcomer
       .post('/auth/password')
@@ -95,6 +116,17 @@ describe('staff management', () => {
       .post('/auth/password')
       .send({ currentPassword: temporary, newPassword: chosen })
       .expect(204);
+
+    // Then two-factor, which is required, then everything else.
+    const next = await newcomer.get('/applications').expect(403);
+    expect(next.body.message).toBe('Turn on two-factor sign-in first');
+    const phone = testPhone();
+    await newcomer.post('/auth/2fa/sms/start').send({ phone }).expect(200);
+    await newcomer
+      .post('/auth/2fa/sms/confirm')
+      .send({ code: lastCodeTo(app, phone) })
+      .expect(200);
+    phones.set(address, phone);
     await newcomer.get('/applications').expect(200);
 
     await http().post('/auth/login').send({ email: address, password: temporary }).expect(401);
@@ -191,6 +223,24 @@ describe('staff management', () => {
     const after = await prisma.user.findUniqueOrThrow({ where: { id: officer.id } });
     expect(after.totpEnabledAt).toBeNull();
     expect(after.totpSecretEnc).toBeNull();
+    expect(after.phoneVerifiedAt).toBeNull();
+    // They set it up again at their next sign-in.
+    const back = await http()
+      .post('/auth/login')
+      .send({ email: officer.email, password: PASSWORD })
+      .expect(200);
+    expect(back.body.status).toBe('OK');
+    expect(back.body.user.twoFactorEnabled).toBe(false);
+  });
+
+  it('a new phone number must be confirmed by its owner', async () => {
+    const admin = await signIn((await makeUser('ADMIN')).email);
+    const officer = await makeUser('LOAN_OFFICER');
+    const session = await signIn(officer.email);
+    await admin.patch(`/users/${officer.id}`).send({ phone: testPhone() }).expect(204);
+    await session.get('/auth/me').expect(401);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: officer.id } });
+    expect(after.phoneVerifiedAt).toBeNull();
   });
 
   it('admins add branches and assign staff to them', async () => {

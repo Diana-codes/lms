@@ -56,7 +56,7 @@ export default async function LoginPage({
         </p>
       </section>
       <section className="flex flex-[2_1_420px] items-center justify-center p-6 md:p-12">
-        <LoginForm next={next} apiDown={!me.ok && me.status >= 500} />
+        <LoginForm next={next} apiDown={!me.ok && me.status >= 500} appName={name} />
       </section>
     </main>
   );

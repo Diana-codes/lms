@@ -10,6 +10,7 @@ import { hashPassword } from '../src/auth/password';
 import { ACCOUNTS } from '../src/ledger/accounts';
 import { MomoSimulator } from '../src/providers/momo.simulator';
 import type { PrismaClient } from '../src/generated/prisma/client';
+import { signInWithSms, smsTwoFactor } from './sign-in';
 import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /** Phase 3: the borrower app's API, from OTP sign-in to a submitted application. */
@@ -119,10 +120,11 @@ beforeAll(async () => {
     ['MANAGER', 'manager'],
   ] as const) {
     const email = `e2e-${role.toLowerCase()}-${randomUUID()}@koralend.test`;
+    const factor = smsTwoFactor();
     await prisma.user.create({
-      data: { email, passwordHash: hash, firstName: 'E2E', lastName: role, role },
+      data: { email, passwordHash: hash, firstName: 'E2E', lastName: role, role, ...factor },
     });
-    const res = await http().post('/auth/login').send({ email, password: PASSWORD }).expect(200);
+    const res = await signInWithSms(app, { email, phone: factor.phone }, PASSWORD);
     const cookies = ([] as string[])
       .concat(res.get('Set-Cookie') ?? [])
       .map((c) => c.split(';')[0]!);

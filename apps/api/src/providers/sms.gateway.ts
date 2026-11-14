@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import { maskPhone } from '@kora/core';
 
@@ -23,10 +24,22 @@ export class SmsSimulator extends SmsGateway {
   readonly name = 'simulator' as const;
   private readonly logger = new Logger('SmsSimulator');
   private counter = 0;
+  /** The latest messages, newest last, for tests to read. */
+  readonly outbox: Array<{ to: string; message: string }> = [];
+
+  /** `outboxFile`: development only, also append each message there (see SMS_OUTBOX_FILE). */
+  constructor(private readonly outboxFile?: string) {
+    super();
+  }
 
   async send(to: string, message: string): Promise<SmsSendResult> {
     if (to.endsWith('00')) return { accepted: false, reason: 'Number not reachable' };
     this.counter += 1;
+    this.outbox.push({ to, message });
+    if (this.outbox.length > 200) this.outbox.shift();
+    if (this.outboxFile) {
+      appendFileSync(this.outboxFile, `${JSON.stringify({ at: Date.now(), to, message })}\n`);
+    }
     // The number is masked and the text is not logged: it can hold a one-time code.
     this.logger.log(`Simulated SMS to ${maskPhone(to)} (${message.length} characters)`);
     return {

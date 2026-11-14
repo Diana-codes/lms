@@ -37,6 +37,8 @@ const timezone = z.string().refine((tz) => {
 const loginSchema = z.object({ email: z.string().trim().min(3), password: z.string().min(1) });
 const codeSchema = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code') });
 const challengeSchema = codeSchema.extend({ challengeToken: z.string().min(20) });
+const resendSchema = z.object({ challengeToken: z.string().min(20) });
+const phoneSchema = z.object({ phone: z.string().trim().min(9).max(20) });
 
 const createSchema = z.object({
   slug: z
@@ -109,9 +111,37 @@ export class PlatformController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.auth.login(body.email, body.password, requestMeta(req));
-    if (result.status === 'TOTP_REQUIRED') return result;
+    if (result.status === 'TWO_FACTOR_REQUIRED') return result;
     res.cookie(PLATFORM_COOKIE, result.token, this.auth.cookieOptions());
     return { status: 'OK' as const, admin: result.admin };
+  }
+
+  @Post('auth/2fa/resend')
+  @HttpCode(200)
+  resendCode(@Body(new ZodPipe(resendSchema)) body: z.infer<typeof resendSchema>) {
+    return this.auth.resendSignInCode(body.challengeToken);
+  }
+
+  @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
+  @Post('auth/2fa/sms/start')
+  @HttpCode(200)
+  startSms(
+    @Body(new ZodPipe(phoneSchema)) body: z.infer<typeof phoneSchema>,
+    @Req() req: PlatformRequest,
+  ) {
+    return this.auth.startPhoneVerification(req.platformAdmin!.id, body.phone);
+  }
+
+  @UseGuards(PlatformGuard)
+  @AllowBeforeTwoFactor()
+  @Post('auth/2fa/sms/confirm')
+  @HttpCode(200)
+  confirmSms(
+    @Body(new ZodPipe(codeSchema)) body: z.infer<typeof codeSchema>,
+    @Req() req: PlatformRequest,
+  ) {
+    return this.auth.confirmPhone(req.platformAdmin!.id, body.code, requestMeta(req));
   }
 
   @Post('auth/2fa/verify')

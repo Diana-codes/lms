@@ -24,7 +24,8 @@ export default async function PlatformTwoFactorPage() {
           </h1>
           <p className="m-0 text-sm text-ink-muted">
             Platform accounts can create and suspend lenders, so they need a code from your phone as
-            well as your password. This is required before you continue.
+            well as your password: by text message, or from an authenticator app. This is required
+            before you continue.
           </p>
         </div>
         <PlatformTwoFactorSetup />

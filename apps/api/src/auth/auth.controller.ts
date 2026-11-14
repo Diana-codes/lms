@@ -15,7 +15,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { ENV, type Env } from '../config/env';
 import { AuthService, type PublicUser, type RequestMeta, type SessionTokens } from './auth.service';
 import { ACCESS_COOKIE, type AuthUser, REFRESH_COOKIE } from './auth.types';
-import { AllowWhilePasswordChange, CurrentUser, Public } from './decorators';
+import { AllowWhilePasswordChange, AllowWithoutTwoFactor, CurrentUser, Public } from './decorators';
 import { MIN_PASSWORD_LENGTH } from './password';
 
 const loginSchema = z.object({
@@ -27,6 +27,8 @@ const twoFactorSchema = z.object({ challengeToken: z.string().min(1), code: code
 const enableSchema = z.object({ code: codeSchema });
 const disableSchema = z.object({ password: z.string().min(1).max(200), code: codeSchema });
 const refreshSchema = z.object({ refreshToken: z.string().min(1).optional() }).optional();
+const resendSchema = z.object({ challengeToken: z.string().min(1) });
+const phoneSchema = z.object({ phone: z.string().trim().min(9).max(20) });
 const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z
@@ -53,8 +55,16 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.auth.login(body.email, body.password, meta(req));
-    if (result.status === 'TOTP_REQUIRED') return result;
+    if (result.status === 'TWO_FACTOR_REQUIRED') return result;
     return this.respondWithSession(res, result.tokens, result.user);
+  }
+
+  /** Text another sign-in code to someone at the code step. */
+  @Public()
+  @Post('2fa/resend')
+  @HttpCode(200)
+  resendCode(@Body(new ZodPipe(resendSchema)) body: z.infer<typeof resendSchema>) {
+    return this.auth.resendSignInCode(body.challengeToken);
   }
 
   @Public()
@@ -94,6 +104,7 @@ export class AuthController {
   }
 
   @AllowWhilePasswordChange()
+  @AllowWithoutTwoFactor()
   @Post('logout')
   @HttpCode(204)
   async logout(
@@ -107,6 +118,7 @@ export class AuthController {
 
   /** Change your own password. Other sessions are signed out. */
   @AllowWhilePasswordChange()
+  @AllowWithoutTwoFactor()
   @Post('password')
   @HttpCode(204)
   async changePassword(
@@ -124,18 +136,44 @@ export class AuthController {
   }
 
   @AllowWhilePasswordChange()
+  @AllowWithoutTwoFactor()
   @Get('me')
   me(@CurrentUser() user: AuthUser): Omit<AuthUser, 'sessionId'> {
     const { sessionId: _sessionId, ...rest } = user;
     return rest;
   }
 
+  /** Texted codes, step one: send a code to the number to confirm it. */
+  @AllowWithoutTwoFactor()
+  @Post('2fa/sms/start')
+  @HttpCode(200)
+  startSms(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(phoneSchema)) body: z.infer<typeof phoneSchema>,
+  ) {
+    return this.auth.startPhoneVerification(user.id, body.phone);
+  }
+
+  /** Texted codes, step two: the code that arrived. Sign-in codes go to this number from now on. */
+  @AllowWithoutTwoFactor()
+  @Post('2fa/sms/confirm')
+  @HttpCode(200)
+  confirmSms(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodPipe(enableSchema)) body: z.infer<typeof enableSchema>,
+    @Req() req: Request,
+  ) {
+    return this.auth.confirmPhone(user.id, body.code, meta(req));
+  }
+
+  @AllowWithoutTwoFactor()
   @Post('2fa/setup')
   @HttpCode(200)
   setupTwoFactor(@CurrentUser() user: AuthUser) {
     return this.auth.beginTwoFactorSetup(user.id);
   }
 
+  @AllowWithoutTwoFactor()
   @Post('2fa/enable')
   @HttpCode(204)
   async enableTwoFactor(

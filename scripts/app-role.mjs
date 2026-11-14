@@ -43,7 +43,7 @@ const db = target.pathname.slice(1).split('?')[0];
 if (!/^[a-z0-9_]+$/i.test(db)) throw new Error(`Unexpected database name: ${db}`);
 
 // Owner-only tables: the API never touches these through its company login.
-const OWNER_ONLY = ['PlatformAdmin', 'PlatformSession', '_prisma_migrations'];
+const OWNER_ONLY = ['PlatformAdmin', 'PlatformSession', 'PlatformCode', '_prisma_migrations'];
 
 const client = new Client({ connectionString: target.toString() });
 await client.connect();

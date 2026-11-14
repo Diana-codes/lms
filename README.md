@@ -36,7 +36,7 @@ pnpm dev            # API on :4000, console on :3000
 
 **Providers:** each company brings its own MoMo and Africa's Talking keys, set by a platform admin on the company's page. A company without them uses the local simulators in development (the API logs which); in production MoMo and SMS stay off for it. In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. Keys still in `apps/api/.env` from older setups are copied into the demo company by `pnpm db:seed`. With no `ANTHROPIC_API_KEY`, the Claude-written features (summaries, collections advice, Ask your data) say they are not configured; scoring still works.
 
-Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
+Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. Then enter the 6-digit code texted to the account's phone: with no `PLATFORM_SMS_API_KEY`, nothing is sent and the code appears in the API log (`Development code for +250 78• ••• 002: …`). The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
 
 ## Companies (multi-tenancy)
 
@@ -85,7 +85,7 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every push and pull req
 
 ## Sign-in
 
-Staff sign in with email and password, plus a 6-digit authenticator code once they turn on two-factor (Security in the sidebar). Sessions are httpOnly cookies: a 15-minute access token and a 7-day rotating refresh token. Five failed attempts lock an account for 15 minutes. Roles are `ADMIN`, `MANAGER`, `LOAN_OFFICER` and `COLLECTIONS_AGENT`; restrict a route with `@Roles(...)`.
+Staff sign in with email and password, then a 6-digit code. Two-factor is required for everyone: until it is set up, a session can only set it up. The code comes by SMS to a phone the person has confirmed, or from an authenticator app if they choose one (Security in the sidebar). Sign-in codes are sent through the platform's own Africa's Talking account (`PLATFORM_SMS_*` in `apps/api/.env`), never a company's, so a lender's SMS account running dry cannot lock its staff out. Codes last 5 minutes, only an HMAC of each is stored, and each person gets at most 10 an hour. Platform admins sign in the same way. Sessions are httpOnly cookies: a 15-minute access token and a 7-day rotating refresh token. Five failed attempts lock an account for 15 minutes. Roles are `ADMIN`, `MANAGER`, `LOAN_OFFICER` and `COLLECTIONS_AGENT`; restrict a route with `@Roles(...)`.
 
 ## Database changes
 

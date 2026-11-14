@@ -10,6 +10,7 @@ import { hashPassword } from '../src/auth/password';
 import type { StaffRole } from '../src/generated/prisma/client';
 import { ACCOUNTS } from '../src/ledger/accounts';
 import type { PrismaClient } from '../src/generated/prisma/client';
+import { signInWithSms, smsTwoFactor } from './sign-in';
 import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /**
@@ -34,10 +35,11 @@ const post = (who: Agent, path: string, body: object = {}) =>
 
 async function signIn(role: StaffRole, passwordHash: string): Promise<Agent> {
   const email = `e2e-${role.toLowerCase()}-${randomUUID()}@koralend.test`;
+  const factor = smsTwoFactor();
   const user = await prisma.user.create({
-    data: { email, passwordHash, firstName: 'E2E', lastName: role, role },
+    data: { email, passwordHash, firstName: 'E2E', lastName: role, role, ...factor },
   });
-  const res = await http().post('/auth/login').send({ email, password: PASSWORD }).expect(200);
+  const res = await signInWithSms(app, { email, phone: factor.phone }, PASSWORD);
   const cookies = ([] as string[]).concat(res.get('Set-Cookie') ?? []).map((c) => c.split(';')[0]!);
   return { cookies, id: user.id };
 }

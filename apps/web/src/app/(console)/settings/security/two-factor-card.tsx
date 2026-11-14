@@ -1,202 +1,157 @@
 'use client';
 
-import { Button, Card, CardTitle, Pill, TextField, useToast } from '@kora/ui';
+import { Button, Card, CardTitle, FormError, Pill, TextField, useToast } from '@kora/ui';
 import { useRouter } from 'next/navigation';
-import QRCode from 'qrcode';
 import { type FormEvent, useState } from 'react';
+import { AppSetup, codeInputProps, SmsSetup } from '@/components/two-factor-setup';
 import { api, ApiError } from '@/lib/api';
+import type { TwoFactorMethod } from '@/lib/types';
 
-interface Setup {
-  secret: string;
-  qrSvg: string;
-}
+type Panel = 'phone' | 'app' | 'toSms' | null;
 
-const codeProps = {
-  inputMode: 'numeric',
-  autoComplete: 'one-time-code',
-  pattern: '[0-9]{6}',
-  maxLength: 6,
-  required: true,
-} as const;
-
-export function TwoFactorCard({ enabled }: { enabled: boolean }) {
+/**
+ * Two-factor sign-in is required, so this card changes how it works rather
+ * than turning it off: a new phone number, or text messages versus an app.
+ */
+export function TwoFactorCard({
+  method,
+  verifiedPhone,
+  appIssuer,
+}: {
+  method: TwoFactorMethod | null;
+  verifiedPhone: string | null;
+  appIssuer: string;
+}) {
   const router = useRouter();
   const toast = useToast();
-  const [setup, setSetup] = useState<Setup | null>(null);
-  const [turningOff, setTurningOff] = useState(false);
-  const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
 
-  const fail = (err: unknown) =>
-    setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
-
-  function reset() {
-    setSetup(null);
-    setTurningOff(false);
-    setCode('');
-    setPassword('');
-    setError(null);
+  function done(message: string) {
+    setPanel(null);
+    toast(message);
+    router.refresh();
   }
-
-  async function begin() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api<{ secret: string; otpauthUrl: string }>('/auth/2fa/setup', {
-        method: 'POST',
-      });
-      // The QR code is drawn in the browser; the secret is not sent anywhere else.
-      const qrSvg = await QRCode.toString(res.otpauthUrl, { type: 'svg', margin: 1, width: 180 });
-      setSetup({ secret: res.secret, qrSvg });
-    } catch (err) {
-      fail(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function enable(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api('/auth/2fa/enable', { method: 'POST', body: { code } });
-      reset();
-      toast('Two-factor sign-in is on.');
-      router.refresh();
-    } catch (err) {
-      fail(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function disable(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api('/auth/2fa/disable', { method: 'POST', body: { password, code } });
-      reset();
-      toast('Two-factor sign-in is off.');
-      router.refresh();
-    } catch (err) {
-      fail(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const errorBox = error ? (
-    <p
-      role="alert"
-      className="m-0 rounded-control bg-danger-bg px-3.5 py-2.5 text-sm text-danger-fg"
-    >
-      {error}
-    </p>
-  ) : null;
 
   return (
     <Card className="max-w-2xl">
       <div className="flex flex-wrap items-center gap-3">
         <CardTitle className="mr-auto">Two-factor sign-in</CardTitle>
-        <Pill tone={enabled ? 'success' : 'warning'}>{enabled ? 'On' : 'Off'}</Pill>
+        <Pill tone="success">{method === 'app' ? 'Authenticator app' : 'Text message'}</Pill>
       </div>
       <p className="m-0 text-sm text-ink-muted">
-        After your password, you enter a 6-digit code from an authenticator app on your phone. It
-        stops someone who has learned your password from signing in as you.
+        {method === 'app'
+          ? 'After your password, you enter the 6-digit code your authenticator app shows.'
+          : `After your password, we text a 6-digit code to ${verifiedPhone ?? 'your phone'}.`}
+        {method === 'app' && verifiedPhone
+          ? ` Your confirmed number for text messages is ${verifiedPhone}.`
+          : null}
       </p>
 
-      {!enabled && !setup ? (
+      {panel === null ? (
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => setPanel('phone')}>
+            {verifiedPhone ? 'Change phone number' : 'Add a phone for text messages'}
+          </Button>
+          {method === 'sms' ? (
+            <Button variant="secondary" onClick={() => setPanel('app')}>
+              Use an authenticator app instead
+            </Button>
+          ) : null}
+          {method === 'app' && verifiedPhone ? (
+            <Button variant="secondary" onClick={() => setPanel('toSms')}>
+              Switch to text messages
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {panel === 'phone' ? (
         <>
-          {errorBox}
-          <Button className="self-start" onClick={begin} loading={busy}>
-            Set up two-factor
+          <SmsSetup
+            base="/auth"
+            submitLabel="Confirm number"
+            onDone={() =>
+              done(
+                method === 'app'
+                  ? 'Phone confirmed. You can now switch to text messages.'
+                  : 'Phone confirmed. Sign-in codes go there from now on.',
+              )
+            }
+          />
+          <Button variant="ghost" className="self-start" onClick={() => setPanel(null)}>
+            Cancel
           </Button>
         </>
       ) : null}
 
-      {!enabled && setup ? (
-        <form onSubmit={enable} className="flex flex-col gap-4" noValidate>
-          <ol className="m-0 flex list-decimal flex-col gap-4 pl-5 text-sm">
-            <li>
-              Scan this code with your authenticator app.
-              <div
-                role="img"
-                aria-label="QR code for your authenticator app"
-                className="mt-3 w-fit rounded-control border border-line bg-white p-2"
-                dangerouslySetInnerHTML={{ __html: setup.qrSvg }}
-              />
-              <p className="mt-3 mb-0 text-[13px] text-ink-muted">
-                Can’t scan it? Type this key into the app instead:
-              </p>
-              <code className="mt-1 block w-fit rounded-control bg-ground px-3 py-2 font-mono text-[13px] break-all">
-                {setup.secret.match(/.{1,4}/g)?.join(' ')}
-              </code>
-            </li>
-            <li>
-              Enter the 6-digit code the app shows.
-              <TextField
-                className="mt-3 max-w-[220px]"
-                label="6-digit code"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                {...codeProps}
-              />
-            </li>
-          </ol>
-          {errorBox}
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" loading={busy} disabled={code.length !== 6}>
-              Turn on
-            </Button>
-            <Button variant="secondary" onClick={reset}>
-              Cancel
-            </Button>
-          </div>
-        </form>
+      {panel === 'app' ? (
+        <>
+          <AppSetup
+            base="/auth"
+            issuer={appIssuer}
+            onDone={() => done('Authenticator app is on. Sign-in now asks for its code.')}
+          />
+          <Button variant="ghost" className="self-start" onClick={() => setPanel(null)}>
+            Cancel
+          </Button>
+        </>
       ) : null}
 
-      {enabled && !turningOff ? (
-        <Button variant="secondary" className="self-start" onClick={() => setTurningOff(true)}>
-          Turn off two-factor
-        </Button>
-      ) : null}
-
-      {enabled && turningOff ? (
-        <form onSubmit={disable} className="flex max-w-sm flex-col gap-4" noValidate>
-          <TextField
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <TextField
-            label="6-digit code"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            {...codeProps}
-          />
-          {errorBox}
-          <div className="flex flex-wrap gap-3">
-            <Button
-              type="submit"
-              variant="danger"
-              loading={busy}
-              disabled={!password || code.length !== 6}
-            >
-              Turn off
-            </Button>
-            <Button variant="secondary" onClick={reset}>
-              Cancel
-            </Button>
-          </div>
-        </form>
+      {panel === 'toSms' ? (
+        <SwitchToSms
+          onCancel={() => setPanel(null)}
+          onDone={() => done(`Sign-in codes now come by text to ${verifiedPhone}.`)}
+        />
       ) : null}
     </Card>
+  );
+}
+
+/** Stop using the app (codes then come by text): needs the password and an app code. */
+function SwitchToSms({ onCancel, onDone }: { onCancel: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/auth/2fa/disable', { method: 'POST', body: { password, code } });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex max-w-sm flex-col gap-4" noValidate>
+      <TextField
+        label="Password"
+        type="password"
+        autoComplete="current-password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <TextField
+        label="Code from your authenticator app"
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+        {...codeInputProps}
+      />
+      <FormError>{error}</FormError>
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" loading={busy} disabled={!password || code.length !== 6}>
+          Switch to text messages
+        </Button>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

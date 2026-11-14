@@ -133,9 +133,22 @@ describe('loadEnv', () => {
 
   it('insists on secure cookies in production', () => {
     expect(() => loadEnv({ ...good, NODE_ENV: 'production' })).toThrow(/COOKIE_SECURE/);
-    expect(loadEnv({ ...good, NODE_ENV: 'production', COOKIE_SECURE: 'true' }).COOKIE_SECURE).toBe(
-      true,
-    );
+    expect(
+      loadEnv({
+        ...good,
+        NODE_ENV: 'production',
+        COOKIE_SECURE: 'true',
+        PLATFORM_SMS_API_KEY: 'at-key',
+      }).COOKIE_SECURE,
+    ).toBe(true);
+  });
+
+  it('needs a real SMS account for sign-in codes in production, and no outbox file', () => {
+    const production = { ...good, NODE_ENV: 'production', COOKIE_SECURE: 'true' };
+    expect(() => loadEnv(production)).toThrow(/PLATFORM_SMS_API_KEY/);
+    expect(() =>
+      loadEnv({ ...production, PLATFORM_SMS_API_KEY: 'at-key', SMS_OUTBOX_FILE: 'out.log' }),
+    ).toThrow(/SMS_OUTBOX_FILE/);
   });
 
   it('keeps company isolation switched on', () => {
@@ -150,6 +163,7 @@ describe('loadEnv', () => {
         ...good,
         NODE_ENV: 'production',
         COOKIE_SECURE: 'true',
+        PLATFORM_SMS_API_KEY: 'at-key',
         DEFAULT_COMPANY_SLUG: 'demo',
       }),
     ).toThrow(/DEFAULT_COMPANY_SLUG/);
