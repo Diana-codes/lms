@@ -10,7 +10,9 @@ import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
 import { ACCOUNTS } from '../src/ledger/accounts';
-import { PrismaService } from '../src/prisma/prisma.service';
+import type { PrismaClient } from '../src/generated/prisma/client';
+import { runAsCompany } from '../src/tenancy/company-context';
+import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /**
  * Phase 5: scoring (against the real rules service) and the Claude features
@@ -35,7 +37,7 @@ class FakeAi {
 }
 
 let app: INestApplication;
-let prisma: PrismaService;
+let prisma: PrismaClient;
 const fake = new FakeAi();
 const cookies: Record<'officer' | 'manager', string[]> = { officer: [], manager: [] };
 const ids: Record<'officer' | 'manager', string> = { officer: '', manager: '' };
@@ -62,7 +64,7 @@ async function application(
       termMonths: 12,
     })
     .expect(201);
-  const borrower = await prisma.borrower.findUniqueOrThrow({
+  const borrower = await prisma.borrower.findFirstOrThrow({
     where: { code: res.body.borrowerCode },
   });
   if (opts.income != null)
@@ -72,7 +74,7 @@ async function application(
     });
   if (opts.stated != null)
     await prisma.application.update({
-      where: { code: res.body.code },
+      where: byCode(res.body.code),
       data: { statedMonthlyIncome: opts.stated },
     });
   if (opts.inflows) {
@@ -103,11 +105,11 @@ async function application(
 async function liveLoan(borrowerCode: string, appCode: string, due: Date): Promise<string> {
   await as('officer').post(`/applications/${appCode}/move`, { to: 'UNDER_REVIEW' }).expect(200);
   await prisma.application.update({
-    where: { code: appCode },
+    where: byCode(appCode),
     data: { statedMonthlyIncome: null },
   });
   await prisma.borrower.update({
-    where: { code: borrowerCode },
+    where: byCode(borrowerCode),
     data: { monthlyIncome: 5_000_000n },
   });
   await as('officer')
@@ -116,7 +118,7 @@ async function liveLoan(borrowerCode: string, appCode: string, due: Date): Promi
   const res = await as('manager')
     .post(`/applications/${appCode}/disburse`, { channel: 'BANK_TRANSFER' })
     .expect(200);
-  const loan = await prisma.loan.findUniqueOrThrow({ where: { code: res.body.loanCode } });
+  const loan = await prisma.loan.findFirstOrThrow({ where: { code: res.body.loanCode } });
   await prisma.scheduleInstalment.updateMany({
     where: { loanId: loan.id, number: 1 },
     data: {
@@ -134,12 +136,12 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   setupApp(app);
   await app.init();
-  prisma = app.get(PrismaService);
+  prisma = testPrisma();
   for (const account of Object.values(ACCOUNTS))
     await prisma.ledgerAccount.upsert({
-      where: { code: account.code },
+      where: byCode(account.code),
       update: {},
-      create: account,
+      create: { ...account, companyId: E2E_COMPANY_ID },
     });
   await prisma.product.create({
     data: {
@@ -181,6 +183,7 @@ afterAll(async () => {
     data: { isActive: false },
   });
   await app.close();
+  await prisma.$disconnect();
 });
 
 describe('scoring', () => {
@@ -203,7 +206,10 @@ describe('scoring', () => {
     const { code } = await application('1000000', {
       inflows: [500_000, 500_000, 500_000, 500_000, 500_000, 500_000],
     });
-    await prisma.application.update({ where: { code }, data: { statedMonthlyIncome: 1_500_000n } });
+    await prisma.application.update({
+      where: byCode(code),
+      data: { statedMonthlyIncome: 1_500_000n },
+    });
     const rescored = await as('officer').post(`/applications/${code}/score`).expect(200);
     expect(rescored.body.ai).toMatchObject({
       recommendation: 'FLAG',
@@ -215,7 +221,7 @@ describe('scoring', () => {
     const refused = await as('officer').post(`/applications/${code}/approve`).expect(400);
     expect(refused.body.message).toContain('flagged');
     await prisma.borrower.update({
-      where: { code: rescored.body.borrowerCode },
+      where: byCode(rescored.body.borrowerCode),
       data: { monthlyIncome: 1_500_000n },
     });
     await as('officer')
@@ -257,10 +263,10 @@ describe('scoring', () => {
       income: 2_000_000n,
       inflows: [2_000_000, 2_010_000, 1_990_000, 2_000_000, 2_020_000, 1_980_000],
     });
-    const borrower = await prisma.borrower.findUniqueOrThrow({
+    const borrower = await prisma.borrower.findFirstOrThrow({
       where: { code: first.borrowerCode },
     });
-    const product = await prisma.product.findUniqueOrThrow({ where: { code: PRODUCT } });
+    const product = await prisma.product.findFirstOrThrow({ where: { code: PRODUCT } });
     const old = await prisma.loan.create({
       data: {
         code: `LN-${String(randomInt(1000, 9999))}-1999`,
@@ -292,7 +298,7 @@ describe('scoring', () => {
       where: { id: borrower.id },
       data: { customerSince: new Date('1999-01-01') },
     });
-    await prisma.application.update({ where: { code: first.code }, data: { docsReceived: 4 } });
+    await prisma.application.update({ where: byCode(first.code), data: { docsReceived: 4 } });
     const card = (await as('officer').post(`/applications/${first.code}/score`).expect(200)).body;
     expect(card.ai.recommendation).toBe('AUTO_APPROVE_ELIGIBLE');
     expect(card.autoEligible).toBe(true);
@@ -301,9 +307,9 @@ describe('scoring', () => {
     const res = await as('officer').post('/applications/auto-approve').expect(200);
     expect(res.body.approved).toContain(first.code);
     expect(res.body.approved).not.toContain(thin.code);
-    const row = await prisma.application.findUniqueOrThrow({ where: { code: first.code } });
+    const row = await prisma.application.findFirstOrThrow({ where: { code: first.code } });
     expect(row).toMatchObject({ stage: 'APPROVED', autoApproved: true, decidedById: ids.officer });
-    expect((await prisma.application.findUniqueOrThrow({ where: { code: thin.code } })).stage).toBe(
+    expect((await prisma.application.findFirstOrThrow({ where: { code: thin.code } })).stage).toBe(
       'NEW',
     );
   });
@@ -327,7 +333,7 @@ describe('Claude features (with a stand-in model)', () => {
       modelVersion: 'fake-model',
     });
     const sent = fake.calls.at(-1)!.user;
-    const b = await prisma.borrower.findUniqueOrThrow({ where: { code: borrowerCode } });
+    const b = await prisma.borrower.findFirstOrThrow({ where: { code: borrowerCode } });
     expect(sent).not.toContain(b.fullName);
     expect(sent).not.toContain(b.phone.slice(4));
     const note = await prisma.aiNote.findFirstOrThrow({
@@ -356,7 +362,7 @@ describe('Claude features (with a stand-in model)', () => {
   it('suggests a collections approach with a Kinyarwanda draft', async () => {
     const { borrowerCode, code } = await application('500000');
     const loanCode = await liveLoan(borrowerCode, code, new Date(Date.now() - 20 * 86_400_000));
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code: loanCode } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code: loanCode } });
     fake.queue.push({
       bestTime: 'Weekday mornings',
       offer: 'Two smaller payments',
@@ -429,13 +435,12 @@ describe('Claude features (with a stand-in model)', () => {
   it('even a query that slips past the check cannot write, thanks to the read-only login', async () => {
     if (!process.env.REPORTING_DATABASE_URL) return;
     const service = app.get(AiService);
-    await expect(service.run('SELECT * FROM "Borrower"')).rejects.toThrow(
+    const run = (sql: string) => runAsCompany(E2E_COMPANY_ID, () => service.run(sql));
+    await expect(run('SELECT * FROM "Borrower"')).rejects.toThrow(
       /does not exist|permission denied/,
     );
     await expect(
-      service.run(
-        'SELECT 1 FROM loans WHERE false UNION SELECT count(*) FROM pg_catalog.pg_authid',
-      ),
+      run('SELECT 1 FROM loans WHERE false UNION SELECT count(*) FROM pg_catalog.pg_authid'),
     ).rejects.toThrow();
   });
 

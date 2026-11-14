@@ -15,6 +15,7 @@ import type { AuthUser } from '../auth/auth.types';
 import { ENV, type Env } from '../config/env';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProvidersService } from '../providers/providers.service';
 import { AiClient, AiUnavailableError } from './ai.client';
 import { checkSql, UnsafeSqlError } from './sql-guard';
 
@@ -80,6 +81,7 @@ export class AiService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly ai: AiClient,
     private readonly audit: AuditService,
+    private readonly providers: ProvidersService,
     @Inject(ENV) private readonly env: Env,
   ) {
     this.reporting = env.REPORTING_DATABASE_URL
@@ -111,7 +113,7 @@ export class AiService implements OnModuleDestroy {
 
   /** A short written profile of a borrower, refreshed at most daily unless forced. */
   async borrowerSummary(code: string, user: AuthUser, force: boolean, meta: RequestMeta) {
-    const b = await this.prisma.borrower.findUnique({
+    const b = await this.prisma.borrower.findFirst({
       where: { code },
       include: {
         business: true,
@@ -233,7 +235,7 @@ export class AiService implements OnModuleDestroy {
   /** How to approach an overdue account, with a Kinyarwanda SMS draft for review. */
   async collectionsApproach(loanCode: string, user: AuthUser) {
     if (!this.ai.configured) return { approach: null, reason: 'not_configured' as const };
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code: loanCode },
       include: {
         borrower: { select: { id: true, type: true, fullName: true } },
@@ -265,6 +267,7 @@ export class AiService implements OnModuleDestroy {
     }
 
     const today = kigaliDate();
+    const payCode = await this.providers.momoPayCode();
     const unpaid = loan.instalments.filter((i) => i.status !== 'PAID');
     const overdue = unpaid.filter((i) => utcDateToIso(i.dueDate) < today);
     const firstName =
@@ -300,9 +303,7 @@ export class AiService implements OnModuleDestroy {
       // The first name is used only to greet the borrower in the SMS draft.
       greetingName: firstName,
       loanCode: loan.code,
-      payInstruction: this.env.MOMO_PAY_CODE
-        ? `MoMo Pay ${this.env.MOMO_PAY_CODE}`
-        : 'MoMo or at a branch',
+      payInstruction: payCode ? `MoMo Pay ${payCode}` : 'MoMo or at a branch',
       today,
     };
     let out: z.infer<typeof ApproachSchema>;
@@ -434,10 +435,20 @@ export class AiService implements OnModuleDestroy {
     };
   }
 
-  /** Run a checked query on the read-only login, inside a read-only transaction. */
+  /**
+   * Run a checked query on the read-only login, inside a read-only transaction.
+   * The reporting views only show the company registered for this exact
+   * database connection; the registration is written through the company
+   * login, whose policies only allow its own company.
+   */
   async run(sql: string): Promise<Record<string, unknown>[]> {
     const client = await this.reporting!.connect();
+    let pid: number | null = null;
     try {
+      pid = (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      await this.prisma.$executeRaw`
+        INSERT INTO reporting_ctx.session_company (pid, company_id) VALUES (${pid}, current_company_id())
+        ON CONFLICT (pid) DO UPDATE SET company_id = current_company_id(), set_at = now()`;
       await client.query('BEGIN READ ONLY');
       await client.query(`SET LOCAL statement_timeout = '5s'`);
       await client.query('SET LOCAL search_path = reporting');
@@ -448,6 +459,12 @@ export class AiService implements OnModuleDestroy {
       await client.query('ROLLBACK').catch(() => undefined);
       throw err;
     } finally {
+      if (pid != null) {
+        await this.prisma
+          .$executeRaw`DELETE FROM reporting_ctx.session_company WHERE pid = ${pid}`.catch(
+          () => undefined,
+        );
+      }
       client.release();
     }
   }

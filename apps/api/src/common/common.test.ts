@@ -107,6 +107,7 @@ describe('BigInt JSON', () => {
 describe('loadEnv', () => {
   const good = {
     DATABASE_URL: 'postgresql://u:p@localhost:5433/db',
+    APP_DATABASE_URL: 'postgresql://app:p@localhost:5433/db',
     JWT_ACCESS_SECRET: Buffer.alloc(48, 1).toString('base64'),
     PII_ENCRYPTION_KEY: KEY,
     PII_HASH_KEY: HASH_KEY,
@@ -135,5 +136,22 @@ describe('loadEnv', () => {
     expect(loadEnv({ ...good, NODE_ENV: 'production', COOKIE_SECURE: 'true' }).COOKIE_SECURE).toBe(
       true,
     );
+  });
+
+  it('keeps company isolation switched on', () => {
+    // The company login must not be the owner login, which bypasses row-level security.
+    expect(() => loadEnv({ ...good, APP_DATABASE_URL: good.DATABASE_URL })).toThrow(
+      /APP_DATABASE_URL/,
+    );
+    expect(() => loadEnv({ ...good, APP_DATABASE_URL: undefined })).toThrow(/APP_DATABASE_URL/);
+    // No silent fallback company in production.
+    expect(() =>
+      loadEnv({
+        ...good,
+        NODE_ENV: 'production',
+        COOKIE_SECURE: 'true',
+        DEFAULT_COMPANY_SLUG: 'demo',
+      }),
+    ).toThrow(/DEFAULT_COMPANY_SLUG/);
   });
 });

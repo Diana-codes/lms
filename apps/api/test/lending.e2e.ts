@@ -9,7 +9,8 @@ import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
 import type { StaffRole } from '../src/generated/prisma/client';
 import { ACCOUNTS } from '../src/ledger/accounts';
-import { PrismaService } from '../src/prisma/prisma.service';
+import type { PrismaClient } from '../src/generated/prisma/client';
+import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /**
  * Phase 1 lending flows, end to end against a real Postgres: application to
@@ -21,7 +22,7 @@ const PRODUCT = `E2E-${randomUUID().slice(0, 8)}`;
 const today = kigaliDate();
 
 let app: INestApplication;
-let prisma: PrismaService;
+let prisma: PrismaClient;
 type Agent = { cookies: string[]; id: string };
 const staff = {} as Record<'officer' | 'officer2' | 'manager' | 'manager2' | 'collections', Agent>;
 
@@ -52,7 +53,7 @@ async function newApplication(amount: string, opts: { income?: bigint; name?: st
   }).expect(201);
   if (opts.income != null) {
     await prisma.borrower.update({
-      where: { code: res.body.borrowerCode },
+      where: byCode(res.body.borrowerCode),
       data: { monthlyIncome: opts.income },
     });
   }
@@ -84,13 +85,13 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   setupApp(app);
   await app.init();
-  prisma = app.get(PrismaService);
+  prisma = testPrisma();
 
   for (const account of Object.values(ACCOUNTS)) {
     await prisma.ledgerAccount.upsert({
-      where: { code: account.code },
+      where: byCode(account.code),
       update: {},
-      create: account,
+      create: { ...account, companyId: E2E_COMPANY_ID },
     });
   }
   await prisma.product.create({
@@ -122,6 +123,7 @@ afterAll(async () => {
     data: { isActive: false },
   });
   await app.close();
+  await prisma.$disconnect();
 });
 
 describe('applications', () => {
@@ -212,7 +214,7 @@ describe('applications', () => {
     const second = await post(staff.manager, `/applications/${a.code}/approve`).expect(200);
     expect(second.body.stage).toBe('APPROVED');
 
-    const row = await prisma.application.findUniqueOrThrow({ where: { code: a.code } });
+    const row = await prisma.application.findFirstOrThrow({ where: { code: a.code } });
     expect(row.decidedById).toBe(staff.officer.id);
     expect(row.secondApproverId).toBe(staff.manager.id);
   });
@@ -302,7 +304,7 @@ describe('disbursement', () => {
     await post(staff.manager, `/applications/${a.code}/disburse`, { channel: 'MTN_MOMO' }).expect(
       409,
     );
-    const row = await prisma.application.findUniqueOrThrow({ where: { code: a.code } });
+    const row = await prisma.application.findFirstOrThrow({ where: { code: a.code } });
     expect(await prisma.loan.count({ where: { applicationId: row.id } })).toBe(1);
   });
 });
@@ -380,7 +382,7 @@ describe('recording payments', () => {
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200]);
     expect(results.filter((r) => r.body.replayed === false)).toHaveLength(1);
 
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     expect(await prisma.payment.count({ where: { loanId: loan.id } })).toBe(1);
     const detail = (await get(staff.officer, `/loans/${code}`).expect(200)).body;
     expect(detail.figures.totalRepaid).toBe('110000');
@@ -617,7 +619,7 @@ describe('loans list and dashboard', () => {
 
   it('shows an overdue loan as late', async () => {
     const code = await disbursedLoan('1200000');
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     // Pretend the first instalment fell due 40 days ago.
     await prisma.scheduleInstalment.updateMany({
       where: { loanId: loan.id, number: 1 },

@@ -21,6 +21,8 @@ const targets = [
       WEBHOOK_TOKEN: () => randomBytes(24).toString('base64url'),
       REPORTING_DATABASE_URL: () =>
         `postgresql://kora_reporting:${randomBytes(18).toString('hex')}@localhost:5433/kora_lend`,
+      APP_DATABASE_URL: () =>
+        `postgresql://kora_app:${randomBytes(18).toString('hex')}@localhost:5433/kora_lend`,
     },
   },
   { dir: 'apps/web', file: '.env.local', fill: {} },

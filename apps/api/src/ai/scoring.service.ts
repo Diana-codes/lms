@@ -71,7 +71,7 @@ export class ScoringService {
   async scoreApplication(
     code: string,
   ): Promise<{ value: number; recommendation: ScoreRecommendation } | null> {
-    const app = await this.prisma.application.findUnique({
+    const app = await this.prisma.application.findFirst({
       where: { code },
       include: {
         product: true,

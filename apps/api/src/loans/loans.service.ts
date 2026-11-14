@@ -191,7 +191,7 @@ export class LoansService {
   }
 
   async detail(code: string) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code },
       include: {
         borrower: {
@@ -450,7 +450,7 @@ export class LoansService {
         if (!locked[0]) throw new NotFoundException(`No loan ${code}`);
         const loanId = locked[0].id;
 
-        const existing = await tx.payment.findUnique({ where: { idempotencyKey: key } });
+        const existing = await tx.payment.findFirst({ where: { idempotencyKey: key } });
         if (existing) {
           if (existing.loanId !== loanId || existing.amount !== input.amount) {
             throw new ConflictException('This request was already used for a different payment');
@@ -497,7 +497,7 @@ export class LoansService {
     user: AuthUser,
     meta: RequestMeta,
   ) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code },
       include: {
         instalments: { where: { supersededAt: null, status: { not: 'PAID' } } },

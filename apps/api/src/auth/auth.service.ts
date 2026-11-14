@@ -14,6 +14,7 @@ import { PiiCrypto } from '../common/pii-crypto';
 import { ENV, type Env } from '../config/env';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { currentCompanyId } from '../tenancy/company-context';
 import type { AccessTokenClaims, TwoFactorChallengeClaims } from './auth.types';
 import { hashPassword, verifyPassword } from './password';
 import { generateTotpSecret, totpUri, verifyTotp } from './totp';
@@ -106,7 +107,7 @@ export class AuthService {
     }
 
     if (user.totpEnabledAt) {
-      const claims: TwoFactorChallengeClaims = { sub: user.id, typ: '2fa' };
+      const claims: TwoFactorChallengeClaims = { sub: user.id, cid: user.companyId, typ: '2fa' };
       const challengeToken = await this.jwt.signAsync(claims, {
         expiresIn: CHALLENGE_TTL_SECONDS,
       });
@@ -128,7 +129,9 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Sign-in expired. Start again.');
     }
-    if (claims.typ !== '2fa') throw new UnauthorizedException('Sign-in expired. Start again.');
+    if (claims.typ !== '2fa' || claims.cid !== currentCompanyId()) {
+      throw new UnauthorizedException('Sign-in expired. Start again.');
+    }
 
     const user = await this.prisma.user.findUnique({ where: { id: claims.sub } });
     if (!user || !user.isActive || !user.totpEnabledAt || !user.totpSecretEnc) {
@@ -379,6 +382,7 @@ export class AuthService {
     const claims: AccessTokenClaims = {
       sub: user.id,
       sid: sessionId,
+      cid: user.companyId,
       role: user.role,
       typ: 'access',
     };

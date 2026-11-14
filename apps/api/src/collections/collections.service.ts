@@ -196,7 +196,7 @@ export class CollectionsService {
 
   /** One account, with its contact log, for the side panel. */
   async account(loanCode: string) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code: loanCode },
       include: {
         borrower: true,
@@ -241,7 +241,7 @@ export class CollectionsService {
 
   /** Record what happened on a call or visit, and set the next step. */
   async logOutcome(loanCode: string, input: LogOutcomeInput, user: AuthUser, meta: RequestMeta) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code: loanCode },
       include: { borrower: true },
     });
@@ -354,6 +354,7 @@ export class CollectionsService {
         firstName: account.firstName,
         amount: account.overdue,
         loanCode,
+        payCode: await this.sms.payCode(),
       }),
     };
   }
@@ -376,6 +377,7 @@ export class CollectionsService {
       ).map((s) => s.loanId),
     );
     let sent = 0;
+    const payCode = await this.sms.payCode();
     for (const l of loans) {
       if (textedToday.has(l.loanId)) continue;
       const sms = await this.sms.send({
@@ -388,6 +390,7 @@ export class CollectionsService {
           firstName: l.type === 'BUSINESS' ? undefined : l.name.split(' ')[0],
           amount: l.overdue,
           loanCode: l.code,
+          payCode,
         }),
       });
       if (sms.status !== 'FAILED') {

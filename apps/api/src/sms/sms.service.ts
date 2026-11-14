@@ -1,12 +1,12 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { addDays, formatDate, formatRwf, isoToUtcDate, kigaliDate, utcDateToIso } from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
-import { ENV, type Env } from '../config/env';
 import type { Language, SmsMessage } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SmsGateway } from '../providers/sms.gateway';
+import { ProvidersService } from '../providers/providers.service';
+import { companyDisplayName } from '../tenancy/company-context';
 
 export type SmsTemplate =
   | 'reminder.due_soon'
@@ -22,6 +22,8 @@ export interface SmsVars {
   loanCode?: string;
   date?: string;
   code?: string;
+  /** The company's MoMo Pay merchant code, for reminders (see payCode()). */
+  payCode?: string;
 }
 
 export interface SendSms {
@@ -41,38 +43,42 @@ export const SMS_MAX_LENGTH = 480;
 export class SmsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: SmsGateway,
+    private readonly providers: ProvidersService,
     private readonly audit: AuditService,
-    @Inject(ENV) private readonly env: Env,
   ) {}
 
+  /** The current company's MoMo Pay merchant code, if it has one. */
+  payCode(): Promise<string | undefined> {
+    return this.providers.momoPayCode();
+  }
+
   /** How to pay, for the end of a message. The merchant code is only quoted once it is real. */
-  private payHint(): string {
-    return this.env.MOMO_PAY_CODE
-      ? `Pay with MoMo Pay ${this.env.MOMO_PAY_CODE}`
-      : 'Pay with MoMo or at a branch';
+  private payHint(payCode?: string): string {
+    return payCode ? `Pay with MoMo Pay ${payCode}` : 'Pay with MoMo or at a branch';
   }
 
   /**
-   * The wording of each message. English only for now: Kinyarwanda and French
-   * versions should be written and checked by native speakers before use.
+   * The wording of each message, signed with the lender's own name. English
+   * only for now: Kinyarwanda and French versions should be written and
+   * checked by native speakers before use.
    */
   render(template: SmsTemplate, v: SmsVars): string {
-    const hello = v.firstName ? `Hello ${v.firstName}, this is Kora Lend.` : 'Kora Lend:';
+    const lender = companyDisplayName();
+    const hello = v.firstName ? `Hello ${v.firstName}, this is ${lender}.` : `${lender}:`;
     const amount = v.amount != null ? formatRwf(v.amount) : '';
     switch (template) {
       case 'reminder.due_soon':
-        return `${hello} Your instalment of ${amount} on loan ${v.loanCode} is due on ${v.date}. ${this.payHint()}. Thank you.`;
+        return `${hello} Your instalment of ${amount} on loan ${v.loanCode} is due on ${v.date}. ${this.payHint(v.payCode)}. Thank you.`;
       case 'reminder.overdue':
-        return `${hello} A reminder that ${amount} on loan ${v.loanCode} is overdue. ${this.payHint()}, or reply to agree a date. Thank you.`;
+        return `${hello} A reminder that ${amount} on loan ${v.loanCode} is overdue. ${this.payHint(v.payCode)}, or reply to agree a date. Thank you.`;
       case 'payment.received':
-        return `Kora Lend: we received ${amount} for loan ${v.loanCode}. Thank you.`;
+        return `${lender}: we received ${amount} for loan ${v.loanCode}. Thank you.`;
       case 'disbursement.sent':
-        return `Kora Lend: ${amount} for loan ${v.loanCode} has been sent to your MoMo wallet. Your first instalment is due on ${v.date}.`;
+        return `${lender}: ${amount} for loan ${v.loanCode} has been sent to your MoMo wallet. Your first instalment is due on ${v.date}.`;
       case 'checkin':
         return `${hello} Your next instalment on loan ${v.loanCode} is due on ${v.date}. If anything has changed for you, reply and we will find a plan together.`;
       case 'otp':
-        return `Kora Lend: your sign-in code is ${v.code}. It expires in 5 minutes. Do not share it with anyone.`;
+        return `${lender}: your sign-in code is ${v.code}. It expires in 5 minutes. Do not share it with anyone.`;
     }
   }
 
@@ -83,20 +89,22 @@ export class SmsService {
     if (body.length > SMS_MAX_LENGTH) {
       throw new BadRequestException(`Keep the message under ${SMS_MAX_LENGTH} characters`);
     }
+    const gateway = await this.providers.sms();
     const row = await this.prisma.smsMessage.create({
       data: {
         toPhone: input.toPhone,
         // One-time codes are never kept: the stored text has the code removed.
-        body: input.template === 'otp' ? 'Kora Lend: your sign-in code is ••••••.' : body,
+        body:
+          input.template === 'otp' ? `${companyDisplayName()}: your sign-in code is ••••••.` : body,
         borrowerId: input.borrowerId ?? null,
         loanId: input.loanId ?? null,
         template: input.template ?? null,
         language: input.language ?? 'EN',
-        provider: this.gateway.name,
+        provider: gateway.name,
         sentById: input.sentById ?? null,
       },
     });
-    const result = await this.gateway.send(input.toPhone, body);
+    const result = await gateway.send(input.toPhone, body);
     const now = new Date();
     return this.prisma.smsMessage.update({
       where: { id: row.id },
@@ -132,7 +140,7 @@ export class SmsService {
     user: AuthUser,
     meta: RequestMeta,
   ) {
-    const borrower = await this.prisma.borrower.findUnique({ where: { code: borrowerCode } });
+    const borrower = await this.prisma.borrower.findFirst({ where: { code: borrowerCode } });
     if (!borrower) throw new NotFoundException(`No borrower ${borrowerCode}`);
     const loan = input.loanCode
       ? await this.prisma.loan.findFirst({
@@ -208,6 +216,7 @@ export class SmsService {
       select: { loanId: true },
     });
     const skip = new Set(recent.map((r) => r.loanId));
+    const payCode = await this.payCode();
     let sent = 0;
     let failed = 0;
     for (const inst of due) {
@@ -225,6 +234,7 @@ export class SmsService {
           amount: inst.principalDue - inst.principalPaid + (inst.interestDue - inst.interestPaid),
           loanCode: inst.loan.code,
           date: formatDate(utcDateToIso(inst.dueDate), { year: false }),
+          payCode,
         }),
       });
       if (sms.status === 'FAILED') failed += 1;

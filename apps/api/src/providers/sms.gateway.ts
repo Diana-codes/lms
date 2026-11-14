@@ -1,6 +1,5 @@
 import { Logger } from '@nestjs/common';
 import { maskPhone } from '@kora/core';
-import type { Env } from '../config/env';
 
 export interface SmsSendResult {
   accepted: boolean;
@@ -45,26 +44,33 @@ interface AtResponse {
   };
 }
 
+/** One company's Africa's Talking account. */
+export interface AfricasTalkingSettings {
+  username: string;
+  apiKey: string;
+  senderId?: string;
+}
+
 /** Africa's Talking bulk SMS. The sandbox and live APIs differ only in host and username. */
 export class AfricasTalkingGateway extends SmsGateway {
   readonly name = 'africastalking' as const;
 
-  constructor(private readonly env: Env) {
+  constructor(private readonly settings: AfricasTalkingSettings) {
     super();
   }
 
   async send(to: string, message: string): Promise<SmsSendResult> {
-    const sandbox = this.env.AFRICASTALKING_USERNAME === 'sandbox';
+    const sandbox = this.settings.username === 'sandbox';
     const host = sandbox ? 'api.sandbox.africastalking.com' : 'api.africastalking.com';
-    const form = new URLSearchParams({ username: this.env.AFRICASTALKING_USERNAME, to, message });
-    if (this.env.AFRICASTALKING_SENDER_ID) form.set('from', this.env.AFRICASTALKING_SENDER_ID);
+    const form = new URLSearchParams({ username: this.settings.username, to, message });
+    if (this.settings.senderId) form.set('from', this.settings.senderId);
 
     let res: Response;
     try {
       res = await fetch(`https://${host}/version1/messaging`, {
         method: 'POST',
         headers: {
-          apiKey: this.env.AFRICASTALKING_API_KEY!,
+          apiKey: this.settings.apiKey,
           Accept: 'application/json',
           'Content-Type': 'application/x-www-form-urlencoded',
         },

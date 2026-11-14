@@ -10,8 +10,10 @@ import { hashPassword } from '../src/auth/password';
 import type { StaffRole } from '../src/generated/prisma/client';
 import { JobsService } from '../src/jobs/jobs.service';
 import { ACCOUNTS } from '../src/ledger/accounts';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { MomoSimulator } from '../src/providers/momo.simulator';
+import type { PrismaClient } from '../src/generated/prisma/client';
+import { runAsCompany } from '../src/tenancy/company-context';
+import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /**
  * Phase 2: money through MoMo, SMS, collections and the nightly job, against
@@ -22,7 +24,7 @@ const PRODUCT = `E2E2-${randomUUID().slice(0, 8)}`;
 const today = kigaliDate();
 
 let app: INestApplication;
-let prisma: PrismaService;
+let prisma: PrismaClient;
 type Agent = { cookies: string[]; id: string };
 const staff = {} as Record<'officer' | 'manager' | 'collections', Agent>;
 
@@ -55,7 +57,7 @@ async function approved(amount: string, number: string) {
     termMonths: 12,
   }).expect(201);
   await prisma.borrower.update({
-    where: { code: res.body.borrowerCode },
+    where: byCode(res.body.borrowerCode),
     data: { momoLinked: true },
   });
   await post(staff.officer, `/applications/${res.body.code}/move`, { to: 'UNDER_REVIEW' }).expect(
@@ -79,12 +81,12 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   setupApp(app);
   await app.init();
-  prisma = app.get(PrismaService);
+  prisma = testPrisma();
   for (const account of Object.values(ACCOUNTS)) {
     await prisma.ledgerAccount.upsert({
-      where: { code: account.code },
+      where: byCode(account.code),
       update: {},
-      create: account,
+      create: { ...account, companyId: E2E_COMPANY_ID },
     });
   }
   await prisma.product.create({
@@ -113,6 +115,7 @@ afterAll(async () => {
     data: { isActive: false },
   });
   await app.close();
+  await prisma.$disconnect();
 });
 
 describe('MoMo request to pay', () => {
@@ -165,7 +168,7 @@ describe('MoMo request to pay', () => {
     expect(results.map((r) => r.body.status)).toEqual(Array(6).fill('SUCCESSFUL'));
     const detail = (await get(staff.officer, `/loans/${code}`).expect(200)).body;
     expect(detail.figures.totalRepaid).toBe('50000');
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     expect(await prisma.payment.count({ where: { loanId: loan.id, status: 'SUCCESSFUL' } })).toBe(
       1,
     );
@@ -250,7 +253,7 @@ describe('MoMo disbursement', () => {
     expect(res.body.application.stage).toBe('APPROVED');
     expect(res.body.application.statusNote).toContain('failed');
     expect(res.body.application.disbursement.status).toBe('FAILED');
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code: res.body.loanCode } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code: res.body.loanCode } });
     expect(loan.status).toBe('PENDING_DISBURSEMENT');
     expect(await prisma.ledgerTransaction.count({ where: { loanId: loan.id } })).toBe(0);
     expect(
@@ -258,7 +261,7 @@ describe('MoMo disbursement', () => {
     ).toBe(0);
 
     // The borrower fixes their wallet; the manager tries again.
-    await prisma.borrower.update({ where: { code: a.borrowerCode }, data: { phone: phone() } });
+    await prisma.borrower.update({ where: byCode(a.borrowerCode), data: { phone: phone() } });
     const retry = await post(staff.manager, `/applications/${a.code}/disburse`, {
       channel: 'MTN_MOMO',
     }).expect(200);
@@ -272,7 +275,7 @@ describe('MoMo disbursement', () => {
 
   it('needs a linked MoMo wallet', async () => {
     const a = await approved('500000', phone());
-    await prisma.borrower.update({ where: { code: a.borrowerCode }, data: { momoLinked: false } });
+    await prisma.borrower.update({ where: byCode(a.borrowerCode), data: { momoLinked: false } });
     const res = await post(staff.manager, `/applications/${a.code}/disburse`, {
       channel: 'MTN_MOMO',
     }).expect(409);
@@ -321,7 +324,7 @@ describe('webhooks', () => {
 describe('SMS', () => {
   it('sends a message to a borrower and logs it against the loan', async () => {
     const code = await activeLoan();
-    const loan = await prisma.loan.findUniqueOrThrow({
+    const loan = await prisma.loan.findFirstOrThrow({
       where: { code },
       include: { borrower: true },
     });
@@ -342,7 +345,7 @@ describe('SMS', () => {
 
   it('records a failed send instead of pretending', async () => {
     const code = await activeLoan(phone('00'));
-    const loan = await prisma.loan.findUniqueOrThrow({
+    const loan = await prisma.loan.findFirstOrThrow({
       where: { code },
       include: { borrower: true },
     });
@@ -355,7 +358,7 @@ describe('SMS', () => {
 
   it('sends due-soon reminders once, not twice', async () => {
     const code = await activeLoan();
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     await prisma.scheduleInstalment.updateMany({
       where: { loanId: loan.id, number: 1 },
       data: { dueDate: new Date(Date.now() + 2 * 86_400_000) },
@@ -376,7 +379,7 @@ describe('collections', () => {
   /** A loan whose first instalment fell due `days` ago. */
   async function lateLoan(days: number): Promise<string> {
     const code = await activeLoan();
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     await prisma.scheduleInstalment.updateMany({
       where: { loanId: loan.id, number: 1 },
       data: { dueDate: new Date(Date.now() - days * 86_400_000) },
@@ -467,7 +470,7 @@ describe('collections', () => {
       outcome: 'REACHED',
       note: 'Will pay today',
     }).expect(200);
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     expect(await prisma.collectionCase.count({ where: { loanId: loan.id, closedAt: null } })).toBe(
       1,
     );
@@ -487,7 +490,7 @@ describe('collections', () => {
 describe('the nightly job', () => {
   it('opens cases for new arrears, closes cleared ones, and marks broken promises', async () => {
     const code = await activeLoan();
-    const loan = await prisma.loan.findUniqueOrThrow({ where: { code } });
+    const loan = await prisma.loan.findFirstOrThrow({ where: { code } });
     await prisma.scheduleInstalment.updateMany({
       where: { loanId: loan.id, number: 1 },
       data: { dueDate: new Date(Date.now() - 3 * 86_400_000) },
@@ -496,7 +499,7 @@ describe('the nightly job', () => {
       data: { loanId: loan.id, amount: 1000n, promisedFor: new Date(Date.now() - 86_400_000) },
     });
 
-    const summary = await app.get(JobsService).nightly();
+    const summary = await runAsCompany(E2E_COMPANY_ID, () => app.get(JobsService).nightly());
     expect(summary.casesOpened).toBeGreaterThanOrEqual(1);
     expect(summary.promisesBroken).toBeGreaterThanOrEqual(1);
     const opened = await prisma.collectionCase.findFirst({
@@ -515,7 +518,7 @@ describe('the nightly job', () => {
       receivedOn: today,
       idempotencyKey: randomUUID(),
     }).expect(200);
-    const again = await app.get(JobsService).nightly();
+    const again = await runAsCompany(E2E_COMPANY_ID, () => app.get(JobsService).nightly());
     expect(again.casesClosed).toBeGreaterThanOrEqual(1);
     expect(await prisma.collectionCase.count({ where: { loanId: loan.id, closedAt: null } })).toBe(
       0,

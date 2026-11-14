@@ -2,15 +2,15 @@ import {
   type CanActivate,
   type ExecutionContext,
   ForbiddenException,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { StaffRole } from '@kora/core';
 import type { Request } from 'express';
-import { ENV, type Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompaniesService } from '../tenancy/companies.service';
+import { companyContext } from '../tenancy/company-context';
 import { AuthService } from './auth.service';
 import { ACCESS_COOKIE, type AuthUser } from './auth.types';
 import { IS_PUBLIC, ROLES } from './decorators';
@@ -18,6 +18,28 @@ import { IS_PUBLIC, ROLES } from './decorators';
 type AuthedRequest = Request & { user?: AuthUser; authVia?: 'cookie' | 'bearer' };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * A token belongs to one company. When the request already names a company
+ * (subdomain or header), the token must be for that company; a token from
+ * another company is refused as if it had expired. When the request names
+ * none (a mobile client talking to the bare API host), the token's company
+ * is used, provided it is still active.
+ */
+export async function adoptTokenCompany(
+  companies: CompaniesService,
+  tokenCompanyId: string | undefined,
+): Promise<void> {
+  const context = companyContext();
+  if (!context || !tokenCompanyId) throw new UnauthorizedException('Session expired');
+  if (context.companyId) {
+    if (context.companyId !== tokenCompanyId) throw new UnauthorizedException('Session expired');
+    return;
+  }
+  const company = await companies.byId(tokenCompanyId);
+  if (!company || company.status !== 'ACTIVE') throw new UnauthorizedException('Session expired');
+  companies.enter(context, company);
+}
 
 /**
  * Applied to every route. A request must carry a valid access token, as a
@@ -31,7 +53,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
-    @Inject(ENV) private readonly env: Env,
+    private readonly companies: CompaniesService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -51,7 +73,7 @@ export class JwtAuthGuard implements CanActivate {
     // write must come from our own console (CSRF defence, on top of SameSite).
     if (!SAFE_METHODS.has(req.method) && (viaCookie || isPublic)) {
       const origin = req.headers.origin;
-      if (origin && origin !== this.env.WEB_ORIGIN) {
+      if (origin && !this.companies.isAllowedOrigin(origin)) {
         throw new ForbiddenException('Cross-site request blocked');
       }
     }
@@ -65,6 +87,7 @@ export class JwtAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException('Session expired');
     }
+    await adoptTokenCompany(this.companies, claims.cid);
 
     const session = await this.prisma.session.findUnique({
       where: { id: claims.sid },
@@ -83,6 +106,7 @@ export class JwtAuthGuard implements CanActivate {
     const u = session.user;
     req.user = {
       id: u.id,
+      companyId: u.companyId,
       email: u.email,
       firstName: u.firstName,
       lastName: u.lastName,

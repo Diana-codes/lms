@@ -23,6 +23,12 @@ describe('checkSql', () => {
       'WITH d AS (DELETE FROM loans RETURNING *) SELECT * FROM d',
       'COPY loans TO stdout',
       'SET role postgres',
+      // Attempts to point the query at another company.
+      "SELECT set_config('app.company_id', 'x', false), * FROM loans",
+      "SELECT \"set_config\"('app.company_id', 'x', false)",
+      "SELECT current_setting('app.company_id')",
+      'SELECT * FROM reporting_ctx.session_company',
+      "SELECT U&\"set\\005fconfig\"('a', 'b', false)",
       '',
       '/* x */',
     ]) {

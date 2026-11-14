@@ -6,7 +6,7 @@ import { JobsService } from './jobs.service';
 export class JobsController {
   constructor(private readonly jobs: JobsService) {}
 
-  /** Run the nightly process now. Administrators only; useful for demos. */
+  /** Run the nightly process now, for the signed-in user's company. Useful for demos. */
   @Roles('ADMIN', 'MANAGER')
   @Post('nightly')
   @HttpCode(200)
@@ -14,10 +14,11 @@ export class JobsController {
     return this.jobs.nightly();
   }
 
+  /** Follow up this company's pending MoMo requests now. */
   @Roles('ADMIN', 'MANAGER')
   @Post('poll-momo')
   @HttpCode(200)
   poll() {
-    return this.jobs.run('poll-momo');
+    return this.jobs.pollMomo();
   }
 }

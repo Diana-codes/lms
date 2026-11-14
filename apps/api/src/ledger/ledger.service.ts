@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { isoToUtcDate, type IsoDate } from '@kora/core';
 import type { LedgerTransactionType, Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireCompanyId } from '../tenancy/company-context';
 import { ACCOUNTS, type AccountKey } from './accounts';
 import { balancedLines, type PostingLine } from './posting';
 
@@ -22,7 +23,8 @@ export interface LedgerPosting {
  */
 @Injectable()
 export class LedgerService {
-  private accountIds: Map<AccountKey, string> | null = null;
+  /** Account ids per company: every company has its own chart of accounts. */
+  private readonly accountIds = new Map<string, Map<AccountKey, string>>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -76,16 +78,18 @@ export class LedgerService {
   }
 
   private async accounts(): Promise<Map<AccountKey, string>> {
-    if (this.accountIds) return this.accountIds;
+    const companyId = requireCompanyId();
+    const cached = this.accountIds.get(companyId);
+    if (cached) return cached;
     const rows = await this.prisma.ledgerAccount.findMany({ select: { id: true, code: true } });
     const byCode = new Map(rows.map((r) => [r.code, r.id]));
     const map = new Map<AccountKey, string>();
     for (const key of Object.keys(ACCOUNTS) as AccountKey[]) {
       const id = byCode.get(ACCOUNTS[key].code);
-      if (!id) throw new Error(`Ledger account ${ACCOUNTS[key].code} is missing. Run the seed.`);
+      if (!id) throw new Error(`Ledger account ${ACCOUNTS[key].code} is missing for this company`);
       map.set(key, id);
     }
-    this.accountIds = map;
+    this.accountIds.set(companyId, map);
     return map;
   }
 }

@@ -14,11 +14,15 @@ import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import { ENV, type Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProvidersService } from '../providers/providers.service';
 import { SmsService } from '../sms/sms.service';
+import { requireCompanyId } from '../tenancy/company-context';
 
 export interface BorrowerClaims {
   sub: string;
   sid: string;
+  /** The lender the borrower signed in with. */
+  cid: string;
   typ: 'borrower';
 }
 
@@ -47,6 +51,7 @@ export class BorrowerAuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly sms: SmsService,
+    private readonly providers: ProvidersService,
     private readonly audit: AuditService,
     @Inject(ENV) private readonly env: Env,
   ) {}
@@ -64,7 +69,7 @@ export class BorrowerAuthService {
       );
     }
     // A code is only sent to numbers we know, but the answer is the same either way.
-    const borrower = await this.prisma.borrower.findUnique({
+    const borrower = await this.prisma.borrower.findFirst({
       where: { phone },
       select: { id: true },
     });
@@ -84,8 +89,11 @@ export class BorrowerAuthService {
         body: this.sms.render('otp', { code }),
       });
       // Local development only: with the SMS simulator nothing is texted, so show the code
-      // in the API log. Production refuses to start without a real SMS provider.
-      if (this.env.NODE_ENV === 'development' && !this.env.AFRICASTALKING_API_KEY) {
+      // in the API log. Production never uses the simulator.
+      if (
+        this.env.NODE_ENV === 'development' &&
+        (await this.providers.sms()).name === 'simulator'
+      ) {
         this.logger.warn(`Development sign-in code for ${maskPhone(phone)}: ${code}`);
       }
     }
@@ -123,7 +131,7 @@ export class BorrowerAuthService {
       });
       throw new UnauthorizedException('That code is not valid');
     }
-    const borrower = await this.prisma.borrower.findUniqueOrThrow({ where: { phone } });
+    const borrower = await this.prisma.borrower.findFirstOrThrow({ where: { phone } });
     await this.prisma.otpChallenge.update({
       where: { id: challenge!.id },
       data: { consumedAt: new Date() },
@@ -165,9 +173,15 @@ export class BorrowerAuthService {
     });
   }
 
-  async verifyAccess(token: string): Promise<BorrowerClaims> {
+  /** Check the token's signature and type. The guard then confirms its company and session. */
+  async verifyToken(token: string): Promise<BorrowerClaims> {
     const claims = await this.jwt.verifyAsync<BorrowerClaims>(token);
     if (claims.typ !== 'borrower') throw new UnauthorizedException();
+    return claims;
+  }
+
+  /** The session must still be open. Runs once the request's company is settled. */
+  async checkSession(claims: BorrowerClaims): Promise<BorrowerClaims> {
     const session = await this.prisma.borrowerSession.findUnique({ where: { id: claims.sid } });
     if (
       !session ||
@@ -197,7 +211,12 @@ export class BorrowerAuthService {
   }
 
   private sign(borrowerId: string, sessionId: string): Promise<string> {
-    const claims: BorrowerClaims = { sub: borrowerId, sid: sessionId, typ: 'borrower' };
+    const claims: BorrowerClaims = {
+      sub: borrowerId,
+      sid: sessionId,
+      cid: requireCompanyId(),
+      typ: 'borrower',
+    };
     return this.jwt.signAsync(claims, { expiresIn: this.env.BORROWER_ACCESS_TTL_SECONDS });
   }
 

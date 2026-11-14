@@ -37,7 +37,7 @@ export class OffersController {
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    const b = await this.prisma.borrower.findUnique({
+    const b = await this.prisma.borrower.findFirst({
       where: { code },
       include: {
         loans: {

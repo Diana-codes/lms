@@ -3,6 +3,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { z } from 'zod';
 import { ENV, type Env } from '../config/env';
+import { companyFeatures } from '../tenancy/company-context';
 
 export class AiUnavailableError extends Error {}
 
@@ -33,8 +34,9 @@ export class AiClient {
       : null;
   }
 
+  /** Available to the current company: a key is set and the company has AI switched on. */
   get configured(): boolean {
-    return this.client != null;
+    return this.client != null && companyFeatures().ai;
   }
 
   get model(): string {
@@ -43,6 +45,9 @@ export class AiClient {
 
   async structured<T extends z.ZodType>(req: StructuredRequest<T>): Promise<z.infer<T>> {
     if (!this.client) throw new AiUnavailableError('The AI service is not configured');
+    if (!companyFeatures().ai) {
+      throw new AiUnavailableError('AI features are switched off for this company');
+    }
     try {
       const response = await this.client.beta.messages.parse({
         model: this.env.AI_MODEL,

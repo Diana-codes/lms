@@ -19,9 +19,19 @@ const flag = (fallback: 'true' | 'false') =>
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
+  /** Owner login: migrations, seed, platform administration. Bypasses row-level security. */
   DATABASE_URL: z.string().min(1),
+  /** Company-scoped login for everything else. Row-level security applies to it. */
+  APP_DATABASE_URL: z.string().min(1, 'APP_DATABASE_URL is required. Run `pnpm setup:env`.'),
   REDIS_URL: z.string().default('redis://localhost:6380'),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),
+  /** Companies are reached at <slug>.<APP_BASE_DOMAIN>, e.g. bf.koralend.rw. */
+  APP_BASE_DOMAIN: z
+    .string()
+    .default('localhost')
+    .transform((v) => v.toLowerCase()),
+  /** Development and tests only: the company for requests that name none. */
+  DEFAULT_COMPANY_SLUG: optional,
   JWT_ACCESS_SECRET: base64Bytes(32, 'JWT_ACCESS_SECRET'),
   PII_ENCRYPTION_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, {
     message: 'PII_ENCRYPTION_KEY must be exactly 32 bytes, base64-encoded',
@@ -31,22 +41,15 @@ const schema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   COOKIE_SECURE: flag('false'),
 
-  // ── Phase 2: MoMo and SMS. With no keys, the local simulators are used. ──
-  MOMO_COLLECTION_SUBSCRIPTION_KEY: optional,
-  MOMO_DISBURSEMENT_SUBSCRIPTION_KEY: optional,
+  // ── MoMo and SMS. Each company brings its own MoMo and Africa's Talking
+  // keys (company secrets, set by a platform admin); with none, development
+  // and tests use the local simulators. Only the MoMo environment is global. ──
   MOMO_BASE_URL: z.string().default('https://sandbox.momodeveloper.mtn.com'),
   MOMO_TARGET_ENVIRONMENT: z.string().default('sandbox'),
   /** The MTN sandbox only accepts EUR. Production in Rwanda uses RWF. */
   MOMO_CURRENCY: z.string().default('EUR'),
   /** Public https address MTN can call back, e.g. https://api.example.rw. Optional: we also poll. */
   PUBLIC_API_URL: optional,
-  /** The merchant code quoted in SMS ("MoMo Pay 123456"). Left out of messages while empty. */
-  MOMO_PAY_CODE: optional,
-  AFRICASTALKING_USERNAME: z.string().default('sandbox'),
-  AFRICASTALKING_API_KEY: optional,
-  AFRICASTALKING_SENDER_ID: optional,
-  /** A long random string in webhook URLs, so strangers cannot post to them. */
-  WEBHOOK_TOKEN: optional,
   /** Background jobs (status polling, nightly run). Off in tests. */
   JOBS_ENABLED: flag('true'),
 
@@ -81,6 +84,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   }
   if (parsed.data.NODE_ENV === 'production' && !parsed.data.COOKIE_SECURE) {
     throw new Error('COOKIE_SECURE must be true in production');
+  }
+  if (parsed.data.NODE_ENV === 'production' && parsed.data.DEFAULT_COMPANY_SLUG) {
+    throw new Error('DEFAULT_COMPANY_SLUG must be empty in production');
+  }
+  if (parsed.data.APP_DATABASE_URL === parsed.data.DATABASE_URL) {
+    throw new Error('APP_DATABASE_URL must use a different login from DATABASE_URL');
   }
   return parsed.data;
 }

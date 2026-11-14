@@ -5,7 +5,14 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { daysPastDue, dpdBucket, isoToUtcDate, kigaliDate, utcDateToIso } from '@kora/core';
+import {
+  daysPastDue,
+  dpdBucket,
+  isoToUtcDate,
+  kigaliDate,
+  kigaliDayStart,
+  utcDateToIso,
+} from '@kora/core';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { AuditService } from '../audit/audit.service';
@@ -14,15 +21,31 @@ import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
+import { CompaniesService, type CompanyInfo } from '../tenancy/companies.service';
+import { requireCompanyId } from '../tenancy/company-context';
 
 const QUEUE = 'kora-jobs';
-type JobName = 'poll-momo' | 'nightly';
+type JobName = 'poll-momo' | 'nightly-tick';
+/** Each company's nightly run starts at this hour in its own time zone. */
+const NIGHTLY_HOUR = 1;
+
+/** The hour of day (0–23) in a time zone. */
+export function localHour(timezone: string, at: Date = new Date()): number {
+  const hour = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).format(at);
+  return Number(hour);
+}
 
 /**
- * Background work on BullMQ + Redis:
+ * Background work on BullMQ + Redis, done company by company (each in its
+ * own company context, so row-level security applies as for a request):
  *  - every minute, follow up MoMo requests still waiting on the provider;
- *  - every night at 01:00 Kigali, recompute days past due, open and close
- *    collection cases, mark broken promises, and send due-soon reminders.
+ *  - every night at 01:00 in the company's time zone, recompute days past
+ *    due, open and close collection cases, mark broken promises, send
+ *    due-soon reminders, and record the day's usage for billing.
  * The nightly run can also be started by hand from the API, for demos.
  */
 @Injectable()
@@ -39,6 +62,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     private readonly sms: SmsService,
     private readonly audit: AuditService,
     private readonly scoring: ScoringService,
+    private readonly companies: CompaniesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -64,11 +88,12 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     this.worker.on('failed', (job, err) =>
       this.logger.error(`${job?.name} failed: ${err.message}`),
     );
+    await this.queue.removeJobScheduler('nightly').catch(() => undefined);
     await this.queue.upsertJobScheduler('poll-momo', { every: 60_000 }, { name: 'poll-momo' });
     await this.queue.upsertJobScheduler(
-      'nightly',
-      { pattern: '0 1 * * *', tz: 'Africa/Kigali' },
-      { name: 'nightly' },
+      'nightly-tick',
+      { pattern: '0 * * * *' },
+      { name: 'nightly-tick' },
     );
     this.logger.log('Background jobs scheduled');
   }
@@ -80,11 +105,46 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async run(name: JobName): Promise<unknown> {
-    if (name === 'poll-momo') return this.money.pollPending();
-    return this.nightly();
+    if (name === 'poll-momo')
+      return this.forEachCompany('poll-momo', () => this.money.pollPending());
+    const now = new Date();
+    return this.forEachCompany(
+      'nightly',
+      () => this.nightly(),
+      (company) => localHour(company.timezone, now) === NIGHTLY_HOUR,
+    );
   }
 
-  /** The end-of-day run. Safe to run more than once a day. */
+  /**
+   * Run a job for every active company, each in its own context. One
+   * company's failure is logged and does not stop the others.
+   */
+  private async forEachCompany(
+    label: string,
+    work: () => Promise<unknown>,
+    due: (company: CompanyInfo) => boolean = () => true,
+  ): Promise<{ ran: number; failed: number }> {
+    let ran = 0;
+    let failed = 0;
+    for (const company of await this.companies.active()) {
+      if (!due(company)) continue;
+      try {
+        await this.companies.runAs(company, work);
+        ran += 1;
+      } catch (err) {
+        failed += 1;
+        this.logger.error(`${label} failed for ${company.slug}: ${(err as Error).message}`);
+      }
+    }
+    return { ran, failed };
+  }
+
+  /** Follow up the current company's pending MoMo requests. */
+  pollMomo() {
+    return this.money.pollPending();
+  }
+
+  /** The end-of-day run for the current company. Safe to run more than once a day. */
   async nightly() {
     const today = kigaliDate();
     const loans = await this.prisma.loan.findMany({
@@ -160,6 +220,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    const usage = await this.recordUsage(today, loans.length);
+
     const summary = {
       asOf: today,
       loans: loans.length,
@@ -169,11 +231,35 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       promisesBroken: broken.count,
       reminders,
       earlyWarnings: warnings?.flagged.length ?? null,
+      usage,
     };
     await this.audit.record({ action: 'system.nightly', actorType: 'SYSTEM', metadata: summary });
     this.logger.log(
       `Nightly run: ${opened} cases opened, ${closed} closed, ${reminders.sent} reminders`,
     );
     return summary;
+  }
+
+  /** The day's usage figures for billing. Recorded once per day; a re-run updates them. */
+  private async recordUsage(today: string, activeLoans: number) {
+    const dayStart = kigaliDayStart(today);
+    const [borrowers, activeStaff, loansDisbursed, smsSent] = await Promise.all([
+      this.prisma.borrower.count(),
+      this.prisma.user.count({ where: { isActive: true } }),
+      this.prisma.disbursement.count({
+        where: { status: 'SUCCESSFUL', confirmedAt: { gte: dayStart } },
+      }),
+      this.prisma.smsMessage.count({
+        where: { createdAt: { gte: dayStart }, status: { not: 'FAILED' } },
+      }),
+    ]);
+    const figures = { activeLoans, borrowers, activeStaff, loansDisbursed, smsSent };
+    const day = isoToUtcDate(today);
+    await this.prisma.companyUsageDaily.upsert({
+      where: { companyId_day: { companyId: requireCompanyId(), day } },
+      update: { ...figures, recordedAt: new Date() },
+      create: { day, ...figures },
+    });
+    return figures;
   }
 }

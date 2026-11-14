@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   HttpCode,
-  Inject,
   Param,
   Post,
   Req,
@@ -14,8 +13,8 @@ import type { AuthUser } from '../auth/auth.types';
 import { CurrentUser, Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
-import { ENV, type Env } from '../config/env';
 import { SmsService } from '../sms/sms.service';
+import { CompaniesService, type CompanyInfo } from '../tenancy/companies.service';
 import { MoneyService } from './money.service';
 
 const loanCode = new ZodPipe(z.string().regex(/^LN-\d{4}-\d{4}$/, 'Not a loan reference'));
@@ -36,7 +35,7 @@ export class MoneyController {
   constructor(
     private readonly money: MoneyService,
     private readonly sms: SmsService,
-    @Inject(ENV) private readonly env: Env,
+    private readonly companies: CompaniesService,
   ) {}
 
   /** Staff ask the borrower to approve a repayment on their phone. */
@@ -65,8 +64,9 @@ export class MoneyController {
   }
 
   /**
-   * MoMo callbacks. The token in the URL stops strangers posting here, and
-   * the body is only used to learn which request to re-check with MTN.
+   * MoMo callbacks. Each company has its own secret in its webhook URLs: it
+   * stops strangers posting here and says which company the callback is for.
+   * The body is only used to learn which request to re-check with MTN.
    */
   @Public()
   @Post('webhooks/momo/:product/:token')
@@ -76,9 +76,9 @@ export class MoneyController {
     @Body(new ZodPipe(momoCallback)) body: z.infer<typeof momoCallback>,
     @Req() req: Request,
   ) {
-    this.assertToken(token);
+    const company = await this.companyFor(token);
     const reference = body.referenceId ?? req.get('X-Reference-Id');
-    if (reference) await this.money.handleCallback(reference);
+    if (reference) await this.companies.runAs(company, () => this.money.handleCallback(reference));
     return { received: true };
   }
 
@@ -90,14 +90,16 @@ export class MoneyController {
     @Param('token') token: string,
     @Body(new ZodPipe(atReport)) body: z.infer<typeof atReport>,
   ) {
-    this.assertToken(token);
-    await this.sms.deliveryReport(body.id, body.status, body.failureReason);
+    const company = await this.companyFor(token);
+    await this.companies.runAs(company, () =>
+      this.sms.deliveryReport(body.id, body.status, body.failureReason),
+    );
     return { received: true };
   }
 
-  private assertToken(token: string): void {
-    if (!this.env.WEBHOOK_TOKEN || token !== this.env.WEBHOOK_TOKEN) {
-      throw new UnauthorizedException();
-    }
+  private async companyFor(token: string): Promise<CompanyInfo> {
+    const company = await this.companies.byWebhookToken(token);
+    if (!company || company.status !== 'ACTIVE') throw new UnauthorizedException();
+    return company;
   }
 }

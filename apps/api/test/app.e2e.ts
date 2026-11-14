@@ -13,7 +13,8 @@ import {
 import { hashPassword } from '../src/auth/password';
 import { totpCode, totpStep } from '../src/auth/totp';
 import type { StaffRole } from '../src/generated/prisma/client';
-import { PrismaService } from '../src/prisma/prisma.service';
+import type { PrismaClient } from '../src/generated/prisma/client';
+import { testPrisma } from './test-db';
 
 /**
  * End-to-end tests against a real Postgres. They create their own users
@@ -23,7 +24,7 @@ const PASSWORD = `e2e-${randomUUID()}`;
 const ORIGIN = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
 
 let app: INestApplication;
-let prisma: PrismaService;
+let prisma: PrismaClient;
 let passwordHash: string;
 
 async function makeUser(role: StaffRole): Promise<{ id: string; email: string }> {
@@ -45,7 +46,7 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   setupApp(app);
   await app.init();
-  prisma = app.get(PrismaService);
+  prisma = testPrisma();
   passwordHash = await hashPassword(PASSWORD);
 });
 
@@ -55,6 +56,7 @@ afterAll(async () => {
     data: { isActive: false },
   });
   await app.close();
+  await prisma.$disconnect();
 });
 
 describe('health', () => {

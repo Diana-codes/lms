@@ -4,8 +4,10 @@
  * catches obvious mistakes early with a clear message.
  */
 const FORBIDDEN =
-  /\b(insert|update|delete|merge|drop|alter|create|grant|revoke|truncate|copy|call|do|vacuum|analyze|lock|set|reset|listen|notify|prepare|execute|into|pg_sleep|pg_read|lo_import|dblink)\b/i;
-const QUALIFIED = /\b(public|pg_catalog|information_schema)\s*\./i;
+  /\b(insert|update|delete|merge|drop|alter|create|grant|revoke|truncate|copy|call|do|vacuum|analyze|lock|set|reset|listen|notify|prepare|execute|into|pg_sleep|pg_read|lo_import|dblink|set_config|current_setting)\b/i;
+const QUALIFIED = /\b(public|pg_catalog|information_schema|reporting_ctx)\s*\./i;
+/** Unicode-escaped identifiers (U&"...") could spell a forbidden word without writing it. */
+const ESCAPED_IDENTIFIER = /\bu&["']/i;
 
 export class UnsafeSqlError extends Error {}
 
@@ -21,6 +23,8 @@ export function checkSql(raw: string): string {
   if (FORBIDDEN.test(sql))
     throw new UnsafeSqlError('The query uses a word that is not allowed in a read-only report');
   if (QUALIFIED.test(sql)) throw new UnsafeSqlError('The query may only read the reporting views');
+  if (ESCAPED_IDENTIFIER.test(sql))
+    throw new UnsafeSqlError('The query uses an escaped name that is not allowed');
   if (sql.length > 4000) throw new UnsafeSqlError('The query is too long');
   return sql;
 }

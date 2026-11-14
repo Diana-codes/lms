@@ -97,7 +97,7 @@ export class BorrowersService {
   }
 
   async profile(code: string) {
-    const b = await this.prisma.borrower.findUnique({
+    const b = await this.prisma.borrower.findFirst({
       where: { code },
       include: {
         business: true,
@@ -319,7 +319,7 @@ export class BorrowersService {
   async addNote(code: string, body: string, user: AuthUser, meta: RequestMeta) {
     const text = body.trim();
     if (!text) throw new BadRequestException('Write something first');
-    const borrower = await this.prisma.borrower.findUnique({
+    const borrower = await this.prisma.borrower.findFirst({
       where: { code },
       select: { id: true },
     });

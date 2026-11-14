@@ -1,8 +1,21 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { ACCESS_COOKIE, API_URL, REFRESH_COOKIE } from './lib/config';
+import {
+  ACCESS_COOKIE,
+  API_URL,
+  COMPANY_HEADER,
+  companyHeaders,
+  companySlugFromHost,
+  REFRESH_COOKIE,
+} from './lib/config';
 
 /**
- * Runs before every console page. It only decides where to send people:
+ * Runs before every console page and every /api call.
+ *
+ * /api calls are forwarded to the API with the company named by the address
+ * the console was opened at (bf.koralend.rw → "bf"), replacing anything the
+ * browser sent. The API checks that the session belongs to that company.
+ *
+ * For pages it only decides where to send people:
  *  - a live session carries on;
  *  - an expired access token is renewed with the refresh token, then the
  *    same page is requested again with the new cookies;
@@ -10,9 +23,20 @@ import { ACCESS_COOKIE, API_URL, REFRESH_COOKIE } from './lib/config';
  * The API still checks every request itself. This is routing, not security.
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const host = request.headers.get('host');
+  const { pathname, search } = request.nextUrl;
+
+  if (pathname.startsWith('/api/')) {
+    const forwarded = new Headers(request.headers);
+    forwarded.delete(COMPANY_HEADER);
+    const slug = companySlugFromHost(host);
+    if (slug) forwarded.set(COMPANY_HEADER, slug);
+    return NextResponse.next({ request: { headers: forwarded } });
+  }
+  if (pathname === '/login') return NextResponse.next();
+
   if (request.cookies.has(ACCESS_COOKIE)) return NextResponse.next();
 
-  const { pathname, search } = request.nextUrl;
   const login = new URL('/login', request.url);
   if (pathname !== '/') login.searchParams.set('next', pathname + search);
 
@@ -21,7 +45,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
-      headers: { cookie: request.headers.get('cookie') ?? '' },
+      headers: { cookie: request.headers.get('cookie') ?? '', ...companyHeaders(host) },
       cache: 'no-store',
     });
     if (res.ok) {
@@ -36,6 +60,6 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Everything except the API proxy, Next's own assets, static files and sign-in.
-  matcher: ['/((?!api/|_next/|login|favicon\\.ico|.*\\.(?:svg|png|ico|txt|webmanifest)$).*)'],
+  // Everything except Next's own assets and static files.
+  matcher: ['/((?!_next/|favicon\\.ico|.*\\.(?:svg|png|ico|txt|webmanifest)$).*)'],
 };

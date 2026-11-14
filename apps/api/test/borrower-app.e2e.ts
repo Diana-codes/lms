@@ -8,8 +8,9 @@ import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
 import { ACCOUNTS } from '../src/ledger/accounts';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { MomoSimulator } from '../src/providers/momo.simulator';
+import type { PrismaClient } from '../src/generated/prisma/client';
+import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
 /** Phase 3: the borrower app's API, from OTP sign-in to a submitted application. */
 const PASSWORD = `e2e-${randomUUID()}`;
@@ -17,7 +18,7 @@ const PRODUCT = `E2E3-${randomUUID().slice(0, 8)}`;
 const today = kigaliDate();
 
 let app: INestApplication;
-let prisma: PrismaService;
+let prisma: PrismaClient;
 let staffCookies: string[] = [];
 let managerCookies: string[] = [];
 
@@ -66,7 +67,7 @@ async function borrowerWithLoan(
     })
     .expect(201);
   await prisma.borrower.update({
-    where: { code: created.body.borrowerCode },
+    where: byCode(created.body.borrowerCode),
     data: { momoLinked: true, monthlyIncome: 2_000_000n, preApprovedLimit: 3_000_000n },
   });
   await http()
@@ -92,12 +93,12 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   setupApp(app);
   await app.init();
-  prisma = app.get(PrismaService);
+  prisma = testPrisma();
   for (const account of Object.values(ACCOUNTS))
     await prisma.ledgerAccount.upsert({
-      where: { code: account.code },
+      where: byCode(account.code),
       update: {},
-      create: account,
+      create: { ...account, companyId: E2E_COMPANY_ID },
     });
   await prisma.product.create({
     data: {
@@ -137,6 +138,7 @@ afterAll(async () => {
     data: { isActive: false },
   });
   await app.close();
+  await prisma.$disconnect();
 });
 
 describe('sign-in by phone', () => {
@@ -336,7 +338,7 @@ describe('applying in the app', () => {
       .expect(201);
     expect(res.body.code).toMatch(/^APP-\d+$/);
 
-    const application = await prisma.application.findUniqueOrThrow({
+    const application = await prisma.application.findFirstOrThrow({
       where: { code: res.body.code },
       include: { consents: true, borrower: true },
     });

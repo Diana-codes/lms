@@ -41,6 +41,10 @@ import type {
   ScoreRecommendation,
 } from '../src/generated/prisma/client';
 import { ACCOUNTS, type AccountKey, CHANNEL_ACCOUNT } from '../src/ledger/accounts';
+import { provisionCompany } from '../src/platform/provision';
+import { SECRET, type SecretKey } from '../src/tenancy/company-secrets.service';
+import { currentCompanyId, runAsCompany } from '../src/tenancy/company-context';
+import { TenantPool } from '../src/tenancy/tenant-pool';
 import {
   balancedLines,
   disbursementLines,
@@ -59,7 +63,18 @@ if (staffPassword.length < MIN_PASSWORD_LENGTH) {
   );
 }
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }) });
+// The owner login, told which company it is writing for (see runAsCompany in
+// main), so every row's companyId is filled in by the database.
+const prisma = new PrismaClient({
+  adapter: new PrismaPg(new TenantPool({ connectionString: env.DATABASE_URL }, currentCompanyId)),
+});
+/** The sample data belongs to this company, reached at demo.<APP_BASE_DOMAIN>. */
+const DEMO_COMPANY = {
+  id: '019a7a00-0000-7000-8000-00000000d3e0',
+  slug: 'demo',
+  name: 'Demo Lender',
+};
+const PLATFORM_ADMIN_EMAIL = 'platform@koralend.test';
 const crypto = new PiiCrypto(env.PII_ENCRYPTION_KEY, env.PII_HASH_KEY);
 
 // ── time ────────────────────────────────────────────────────────────────
@@ -1878,13 +1893,43 @@ async function main(): Promise<void> {
   await prisma.$executeRawUnsafe(
     `TRUNCATE TABLE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`,
   );
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE reporting_ctx.session_company');
 
+  const passwordHash = await hashPassword(staffPassword);
+  await prisma.platformAdmin.create({
+    data: { email: PLATFORM_ADMIN_EMAIL, name: 'Platform admin', passwordHash },
+  });
+  // The demo shows everything, so its optional features are on. Its webhook
+  // secret is WEBHOOK_TOKEN from .env when set, so existing callback URLs keep working.
+  const { company } = await provisionCompany(
+    prisma,
+    { ...DEMO_COMPANY, aiFeatures: true, autoApprove: true },
+    { crypto, webhookToken: process.env.WEBHOOK_TOKEN?.trim() || undefined },
+  );
+  // Provider keys that used to live in .env become the demo company's own secrets.
+  const legacyKeys: Array<[SecretKey, string | undefined]> = [
+    [SECRET.momoCollectionKey, process.env.MOMO_COLLECTION_SUBSCRIPTION_KEY],
+    [SECRET.momoDisbursementKey, process.env.MOMO_DISBURSEMENT_SUBSCRIPTION_KEY],
+    [SECRET.momoPayCode, process.env.MOMO_PAY_CODE],
+    [SECRET.smsUsername, process.env.AFRICASTALKING_USERNAME],
+    [SECRET.smsApiKey, process.env.AFRICASTALKING_API_KEY],
+    [SECRET.smsSenderId, process.env.AFRICASTALKING_SENDER_ID],
+  ];
+  for (const [key, value] of legacyKeys) {
+    if (!value?.trim() || (key === SECRET.smsUsername && value.trim() === 'sandbox')) continue;
+    await prisma.providerCredential.create({
+      data: { companyId: company.id, key, valueEnc: crypto.encrypt(value.trim()) },
+    });
+  }
+  await runAsCompany(company.id, () => seedCompany(passwordHash));
+}
+
+async function seedCompany(passwordHash: string): Promise<void> {
   ids.branch = uuid();
   await prisma.branch.create({
     data: { id: ids.branch, code: 'KGL-01', name: 'Kigali – Kimironko', district: 'Gasabo' },
   });
 
-  const passwordHash = await hashPassword(staffPassword);
   for (const s of STAFF) {
     const id = uuid();
     ids.staff.set(s.key, id);
@@ -1926,10 +1971,10 @@ async function main(): Promise<void> {
     });
   }
 
+  // provisionCompany created the chart of accounts.
+  const accounts = await prisma.ledgerAccount.findMany({ select: { id: true, code: true } });
   for (const key of Object.keys(ACCOUNTS) as AccountKey[]) {
-    const id = uuid();
-    ids.account.set(key, id);
-    await prisma.ledgerAccount.create({ data: { id, ...ACCOUNTS[key] } });
+    ids.account.set(key, accounts.find((a) => a.code === ACCOUNTS[key].code)!.id);
   }
 
   seedAline();
@@ -2040,8 +2085,12 @@ Portfolio as seeded:
   DPD buckets            ${buckets.CURRENT} / ${buckets.DPD_1_30} / ${buckets.DPD_31_90} / ${buckets.DPD_90_PLUS}   (design: 1021 / 84 / 25 / 12)
   LN-0418-2026           instalment ${formatRwf(aline.schedule.instalment)}, outstanding ${formatRwf(aline.outstanding)}
 
+Company: ${DEMO_COMPANY.name}, at http://${DEMO_COMPANY.slug}.${env.APP_BASE_DOMAIN}:3000
+
 Staff sign-ins (password: SEED_STAFF_PASSWORD in apps/api/.env):
 ${STAFF.map((s) => `  ${s.role.padEnd(18)} ${s.email}`).join('\n')}
+
+Platform admin (same password): ${PLATFORM_ADMIN_EMAIL}
 `);
 
   const problems: string[] = [];

@@ -22,7 +22,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { disbursementLines } from '../ledger/posting';
 import { PaymentPoster } from '../loans/payment-poster';
 import { PrismaService } from '../prisma/prisma.service';
-import { MomoGateway } from '../providers/momo.gateway';
+import { ProvidersService } from '../providers/providers.service';
 import { SmsService } from '../sms/sms.service';
 
 const MOMO_PREFIX = 'momo:';
@@ -46,7 +46,7 @@ export class MoneyService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly momo: MomoGateway,
+    private readonly providers: ProvidersService,
     private readonly poster: PaymentPoster,
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
@@ -55,7 +55,7 @@ export class MoneyService {
 
   /** Ask the borrower to approve a repayment on their phone (MoMo "Request to Pay"). */
   async requestPayment(loanCode: string, amount: bigint, actor: Actor, meta: RequestMeta = {}) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code: loanCode },
       include: {
         borrower: true,
@@ -88,7 +88,9 @@ export class MoneyService {
       },
     });
     try {
-      await this.momo.requestToPay({
+      await (
+        await this.providers.momo()
+      ).requestToPay({
         referenceId,
         amount,
         phone: loan.borrower.phone,
@@ -123,9 +125,9 @@ export class MoneyService {
     if (payment.status !== 'PENDING')
       return payment.status === 'SUCCESSFUL' ? 'SUCCESSFUL' : 'FAILED';
 
-    const result = await this.momo.requestToPayStatus(
-      payment.idempotencyKey.slice(MOMO_PREFIX.length),
-    );
+    const result = await (
+      await this.providers.momo()
+    ).requestToPayStatus(payment.idempotencyKey.slice(MOMO_PREFIX.length));
     if (result.status === 'PENDING') {
       if (Date.now() - payment.initiatedAt.getTime() < EXPIRE_AFTER_MS) return 'PENDING';
       result.status = 'FAILED';
@@ -173,7 +175,9 @@ export class MoneyService {
       throw new NotFoundException('No such disbursement');
     if (d.status === 'SUCCESSFUL' || d.status === 'FAILED') return d.status;
 
-    const result = await this.momo.transferStatus(d.idempotencyKey.slice(MOMO_PREFIX.length));
+    const result = await (
+      await this.providers.momo()
+    ).transferStatus(d.idempotencyKey.slice(MOMO_PREFIX.length));
     if (result.status === 'PENDING') {
       if (Date.now() - d.initiatedAt.getTime() < EXPIRE_AFTER_MS) return 'PENDING';
       result.status = 'FAILED';
@@ -290,7 +294,7 @@ export class MoneyService {
   /** A provider callback: find what it refers to and run the usual status check. */
   async handleCallback(referenceId: string): Promise<void> {
     const key = `${MOMO_PREFIX}${referenceId}`;
-    const payment = await this.prisma.payment.findUnique({
+    const payment = await this.prisma.payment.findFirst({
       where: { idempotencyKey: key },
       select: { id: true },
     });
@@ -298,7 +302,7 @@ export class MoneyService {
       await this.settlePayment(payment.id);
       return;
     }
-    const disbursement = await this.prisma.disbursement.findUnique({
+    const disbursement = await this.prisma.disbursement.findFirst({
       where: { idempotencyKey: key },
       select: { id: true },
     });
@@ -327,7 +331,7 @@ export class MoneyService {
 
   private async afterPayment(paymentId: string, loanCode: string, amount: bigint): Promise<void> {
     await this.quietly(async () => {
-      const loan = await this.prisma.loan.findUniqueOrThrow({
+      const loan = await this.prisma.loan.findFirstOrThrow({
         where: { code: loanCode },
         include: { borrower: true },
       });

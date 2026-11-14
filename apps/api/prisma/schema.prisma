@@ -19,6 +19,128 @@ datasource db {
   provider = "postgresql"
 }
 
+// ───────────────────────── Platform and companies ─────────────────────────
+//
+// Kora Lend is multi-tenant. Every business record carries a companyId, and
+// Postgres row-level security (see the multi_tenancy migration) only lets the
+// API's database login see rows of the company set for the current request.
+// companyId defaults to current_company_id(), so inserts are filled in by the
+// database from that same setting.
+
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// A lending company using the platform.
+model Company {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  /// Subdomain, e.g. "bf" for bf.koralend.rw. Lowercase letters, digits and hyphens.
+  slug            String        @unique
+  name            String
+  legalName       String?
+  status          CompanyStatus @default(ACTIVE)
+  country         String        @default("RW")
+  currency        String        @default("RWF")
+  timezone        String        @default("Africa/Kigali")
+  defaultLanguage Language      @default(EN)
+
+  /// Branding shown in the console and on borrower-facing pages.
+  brandName   String?
+  brandColor  String?
+  accentColor String?
+  logoUrl     String?
+
+  /// Optional features, off unless the company turns them on.
+  aiFeatures  Boolean @default(false)
+  autoApprove Boolean @default(false)
+
+  /// HMAC of the secret in this company's provider webhook URLs.
+  webhookTokenHash String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches           Branch[]
+  users              User[]
+  sessions           Session[]
+  borrowers          Borrower[]
+  businesses         Business[]
+  kycDocuments       KycDocument[]
+  consents           Consent[]
+  products           Product[]
+  applications       Application[]
+  creditScores       CreditScore[]
+  loans              Loan[]
+  instalments        ScheduleInstalment[]
+  ledgerAccounts     LedgerAccount[]
+  ledgerTransactions LedgerTransaction[]
+  ledgerEntries      LedgerEntry[]
+  payments           Payment[]
+  disbursements      Disbursement[]
+  restructures       Restructure[]
+  collectionCases    CollectionCase[]
+  contactLogs        ContactLog[]
+  promises           PromiseToPay[]
+  notes              Note[]
+  notifications      Notification[]
+  smsMessages        SmsMessage[]
+  auditLogs          AuditLog[]
+  codeCounters       CodeCounter[]
+  credentials        ProviderCredential[]
+  simulatedTransfers SimulatedTransfer[]
+  otpChallenges      OtpChallenge[]
+  borrowerSessions   BorrowerSession[]
+  offers             LoanOffer[]
+  momoInflows        MomoInflowMonth[]
+  dataQuestions      DataQuestion[]
+  aiNotes            AiNote[]
+  usage              CompanyUsageDaily[]
+}
+
+/// One day's usage figures for a company, recorded by the nightly job, for billing.
+model CompanyUsageDaily {
+  companyId      String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company        Company  @relation(fields: [companyId], references: [id])
+  day            DateTime @db.Date
+  activeLoans    Int
+  borrowers      Int
+  activeStaff    Int
+  loansDisbursed Int
+  smsSent        Int
+  recordedAt     DateTime @default(now())
+
+  @@id([companyId, day])
+}
+
+/// Someone who runs the platform (Orin Tech House). Not part of any company,
+/// and invisible to the API's company-scoped database login.
+model PlatformAdmin {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  email            String    @unique
+  name             String
+  passwordHash     String
+  isActive         Boolean   @default(true)
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  sessions PlatformSession[]
+}
+
+model PlatformSession {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  adminId   String    @db.Uuid
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  admin PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}
+
 // ───────────────────────── Staff, roles, branches ─────────────────────────
 
 /// Staff roles. The brief lists Role as an entity; a fixed enum keeps the
@@ -32,7 +154,9 @@ enum StaffRole {
 
 model Branch {
   id        String   @id @default(uuid(7)) @db.Uuid
-  code      String   @unique
+  companyId String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id])
+  code      String
   name      String
   district  String
   createdAt DateTime @default(now())
@@ -41,12 +165,16 @@ model Branch {
   borrowers    Borrower[]
   applications Application[]
   loans        Loan[]
+
+  @@unique([companyId, code])
 }
 
 /// A member of staff who signs in to the lender console.
 model User {
   id           String    @id @default(uuid(7)) @db.Uuid
-  email        String    @unique
+  companyId    String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company   @relation(fields: [companyId], references: [id])
+  email        String
   passwordHash String
   firstName    String
   lastName     String
@@ -89,11 +217,16 @@ model User {
   notifications        Notification[]
   smsSent              SmsMessage[]
   ledgerTransactions   LedgerTransaction[]
+
+  /// Accounts are per company: the same email can be staff at two lenders.
+  @@unique([companyId, email])
 }
 
 /// A refresh-token session. Only a hash of the token is stored.
 model Session {
   id                   String    @id @default(uuid(7)) @db.Uuid
+  companyId            String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company              Company   @relation(fields: [companyId], references: [id])
   userId               String    @db.Uuid
   refreshTokenHash     String    @unique
   /// The token this one replaced. Accepted for a few seconds after rotation,
@@ -110,6 +243,7 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([companyId])
 }
 
 // ───────────────────────── Borrowers and KYC ─────────────────────────
@@ -146,18 +280,21 @@ enum RiskLevel {
 }
 
 model Borrower {
-  id       String       @id @default(uuid(7)) @db.Uuid
+  id        String       @id @default(uuid(7)) @db.Uuid
+  companyId String       @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company      @relation(fields: [companyId], references: [id])
   /// Human reference, e.g. BR-00731.
-  code     String       @unique
-  type     BorrowerType @default(INDIVIDUAL)
-  fullName String
+  code      String
+  type      BorrowerType @default(INDIVIDUAL)
+  fullName  String
   /// E.164, e.g. +250788123412. Always mask before display or logging.
-  phone    String       @unique
+  /// Unique per company: the same person can borrow from two lenders.
+  phone     String
 
   /// National ID, AES-256-GCM encrypted. Never stored in the clear.
   nationalIdEnc   String?
   /// HMAC of the ID, so duplicates can be found without decrypting.
-  nationalIdHash  String? @unique
+  nationalIdHash  String?
   /// Last three digits, for the masked display.
   nationalIdLast3 String?
 
@@ -199,12 +336,17 @@ model Borrower {
   offers        LoanOffer[]
   momoInflows   MomoInflowMonth[]
 
+  @@unique([companyId, code])
+  @@unique([companyId, phone])
+  @@unique([companyId, nationalIdHash])
   @@index([fullName])
   @@index([officerId])
 }
 
 model Business {
   id                String    @id @default(uuid(7)) @db.Uuid
+  companyId         String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company           Company   @relation(fields: [companyId], references: [id])
   borrowerId        String    @unique @db.Uuid
   name              String
   sector            String?
@@ -217,6 +359,8 @@ model Business {
   updatedAt         DateTime  @updatedAt
 
   borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
 
 enum KycDocumentType {
@@ -230,6 +374,8 @@ enum KycDocumentType {
 
 model KycDocument {
   id           String          @id @default(uuid(7)) @db.Uuid
+  companyId    String          @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company         @relation(fields: [companyId], references: [id])
   borrowerId   String          @db.Uuid
   type         KycDocumentType
   status       KycStatus       @default(PENDING)
@@ -247,6 +393,7 @@ model KycDocument {
   verifiedBy User?    @relation(fields: [verifiedById], references: [id])
 
   @@index([borrowerId])
+  @@index([companyId])
 }
 
 enum ConsentType {
@@ -267,6 +414,8 @@ enum ConsentChannel {
 /// withdrawing consent sets revokedAt.
 model Consent {
   id            String         @id @default(uuid(7)) @db.Uuid
+  companyId     String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company       Company        @relation(fields: [companyId], references: [id])
   borrowerId    String         @db.Uuid
   type          ConsentType
   /// Version of the wording the borrower agreed to.
@@ -281,6 +430,7 @@ model Consent {
   application Application? @relation(fields: [applicationId], references: [id])
 
   @@index([borrowerId, type])
+  @@index([companyId])
 }
 
 // ───────────────────────── Products and applications ─────────────────────────
@@ -294,7 +444,9 @@ enum ProductKind {
 
 model Product {
   id                String      @id @default(uuid(7)) @db.Uuid
-  code              String      @unique
+  companyId         String      @default(dbgenerated("current_company_id()")) @db.Uuid
+  company           Company     @relation(fields: [companyId], references: [id])
+  code              String
   name              String
   /// Short name used on pipeline cards, e.g. "Agri input".
   shortName         String
@@ -323,6 +475,8 @@ model Product {
   applications Application[]
   loans        Loan[]
   offers       LoanOffer[]
+
+  @@unique([companyId, code])
 }
 
 enum ApplicationStage {
@@ -343,8 +497,10 @@ enum ApplicationChannel {
 
 model Application {
   id            String             @id @default(uuid(7)) @db.Uuid
+  companyId     String             @default(dbgenerated("current_company_id()")) @db.Uuid
+  company       Company            @relation(fields: [companyId], references: [id])
   /// Human reference, e.g. APP-20931.
-  code          String             @unique
+  code          String
   borrowerId    String             @db.Uuid
   productId     String             @db.Uuid
   amount        BigInt
@@ -390,6 +546,7 @@ model Application {
   consents     Consent[]
   loan         Loan?
 
+  @@unique([companyId, code])
   @@index([stage])
   @@index([borrowerId])
   @@index([officerId])
@@ -407,6 +564,8 @@ enum ScoreRecommendation {
 /// A credit score or AI recommendation, stored with what it was based on.
 model CreditScore {
   id                  String               @id @default(uuid(7)) @db.Uuid
+  companyId           String               @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company              @relation(fields: [companyId], references: [id])
   borrowerId          String               @db.Uuid
   applicationId       String?              @db.Uuid
   /// 300–850.
@@ -436,6 +595,7 @@ model CreditScore {
 
   @@index([borrowerId, createdAt])
   @@index([applicationId])
+  @@index([companyId])
 }
 
 // ───────────────────────── Loans and schedules ─────────────────────────
@@ -449,8 +609,10 @@ enum LoanStatus {
 
 model Loan {
   id               String     @id @default(uuid(7)) @db.Uuid
+  companyId        String     @default(dbgenerated("current_company_id()")) @db.Uuid
+  company          Company    @relation(fields: [companyId], references: [id])
   /// Human reference, e.g. LN-0418-2026.
-  code             String     @unique
+  code             String
   borrowerId       String     @db.Uuid
   applicationId    String?    @unique @db.Uuid
   productId        String     @db.Uuid
@@ -494,6 +656,7 @@ model Loan {
   notes              Note[]
   smsMessages        SmsMessage[]
 
+  @@unique([companyId, code])
   @@index([borrowerId])
   @@index([status])
   @@index([officerId])
@@ -507,6 +670,8 @@ enum InstalmentStatus {
 
 model ScheduleInstalment {
   id              String           @id @default(uuid(7)) @db.Uuid
+  companyId       String           @default(dbgenerated("current_company_id()")) @db.Uuid
+  company         Company          @relation(fields: [companyId], references: [id])
   loanId          String           @db.Uuid
   scheduleVersion Int              @default(1)
   number          Int
@@ -526,6 +691,7 @@ model ScheduleInstalment {
 
   @@unique([loanId, scheduleVersion, number])
   @@index([dueDate, status])
+  @@index([companyId])
 }
 
 // ───────────────────────── Double-entry ledger ─────────────────────────
@@ -539,13 +705,17 @@ enum LedgerAccountType {
 }
 
 model LedgerAccount {
-  id   String            @id @default(uuid(7)) @db.Uuid
-  /// Chart-of-accounts code, e.g. "1100".
-  code String            @unique
-  name String
-  type LedgerAccountType
+  id        String            @id @default(uuid(7)) @db.Uuid
+  companyId String            @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company           @relation(fields: [companyId], references: [id])
+  /// Chart-of-accounts code, e.g. "1100". Each company has its own chart.
+  code      String
+  name      String
+  type      LedgerAccountType
 
   entries LedgerEntry[]
+
+  @@unique([companyId, code])
 }
 
 enum LedgerTransactionType {
@@ -564,9 +734,11 @@ enum LedgerTransactionType {
 /// a deferred constraint trigger rejects the commit otherwise.
 model LedgerTransaction {
   id             String                @id @default(uuid(7)) @db.Uuid
+  companyId      String                @default(dbgenerated("current_company_id()")) @db.Uuid
+  company        Company               @relation(fields: [companyId], references: [id])
   type           LedgerTransactionType
   /// Unique per business event, so a retried request cannot post twice.
-  idempotencyKey String                @unique
+  idempotencyKey String
   loanId         String?               @db.Uuid
   memo           String?
   /// The day the event counts for (Kigali calendar).
@@ -585,6 +757,7 @@ model LedgerTransaction {
   payment      Payment?
   disbursement Disbursement?
 
+  @@unique([companyId, idempotencyKey])
   @@index([loanId, effectiveOn])
 }
 
@@ -596,6 +769,8 @@ enum EntryDirection {
 /// One side of a transaction. Append-only: a trigger blocks UPDATE and DELETE.
 model LedgerEntry {
   id            String         @id @default(uuid(7)) @db.Uuid
+  companyId     String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company       Company        @relation(fields: [companyId], references: [id])
   transactionId String         @db.Uuid
   accountId     String         @db.Uuid
   loanId        String?        @db.Uuid
@@ -611,6 +786,7 @@ model LedgerEntry {
   @@index([transactionId])
   @@index([accountId])
   @@index([loanId, accountId])
+  @@index([companyId])
 }
 
 // ───────────────────────── Money movement ─────────────────────────
@@ -633,13 +809,15 @@ enum PaymentStatus {
 /// and is processed once.
 model Payment {
   id                  String         @id @default(uuid(7)) @db.Uuid
+  companyId           String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company        @relation(fields: [companyId], references: [id])
   loanId              String         @db.Uuid
   borrowerId          String         @db.Uuid
   amount              BigInt
   channel             PaymentChannel
   status              PaymentStatus  @default(PENDING)
   /// Our reference for the request (the MoMo X-Reference-Id).
-  idempotencyKey      String         @unique
+  idempotencyKey      String
   /// The provider's transaction ID, once known.
   externalRef         String?
   payerPhone          String?
@@ -656,7 +834,8 @@ model Payment {
   recordedBy        User?              @relation(fields: [recordedById], references: [id])
   ledgerTransaction LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
 
-  @@unique([channel, externalRef])
+  @@unique([companyId, idempotencyKey])
+  @@unique([companyId, channel, externalRef])
   @@index([loanId, confirmedAt])
   @@index([status])
 }
@@ -670,11 +849,13 @@ enum DisbursementStatus {
 
 model Disbursement {
   id                  String             @id @default(uuid(7)) @db.Uuid
+  companyId           String             @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company            @relation(fields: [companyId], references: [id])
   loanId              String             @db.Uuid
   amount              BigInt
   channel             PaymentChannel
   status              DisbursementStatus @default(PENDING)
-  idempotencyKey      String             @unique
+  idempotencyKey      String
   externalRef         String?
   payeePhone          String?
   failureReason       String?
@@ -690,7 +871,8 @@ model Disbursement {
   approvedBy        User?              @relation("DisbursementApprover", fields: [approvedById], references: [id])
   ledgerTransaction LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id])
 
-  @@unique([channel, externalRef])
+  @@unique([companyId, idempotencyKey])
+  @@unique([companyId, channel, externalRef])
   @@index([loanId])
 }
 
@@ -708,6 +890,8 @@ enum ApprovalStatus {
 /// A change to a loan's terms. Always needs a second person to approve.
 model Restructure {
   id                   String          @id @default(uuid(7)) @db.Uuid
+  companyId            String          @default(dbgenerated("current_company_id()")) @db.Uuid
+  company              Company         @relation(fields: [companyId], references: [id])
   loanId               String          @db.Uuid
   type                 RestructureType
   status               ApprovalStatus  @default(PENDING)
@@ -728,6 +912,7 @@ model Restructure {
 
   @@index([loanId])
   @@index([status])
+  @@index([companyId])
 }
 
 // ───────────────────────── Collections ─────────────────────────
@@ -749,6 +934,8 @@ enum CollectionAction {
 
 model CollectionCase {
   id           String               @id @default(uuid(7)) @db.Uuid
+  companyId    String               @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company              @relation(fields: [companyId], references: [id])
   loanId       String               @db.Uuid
   status       CollectionCaseStatus @default(OPEN)
   nextAction   CollectionAction     @default(CALL)
@@ -767,6 +954,7 @@ model CollectionCase {
 
   @@index([loanId])
   @@index([status, assignedToId])
+  @@index([companyId])
 }
 
 enum ContactChannel {
@@ -790,6 +978,8 @@ enum ContactOutcome {
 
 model ContactLog {
   id         String         @id @default(uuid(7)) @db.Uuid
+  companyId  String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company        @relation(fields: [companyId], references: [id])
   caseId     String?        @db.Uuid
   loanId     String         @db.Uuid
   borrowerId String         @db.Uuid
@@ -806,6 +996,7 @@ model ContactLog {
   staff    User?           @relation(fields: [staffId], references: [id])
 
   @@index([loanId, occurredAt])
+  @@index([companyId])
 }
 
 enum PromiseStatus {
@@ -817,6 +1008,8 @@ enum PromiseStatus {
 
 model PromiseToPay {
   id           String        @id @default(uuid(7)) @db.Uuid
+  companyId    String        @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company       @relation(fields: [companyId], references: [id])
   caseId       String?       @db.Uuid
   loanId       String        @db.Uuid
   amount       BigInt
@@ -831,12 +1024,15 @@ model PromiseToPay {
 
   @@index([loanId])
   @@index([promisedFor, status])
+  @@index([companyId])
 }
 
 // ───────────────────────── Notes, notifications, SMS ─────────────────────────
 
 model Note {
   id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company  @relation(fields: [companyId], references: [id])
   borrowerId String   @db.Uuid
   loanId     String?  @db.Uuid
   authorId   String   @db.Uuid
@@ -848,6 +1044,7 @@ model Note {
   author   User     @relation(fields: [authorId], references: [id])
 
   @@index([borrowerId, createdAt])
+  @@index([companyId])
 }
 
 enum NotificationKind {
@@ -862,6 +1059,8 @@ enum NotificationKind {
 /// A staff notification with no userId goes to everyone in the console.
 model Notification {
   id         String           @id @default(uuid(7)) @db.Uuid
+  companyId  String           @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company          @relation(fields: [companyId], references: [id])
   userId     String?          @db.Uuid
   borrowerId String?          @db.Uuid
   kind       NotificationKind
@@ -876,6 +1075,7 @@ model Notification {
 
   @@index([userId, readAt])
   @@index([borrowerId, readAt])
+  @@index([companyId])
 }
 
 enum SmsDirection {
@@ -892,6 +1092,8 @@ enum SmsStatus {
 
 model SmsMessage {
   id                String       @id @default(uuid(7)) @db.Uuid
+  companyId         String       @default(dbgenerated("current_company_id()")) @db.Uuid
+  company           Company      @relation(fields: [companyId], references: [id])
   borrowerId        String?      @db.Uuid
   loanId            String?      @db.Uuid
   toPhone           String
@@ -915,6 +1117,7 @@ model SmsMessage {
 
   @@index([borrowerId, createdAt])
   @@index([status])
+  @@index([companyId])
 }
 
 // ───────────────────────── Audit ─────────────────────────
@@ -928,6 +1131,9 @@ enum ActorType {
 /// Who did what and when. Append-only: a trigger blocks UPDATE and DELETE.
 model AuditLog {
   id         String    @id @default(uuid(7)) @db.Uuid
+  /// Null for platform-level events (company created, platform admin sign-in).
+  companyId  String?   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company?  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   actorType  ActorType @default(STAFF)
   actorId    String?   @db.Uuid
   /// Dotted verb, e.g. "auth.login", "loan.restructure.approve".
@@ -946,6 +1152,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId, createdAt])
   @@index([action, createdAt])
+  @@index([companyId, createdAt])
 }
 
 // ───────────────────────── Reference numbers ─────────────────────────
@@ -953,32 +1160,47 @@ model AuditLog {
 /// Running numbers for human references (APP-20936, BR-01165, LN-0001-2027).
 /// Incremented with a single atomic statement, so two requests never share one.
 model CodeCounter {
-  key   String @id
-  value Int
+  companyId String  @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id])
+  key       String
+  value     Int
+
+  @@id([companyId, key])
 }
 
 // ───────────────────────── Providers ─────────────────────────
 
-/// Credentials the app obtains for itself (the MoMo sandbox API user and key).
+/// A company's provider secrets: its MoMo and SMS keys, AI key, and the
+/// credentials the app obtains for itself (the MoMo sandbox API user).
 /// Values are encrypted like other secrets held in the database.
 model ProviderCredential {
-  key       String   @id
+  companyId String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id])
+  key       String
   valueEnc  String
   updatedAt DateTime @updatedAt
+
+  @@id([companyId, key])
 }
 
 /// State for the local MoMo simulator, used only when no MoMo keys are set.
 model SimulatedTransfer {
   reference String   @id
+  companyId String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id])
   kind      String
   phone     String
   amount    BigInt
   createdAt DateTime @default(now())
+
+  @@index([companyId])
 }
 
 /// One-time sign-in codes for borrowers. Only a hash of the code is stored.
 model OtpChallenge {
   id         String    @id @default(uuid(7)) @db.Uuid
+  companyId  String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company   @relation(fields: [companyId], references: [id])
   phone      String
   codeHash   String
   attempts   Int       @default(0)
@@ -987,11 +1209,14 @@ model OtpChallenge {
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+  @@index([companyId])
 }
 
 /// A borrower's sign-in session in the mobile app.
 model BorrowerSession {
   id               String    @id @default(uuid(7)) @db.Uuid
+  companyId        String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company          Company   @relation(fields: [companyId], references: [id])
   borrowerId       String    @db.Uuid
   refreshTokenHash String    @unique
   deviceName       String?
@@ -1003,11 +1228,14 @@ model BorrowerSession {
   borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
 
   @@index([borrowerId])
+  @@index([companyId])
 }
 
 /// A top-up or new-loan offer shown in the borrower app.
 model LoanOffer {
   id          String    @id @default(uuid(7)) @db.Uuid
+  companyId   String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company     Company   @relation(fields: [companyId], references: [id])
   borrowerId  String    @db.Uuid
   productId   String    @db.Uuid
   maxAmount   BigInt
@@ -1022,12 +1250,15 @@ model LoanOffer {
   product  Product  @relation(fields: [productId], references: [id])
 
   @@index([borrowerId])
+  @@index([companyId])
 }
 
 /// Monthly money-in on a borrower's MoMo wallet, shared with their consent.
 /// The scoring rules use it to judge how steady their income is.
 model MomoInflowMonth {
   id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company  @relation(fields: [companyId], references: [id])
   borrowerId String   @db.Uuid
   month      DateTime @db.Date
   inflow     BigInt
@@ -1035,11 +1266,14 @@ model MomoInflowMonth {
   borrower Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
 
   @@unique([borrowerId, month])
+  @@index([companyId])
 }
 
 /// A question asked in "Ask your data", with the query that answered it.
 model DataQuestion {
   id        String   @id @default(uuid(7)) @db.Uuid
+  companyId String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company   Company  @relation(fields: [companyId], references: [id])
   userId    String   @db.Uuid
   question  String
   sql       String?
@@ -1049,12 +1283,15 @@ model DataQuestion {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@index([companyId])
 }
 
 /// Text an AI model wrote for staff: a borrower summary, a collections
 /// approach, an SMS draft. Always advisory, always stored with its inputs.
 model AiNote {
   id         String   @id @default(uuid(7)) @db.Uuid
+  companyId  String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company    Company  @relation(fields: [companyId], references: [id])
   kind       String
   borrowerId String?  @db.Uuid
   loanId     String?  @db.Uuid
@@ -1065,4 +1302,5 @@ model AiNote {
 
   @@index([kind, borrowerId, createdAt])
   @@index([kind, loanId, createdAt])
+  @@index([companyId])
 }

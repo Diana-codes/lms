@@ -38,12 +38,14 @@ import { SmsService } from './sms/sms.service';
 import { ProductsController } from './products/products.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { SystemController } from './system/system.controller';
+import { TenancyModule } from './tenancy/tenancy.module';
 import { UsersController } from './users/users.controller';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    TenancyModule,
     PiiCryptoModule,
     AuditModule,
     AuthModule,

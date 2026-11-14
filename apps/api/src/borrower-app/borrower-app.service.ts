@@ -341,7 +341,7 @@ export class BorrowerAppService {
       // An ID number typed in the app is stored encrypted, like one entered by staff.
       if (input.nationalId && /^\d{16}$/.test(input.nationalId) && !b.nationalIdHash) {
         // One ID number belongs to one customer. Say so rather than fail.
-        const taken = await tx.borrower.findUnique({
+        const taken = await tx.borrower.findFirst({
           where: { nationalIdHash: this.crypto.lookupHash(input.nationalId) },
           select: { id: true },
         });

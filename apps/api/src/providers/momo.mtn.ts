@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { PiiCrypto } from '../common/pii-crypto';
-import type { Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireCompanyId } from '../tenancy/company-context';
 import {
   MomoError,
   MomoGateway,
@@ -12,6 +12,19 @@ import {
 } from './momo.gateway';
 
 type Product = 'collection' | 'disbursement';
+
+/** One company's MTN MoMo settings (see ProvidersService). */
+export interface MtnSettings {
+  MOMO_COLLECTION_SUBSCRIPTION_KEY?: string;
+  MOMO_DISBURSEMENT_SUBSCRIPTION_KEY?: string;
+  MOMO_BASE_URL: string;
+  MOMO_TARGET_ENVIRONMENT: string;
+  MOMO_CURRENCY: string;
+  /** Public https address MTN can call back. Optional: payments are also polled. */
+  PUBLIC_API_URL?: string;
+  /** This company's webhook secret, so callbacks find their way back to it. */
+  WEBHOOK_TOKEN?: string;
+}
 
 interface Token {
   value: string;
@@ -33,7 +46,7 @@ export class MtnMomoGateway extends MomoGateway {
   private readonly tokens = new Map<Product, Token>();
 
   constructor(
-    private readonly env: Env,
+    private readonly settings: MtnSettings,
     private readonly prisma: PrismaService,
     private readonly crypto: PiiCrypto,
   ) {
@@ -61,8 +74,8 @@ export class MtnMomoGateway extends MomoGateway {
   private subscriptionKey(product: Product): string {
     const key =
       product === 'collection'
-        ? this.env.MOMO_COLLECTION_SUBSCRIPTION_KEY
-        : this.env.MOMO_DISBURSEMENT_SUBSCRIPTION_KEY;
+        ? this.settings.MOMO_COLLECTION_SUBSCRIPTION_KEY
+        : this.settings.MOMO_DISBURSEMENT_SUBSCRIPTION_KEY;
     if (!key) throw new MomoError(`No MoMo ${product} subscription key is configured`);
     return key;
   }
@@ -78,17 +91,17 @@ export class MtnMomoGateway extends MomoGateway {
       'X-Reference-Id': request.referenceId,
       'Content-Type': 'application/json',
     };
-    if (this.env.PUBLIC_API_URL && this.env.WEBHOOK_TOKEN) {
+    if (this.settings.PUBLIC_API_URL && this.settings.WEBHOOK_TOKEN) {
       headers['X-Callback-Url'] =
-        `${this.env.PUBLIC_API_URL}/webhooks/momo/${product}/${this.env.WEBHOOK_TOKEN}`;
+        `${this.settings.PUBLIC_API_URL}/webhooks/momo/${product}/${this.settings.WEBHOOK_TOKEN}`;
     }
-    const res = await fetch(`${this.env.MOMO_BASE_URL}${path}`, {
+    const res = await fetch(`${this.settings.MOMO_BASE_URL}${path}`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         // Whole francs, sent as a string. Never a float.
         amount: request.amount.toString(),
-        currency: this.env.MOMO_CURRENCY,
+        currency: this.settings.MOMO_CURRENCY,
         externalId: request.externalId,
         [party]: { partyIdType: 'MSISDN', partyId: request.phone.replace(/^\+/, '') },
         payerMessage: request.message.slice(0, 160),
@@ -103,7 +116,7 @@ export class MtnMomoGateway extends MomoGateway {
   }
 
   private async status(product: Product, path: string): Promise<MomoResult> {
-    const res = await fetch(`${this.env.MOMO_BASE_URL}${path}`, {
+    const res = await fetch(`${this.settings.MOMO_BASE_URL}${path}`, {
       headers: await this.authHeaders(product),
       signal: AbortSignal.timeout(20_000),
     });
@@ -125,7 +138,7 @@ export class MtnMomoGateway extends MomoGateway {
   private async authHeaders(product: Product): Promise<Record<string, string>> {
     return {
       Authorization: `Bearer ${await this.token(product)}`,
-      'X-Target-Environment': this.env.MOMO_TARGET_ENVIRONMENT,
+      'X-Target-Environment': this.settings.MOMO_TARGET_ENVIRONMENT,
       'Ocp-Apim-Subscription-Key': this.subscriptionKey(product),
     };
   }
@@ -134,7 +147,7 @@ export class MtnMomoGateway extends MomoGateway {
     const cached = this.tokens.get(product);
     if (cached && cached.expiresAt > Date.now() + 30_000) return cached.value;
     const { user, key } = await this.apiUser(product);
-    const res = await fetch(`${this.env.MOMO_BASE_URL}/${product}/token/`, {
+    const res = await fetch(`${this.settings.MOMO_BASE_URL}/${product}/token/`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${Buffer.from(`${user}:${key}`).toString('base64')}`,
@@ -154,20 +167,22 @@ export class MtnMomoGateway extends MomoGateway {
 
   /** The API user and key for a product: read from the database, or provisioned in the sandbox. */
   private async apiUser(product: Product): Promise<{ user: string; key: string }> {
-    const name = `momo.${this.env.MOMO_TARGET_ENVIRONMENT}.${product}`;
-    const stored = await this.prisma.providerCredential.findUnique({ where: { key: name } });
+    const name = `momo.${this.settings.MOMO_TARGET_ENVIRONMENT}.${product}`;
+    const stored = await this.prisma.providerCredential.findFirst({ where: { key: name } });
     if (stored)
       return JSON.parse(this.crypto.decrypt(stored.valueEnc)) as { user: string; key: string };
-    if (this.env.MOMO_TARGET_ENVIRONMENT !== 'sandbox') {
+    if (this.settings.MOMO_TARGET_ENVIRONMENT !== 'sandbox') {
       throw new MomoError(
-        `MoMo ${product} API user is not set up for ${this.env.MOMO_TARGET_ENVIRONMENT}`,
+        `MoMo ${product} API user is not set up for ${this.settings.MOMO_TARGET_ENVIRONMENT}`,
       );
     }
 
     const user = randomUUID();
     const subscription = this.subscriptionKey(product);
-    const host = this.env.PUBLIC_API_URL ? new URL(this.env.PUBLIC_API_URL).host : 'localhost';
-    const created = await fetch(`${this.env.MOMO_BASE_URL}/v1_0/apiuser`, {
+    const host = this.settings.PUBLIC_API_URL
+      ? new URL(this.settings.PUBLIC_API_URL).host
+      : 'localhost';
+    const created = await fetch(`${this.settings.MOMO_BASE_URL}/v1_0/apiuser`, {
       method: 'POST',
       headers: {
         'X-Reference-Id': user,
@@ -182,7 +197,7 @@ export class MtnMomoGateway extends MomoGateway {
         `Could not create the MoMo sandbox user (${created.status}): ${await this.reason(created)}`,
       );
     }
-    const keyRes = await fetch(`${this.env.MOMO_BASE_URL}/v1_0/apiuser/${user}/apikey`, {
+    const keyRes = await fetch(`${this.settings.MOMO_BASE_URL}/v1_0/apiuser/${user}/apikey`, {
       method: 'POST',
       headers: { 'Ocp-Apim-Subscription-Key': subscription },
       signal: AbortSignal.timeout(20_000),
@@ -193,7 +208,7 @@ export class MtnMomoGateway extends MomoGateway {
     const { apiKey } = (await keyRes.json()) as { apiKey: string };
     const value = { user, key: apiKey };
     await this.prisma.providerCredential.upsert({
-      where: { key: name },
+      where: { companyId_key: { companyId: requireCompanyId(), key: name } },
       update: { valueEnc: this.crypto.encrypt(JSON.stringify(value)) },
       create: { key: name, valueEnc: this.crypto.encrypt(JSON.stringify(value)) },
     });

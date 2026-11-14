@@ -2,8 +2,20 @@ import 'dotenv/config';
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { Client } from 'pg';
-import { ML_TEST_PORT, testDatabaseUrl } from './test-db';
+import { PiiCrypto } from '../src/common/pii-crypto';
+import { loadEnv } from '../src/config/env';
+import { PrismaClient } from '../src/generated/prisma/client';
+import { provisionCompany } from '../src/platform/provision';
+import { SECRET } from '../src/tenancy/company-secrets.service';
+import {
+  E2E_COMPANY_ID,
+  E2E_COMPANY_SLUG,
+  E2E_WEBHOOK_TOKEN,
+  ML_TEST_PORT,
+  testDatabaseUrl,
+} from './test-db';
 
 let ml: ChildProcess | null = null;
 
@@ -31,6 +43,42 @@ export default async function setup(): Promise<() => Promise<void>> {
     env: { ...process.env, DATABASE_URL: testUrl },
     stdio: 'pipe',
   });
+  execFileSync('node', [path.resolve(__dirname, '../../../scripts/app-role.mjs'), testUrl], {
+    stdio: 'pipe',
+  });
+  // The company the tests act as, with its chart of accounts. The tests cover
+  // the optional features, so they are switched on for it, and its webhook
+  // secret is the one the tests post to.
+  const owner = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl }) });
+  const env = loadEnv();
+  const crypto = new PiiCrypto(env.PII_ENCRYPTION_KEY, env.PII_HASH_KEY);
+  try {
+    await provisionCompany(
+      owner,
+      { id: E2E_COMPANY_ID, slug: E2E_COMPANY_SLUG, name: 'E2E Lender' },
+      { crypto, webhookToken: E2E_WEBHOOK_TOKEN },
+    );
+    // The test database is kept between runs: make sure the settings are current.
+    await owner.company.update({
+      where: { id: E2E_COMPANY_ID },
+      data: {
+        aiFeatures: true,
+        autoApprove: true,
+        webhookTokenHash: crypto.lookupHash(E2E_WEBHOOK_TOKEN),
+      },
+    });
+    await owner.providerCredential.upsert({
+      where: { companyId_key: { companyId: E2E_COMPANY_ID, key: SECRET.webhookToken } },
+      update: { valueEnc: crypto.encrypt(E2E_WEBHOOK_TOKEN) },
+      create: {
+        companyId: E2E_COMPANY_ID,
+        key: SECRET.webhookToken,
+        valueEnc: crypto.encrypt(E2E_WEBHOOK_TOKEN),
+      },
+    });
+  } finally {
+    await owner.$disconnect();
+  }
   if (process.env.REPORTING_DATABASE_URL) {
     execFileSync(
       'node',

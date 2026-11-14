@@ -37,7 +37,8 @@ import { disbursementLines } from '../ledger/posting';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { MomoGateway } from '../providers/momo.gateway';
+import { companyFeatures } from '../tenancy/company-context';
+import { ProvidersService } from '../providers/providers.service';
 
 /** Disbursed applications stay on the board for this long, then drop off. */
 export const DISBURSED_COLUMN_DAYS = 30;
@@ -113,7 +114,9 @@ function toCard(app: ApplicationRow) {
     docsRequired: app.docsRequired,
     needsSecondApproval: needsSecond,
     // Meets the product's auto-approve policy. An officer still presses the button.
+    // Only offered when the company has the bulk action switched on.
     autoEligible:
+      companyFeatures().autoApprove &&
       score?.recommendation === 'AUTO_APPROVE_ELIGIBLE' &&
       !needsSecond &&
       app.product.autoApproveMinScore != null &&
@@ -158,7 +161,7 @@ export class ApplicationsService {
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
-    private readonly momo: MomoGateway,
+    private readonly providers: ProvidersService,
     private readonly money: MoneyService,
     private readonly scoring: ScoringService,
   ) {}
@@ -222,7 +225,7 @@ export class ApplicationsService {
 
     const code = await this.prisma.$transaction(async (tx) => {
       // A known phone number means a returning borrower; otherwise a new one.
-      let borrower = await tx.borrower.findUnique({ where: { phone } });
+      let borrower = await tx.borrower.findFirst({ where: { phone } });
       const isNewBorrower = !borrower;
       borrower ??= await tx.borrower.create({
         data: {
@@ -293,6 +296,9 @@ export class ApplicationsService {
    * decider; nothing is ever declined this way.
    */
   async approveEligible(user: AuthUser, meta: RequestMeta) {
+    if (!companyFeatures().autoApprove) {
+      throw new ForbiddenException('Approving low-risk applications in bulk is switched off');
+    }
     const { columns } = await this.pipeline();
     const eligible = columns.flatMap((c) => c.cards).filter((c) => c.autoEligible);
     const approved: string[] = [];
@@ -674,7 +680,9 @@ export class ApplicationsService {
     });
 
     try {
-      await this.momo.transfer({
+      await (
+        await this.providers.momo()
+      ).transfer({
         referenceId,
         amount: app.amount,
         phone,
@@ -703,7 +711,7 @@ export class ApplicationsService {
 
   /** A loan whose MoMo transfer failed can be sent again, keeping the loan and schedule. */
   private async retryFailedMomo(loanCode: string, user: AuthUser, meta: RequestMeta) {
-    const loan = await this.prisma.loan.findUnique({
+    const loan = await this.prisma.loan.findFirst({
       where: { code: loanCode },
       include: { borrower: true, disbursements: { orderBy: { initiatedAt: 'desc' }, take: 1 } },
     });
@@ -732,7 +740,9 @@ export class ApplicationsService {
       ...meta,
     });
     try {
-      await this.momo.transfer({
+      await (
+        await this.providers.momo()
+      ).transfer({
         referenceId,
         amount: loan.principal,
         phone: loan.borrower.phone,
@@ -760,7 +770,7 @@ export class ApplicationsService {
   }
 
   private async find(code: string): Promise<ApplicationRow & { borrowerId: string }> {
-    const app = await this.prisma.application.findUnique({ where: { code }, include: cardInclude });
+    const app = await this.prisma.application.findFirst({ where: { code }, include: cardInclude });
     if (!app) throw new NotFoundException(`No application ${code}`);
     return app;
   }
