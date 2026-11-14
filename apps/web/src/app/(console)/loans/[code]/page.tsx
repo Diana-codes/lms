@@ -262,7 +262,7 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
               </dl>
               {figures.payoff.waived !== '0' ? (
                 <p className="m-0 text-[13px] text-ink-muted">
-                  Saves <Money amount={figures.payoff.waived} /> of scheduled interest and fees.
+                  <Money amount={figures.payoff.waived} /> less than the schedule would charge.
                 </p>
               ) : null}
             </Card>

@@ -205,8 +205,11 @@ export class ApplicationsService {
   }
 
   /** The number in the sidebar: the same applications the board shows. */
+  /** Applications still being worked on (disbursed ones stay on the board but are not open). */
   async openCount(): Promise<number> {
-    return this.prisma.application.count({ where: this.onBoard() });
+    return this.prisma.application.count({
+      where: { stage: { in: ['NEW', 'UNDER_REVIEW', 'CREDIT_CHECK', 'APPROVED'] } },
+    });
   }
 
   async get(code: string): Promise<ApplicationCard> {

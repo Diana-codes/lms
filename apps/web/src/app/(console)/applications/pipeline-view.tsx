@@ -190,6 +190,7 @@ export function PipelineView({
   }, [openCode, startNew, router, pathname]);
 
   const all = useMemo(() => columns.flatMap((c) => c.cards), [columns]);
+  const open = useMemo(() => all.filter((c) => c.stage !== 'DISBURSED'), [all]);
   const filtered = kind !== 'ALL' || mine || flagged;
   const keep = (c: ApplicationCard) =>
     (kind === 'ALL' || c.kind === kind) &&
@@ -238,7 +239,7 @@ export function PipelineView({
       <header className="flex flex-wrap items-end gap-4">
         <div className="mr-auto flex flex-col gap-1">
           <span className="text-[13px] text-ink-muted">
-            {count(all.length)} open · {short(sum(all))} requested
+            {count(open.length)} open · {short(sum(open))} requested
           </span>
           <h1 className="m-0 font-display text-[30px] leading-tight font-semibold tracking-[-0.02em]">
             Applications
