@@ -13,7 +13,7 @@ import { PiiCrypto } from '../src/common/pii-crypto';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { ProvidersService } from '../src/providers/providers.service';
 import { runAsCompany } from '../src/tenancy/company-context';
-import { lastCodeTo, testPhone } from './sign-in';
+import { lastCodeTo, signInWithSms, smsTwoFactor, testPhone } from './sign-in';
 import { testPrisma } from './test-db';
 
 /**
@@ -442,5 +442,105 @@ describe('features and suspension', () => {
     expect(actions.map((a) => a.action)).toEqual(
       expect.arrayContaining(['platform.company.create', 'platform.company.update']),
     );
+  });
+});
+
+describe("a company's own settings", () => {
+  const send = (c: Company, method: 'patch' | 'put' | 'post', path: string, body: object = {}) =>
+    http()[method](path).set('x-company', c.slug).set('Cookie', c.cookies).send(body);
+
+  it('its admin sees them, with secrets only marked as set', async () => {
+    const res = await as(co.b).get('/company/settings').expect(200);
+    expect(res.body).toMatchObject({
+      slug: co.b.slug,
+      webhookConfigured: true,
+      features: { ai: false, autoApprove: false },
+    });
+    expect(JSON.stringify(res.body)).not.toContain(co.b.webhookToken);
+  });
+
+  it('its admin changes the branding, and nothing the platform controls', async () => {
+    await send(co.b, 'patch', '/company/settings', {
+      brandName: 'Beta Money',
+      brandColor: '#123456',
+      logoUrl: 'https://example.com/logo.png',
+    }).expect(200);
+    const profile = (await http().get('/company').set('x-company', co.b.slug).expect(200)).body;
+    expect(profile).toMatchObject({ displayName: 'Beta Money', brandColor: '#123456' });
+
+    for (const body of [{ status: 'SUSPENDED' }, { aiFeatures: true }, { name: 'Renamed' }]) {
+      await send(co.b, 'patch', '/company/settings', body).expect(400);
+    }
+    await send(co.b, 'patch', '/company/settings', { logoUrl: 'http://example.com/a.png' }).expect(
+      400,
+    );
+    // The database refuses too: the company login may only change branding columns.
+    await expect(
+      co.b.db.company.update({ where: { id: co.b.id }, data: { aiFeatures: true } }),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      co.b.db.company.update({ where: { id: co.a.id }, data: { brandName: 'Hijacked' } }),
+    ).rejects.toThrow();
+    const a = await owner.company.findUniqueOrThrow({ where: { id: co.a.id } });
+    expect(a.brandName).not.toBe('Hijacked');
+  });
+
+  it('only its admins can change them', async () => {
+    const factor = smsTwoFactor();
+    const email = `officer-${run}@lender.test`;
+    await co.b.db.user.create({
+      data: {
+        email,
+        passwordHash: await hashPassword(PASSWORD.b),
+        firstName: 'Olive',
+        lastName: 'Officer',
+        role: 'LOAN_OFFICER',
+        ...factor,
+      },
+    });
+    const session = await signInWithSms(app, { email, phone: factor.phone }, PASSWORD.b, co.b.slug);
+    const cookies = cookiesOf(session);
+    await http()
+      .get('/company/settings')
+      .set('x-company', co.b.slug)
+      .set('Cookie', cookies)
+      .expect(403);
+    await http()
+      .post('/company/settings/webhook-token')
+      .set('x-company', co.b.slug)
+      .set('Cookie', cookies)
+      .expect(403);
+  });
+
+  it('its admin sets provider keys (write-only) and issues a new webhook secret', async () => {
+    const secrets = await send(co.b, 'put', '/company/settings/secrets', {
+      smsUsername: 'beta-at',
+      smsApiKey: 'at-secret-key',
+    }).expect(200);
+    expect(secrets.body).toMatchObject({ 'sms.username': true, 'sms.api_key': true });
+    expect(JSON.stringify(secrets.body)).not.toContain('at-secret-key');
+    await send(co.b, 'put', '/company/settings/secrets', { smsApiKey: null }).expect(200);
+    const after = (await as(co.b).get('/company/settings').expect(200)).body;
+    expect(after.secrets['sms.api_key']).toBe(false);
+
+    const rotated = await send(co.b, 'post', '/company/settings/webhook-token').expect(200);
+    const token: string = rotated.body.webhookToken;
+    expect(token).not.toBe(co.b.webhookToken);
+    expect(rotated.body.urls.smsDelivery).toMatch(new RegExp(`/webhooks/sms/delivery/${token}$`));
+    await http().post(`/webhooks/momo/collection/${co.b.webhookToken}`).send({}).expect(401);
+    await http().post(`/webhooks/momo/collection/${token}`).send({}).expect(200);
+
+    const actions = await owner.auditLog.findMany({
+      where: { companyId: co.b.id, action: { startsWith: 'company.settings.' } },
+      select: { action: true, metadata: true },
+    });
+    expect(actions.map((a) => a.action)).toEqual(
+      expect.arrayContaining([
+        'company.settings.update',
+        'company.settings.secrets',
+        'company.settings.webhook_rotate',
+      ]),
+    );
+    expect(JSON.stringify(actions)).not.toContain('at-secret-key');
   });
 });

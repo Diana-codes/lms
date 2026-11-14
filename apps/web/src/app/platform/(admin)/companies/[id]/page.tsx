@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { type CompanyDetail, companyUrl } from '@/lib/platform';
 import { serverApi } from '@/lib/server-api';
+import { ProviderKeysForm } from '@/components/company/provider-keys-form';
+import { WebhookSecret } from '@/components/company/webhook-secret';
 import { CompanySettingsForm } from './company-settings-form';
-import { ProviderKeysForm } from './provider-keys-form';
-import { WebhookSecret } from './webhook-secret';
 
 export const metadata: Metadata = { title: 'Company' };
 
@@ -43,8 +43,15 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
       <div className="grid gap-6 lg:grid-cols-2">
         <CompanySettingsForm company={c} />
         <div className="flex flex-col gap-6">
-          <ProviderKeysForm companyId={c.id} configured={c.secrets} />
-          <WebhookSecret companyId={c.id} configured={c.webhookConfigured} />
+          <ProviderKeysForm
+            endpoint={`/platform/companies/${c.id}`}
+            configured={c.secrets}
+            intro="Each lender uses its own MTN MoMo and Africa's Talking accounts. Without them the simulators are used in development; in production MoMo and SMS stay off for this company."
+          />
+          <WebhookSecret
+            endpoint={`/platform/companies/${c.id}`}
+            configured={c.webhookConfigured}
+          />
           <Card>
             <CardTitle>Administrators</CardTitle>
             <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">

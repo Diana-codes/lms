@@ -1,17 +1,23 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { RequestMeta } from '../auth/auth.service';
 import { hashPassword } from '../auth/password';
 import { PiiCrypto } from '../common/pii-crypto';
+import { ENV, type Env } from '../config/env';
 import type { CompanyStatus, Language } from '../generated/prisma/client';
 import { PlatformPrismaService } from '../prisma/prisma.service';
 import { CompaniesService, RESERVED_SLUGS } from '../tenancy/companies.service';
 import { runAsCompany } from '../tenancy/company-context';
-import { CompanySecretsService, SECRET, type SecretKey } from '../tenancy/company-secrets.service';
+import {
+  CompanySecretsService,
+  type SecretsInput,
+  webhookUrls,
+} from '../tenancy/company-secrets.service';
 import { PlatformAuthService } from './platform-auth.service';
 import { provisionCompany } from './provision';
 
@@ -41,18 +47,6 @@ export interface UpdateCompanyInput {
   autoApprove?: boolean;
 }
 
-/** Which provider settings a platform admin can set for a company. */
-export const SETTABLE_SECRETS = {
-  momoCollectionKey: SECRET.momoCollectionKey,
-  momoDisbursementKey: SECRET.momoDisbursementKey,
-  momoPayCode: SECRET.momoPayCode,
-  smsUsername: SECRET.smsUsername,
-  smsApiKey: SECRET.smsApiKey,
-  smsSenderId: SECRET.smsSenderId,
-} as const satisfies Record<string, SecretKey>;
-
-export type SecretsInput = Partial<Record<keyof typeof SETTABLE_SECRETS, string | null>>;
-
 /**
  * Company administration for platform admins. Uses the owner database login,
  * which sees every company; company secrets are written as that company.
@@ -65,6 +59,7 @@ export class PlatformService {
     private readonly companies: CompaniesService,
     private readonly secrets: CompanySecretsService,
     private readonly auth: PlatformAuthService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async list() {
@@ -176,16 +171,7 @@ export class PlatformService {
 
   async setSecrets(id: string, input: SecretsInput, adminId: string, meta: RequestMeta) {
     await this.detail(id);
-    const changed: string[] = [];
-    await runAsCompany(id, async () => {
-      for (const [name, key] of Object.entries(SETTABLE_SECRETS) as Array<
-        [keyof typeof SETTABLE_SECRETS, SecretKey]
-      >) {
-        if (!(name in input)) continue;
-        await this.secrets.set(key, input[name] ?? null);
-        changed.push(name);
-      }
-    });
+    const changed = await runAsCompany(id, () => this.secrets.setMany(input));
     // Only which settings changed is logged, never their values.
     await this.auth.audit('platform.company.secrets', adminId, { changed }, meta, {
       companyId: id,
@@ -203,7 +189,7 @@ export class PlatformService {
       entityType: 'Company',
       entityId: id,
     });
-    return { webhookToken: token };
+    return { webhookToken: token, urls: webhookUrls(this.env.PUBLIC_API_URL, token) };
   }
 
   usage(id: string) {

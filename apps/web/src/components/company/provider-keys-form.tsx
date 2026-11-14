@@ -33,11 +33,14 @@ type FieldName = (typeof FIELDS)[number]['name'];
  * fields are left as they are.
  */
 export function ProviderKeysForm({
-  companyId,
+  endpoint,
   configured,
+  intro,
 }: {
-  companyId: string;
+  /** The settings route: `/platform/companies/<id>` or `/company/settings`. */
+  endpoint: string;
   configured: Record<string, boolean>;
+  intro: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -49,7 +52,7 @@ export function ProviderKeysForm({
     setBusy(true);
     setError(null);
     try {
-      await api(`/platform/companies/${companyId}/secrets`, { method: 'PUT', body });
+      await api(`${endpoint}/secrets`, { method: 'PUT', body });
       setValues({});
       toast(done);
       router.refresh();
@@ -85,10 +88,7 @@ export function ProviderKeysForm({
           </Pill>
         </div>
       </div>
-      <p className="m-0 text-sm text-ink-muted">
-        Each lender uses its own MTN MoMo and Africa&apos;s Talking accounts. Without them the
-        simulators are used in development; in production MoMo and SMS stay off for this company.
-      </p>
+      <p className="m-0 text-sm text-ink-muted">{intro}</p>
       <form onSubmit={save} className="flex flex-col gap-3" noValidate>
         {FIELDS.map((f) => (
           <div key={f.name} className="flex items-end gap-2">

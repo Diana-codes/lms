@@ -39,6 +39,7 @@ import { ProductsController } from './products/products.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { SystemController } from './system/system.controller';
 import { PlatformModule } from './platform/platform.module';
+import { CompanySettingsService } from './tenancy/company-settings.service';
 import { CompanyController } from './tenancy/company.controller';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { StaffService } from './users/staff.service';
@@ -94,6 +95,7 @@ import { UsersController } from './users/users.controller';
     AiService,
     ScoringService,
     StaffService,
+    CompanySettingsService,
   ],
 })
 export class AppModule {}

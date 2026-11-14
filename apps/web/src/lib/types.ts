@@ -41,6 +41,25 @@ export interface StaffMember {
   lastLoginAt: string | null;
 }
 
+/** GET /company/settings: what a company's administrators see and can change. */
+export interface CompanySettings {
+  slug: string;
+  name: string;
+  legalName: string | null;
+  country: string;
+  currency: string;
+  timezone: string;
+  defaultLanguage: 'EN' | 'RW' | 'FR';
+  brandName: string | null;
+  brandColor: string | null;
+  accentColor: string | null;
+  logoUrl: string | null;
+  features: { ai: boolean; autoApprove: boolean };
+  /** Which provider settings are set, by key. Never their values. */
+  secrets: Record<string, boolean>;
+  webhookConfigured: boolean;
+}
+
 /** GET /branches. */
 export interface Branch {
   id: string;

@@ -22,6 +22,31 @@ export const SECRET = {
 
 export type SecretKey = (typeof SECRET)[keyof typeof SECRET];
 
+/** Which provider settings can be set from a settings screen (company or platform admin). */
+export const SETTABLE_SECRETS = {
+  momoCollectionKey: SECRET.momoCollectionKey,
+  momoDisbursementKey: SECRET.momoDisbursementKey,
+  momoPayCode: SECRET.momoPayCode,
+  smsUsername: SECRET.smsUsername,
+  smsApiKey: SECRET.smsApiKey,
+  smsSenderId: SECRET.smsSenderId,
+} as const satisfies Record<string, SecretKey>;
+
+export type SecretsInput = Partial<Record<keyof typeof SETTABLE_SECRETS, string | null>>;
+
+/**
+ * The callback addresses to give MTN and Africa's Talking for a webhook
+ * secret. `publicApiUrl` is the API's public https address, when known.
+ */
+export function webhookUrls(publicApiUrl: string | undefined, token: string) {
+  const base = (publicApiUrl ?? 'https://<your API address>').replace(/\/+$/, '');
+  return {
+    momoCollection: `${base}/webhooks/momo/collection/${token}`,
+    momoDisbursement: `${base}/webhooks/momo/disbursement/${token}`,
+    smsDelivery: `${base}/webhooks/sms/delivery/${token}`,
+  };
+}
+
 const CACHE_MS = 60_000;
 
 /**
@@ -74,6 +99,19 @@ export class CompanySecretsService {
     const token = randomBytes(24).toString('base64url');
     await this.set(SECRET.webhookToken, token);
     return token;
+  }
+
+  /** Write the settings named in `input` (null or empty removes one). Returns the names changed. */
+  async setMany(input: SecretsInput): Promise<string[]> {
+    const changed: string[] = [];
+    for (const [name, key] of Object.entries(SETTABLE_SECRETS) as Array<
+      [keyof typeof SETTABLE_SECRETS, SecretKey]
+    >) {
+      if (!(name in input)) continue;
+      await this.set(key, input[name] ?? null);
+      changed.push(name);
+    }
+    return changed;
   }
 
   /** Which secrets are set, without revealing them (for settings screens). */

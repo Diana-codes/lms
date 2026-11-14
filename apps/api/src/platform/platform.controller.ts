@@ -18,13 +18,17 @@ import { MIN_PASSWORD_LENGTH } from '../auth/password';
 import { requestMeta } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import { SLUG_PATTERN } from '../tenancy/companies.service';
+import {
+  hexColour,
+  logoUrl,
+  optionalText,
+  secretsSchema,
+} from '../tenancy/company-settings.schemas';
 import { PLATFORM_COOKIE, PlatformAuthService } from './platform-auth.service';
 import { AllowBeforeTwoFactor, PlatformGuard, type PlatformRequest } from './platform.guard';
-import { PlatformService, SETTABLE_SECRETS } from './platform.service';
+import { PlatformService } from './platform.service';
 
 const companyId = new ZodPipe(z.uuid());
-const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour like #0E3B2E');
-const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 const timezone = z.string().refine((tz) => {
   try {
     new Intl.DateTimeFormat('en', { timeZone: tz });
@@ -71,24 +75,13 @@ const updateSchema = z
     brandName: optionalText(60),
     brandColor: hexColour.nullable().optional(),
     accentColor: hexColour.nullable().optional(),
-    logoUrl: z.url().max(500).nullable().optional(),
+    logoUrl: logoUrl.nullable().optional(),
     timezone: timezone.optional(),
     defaultLanguage: z.enum(['EN', 'RW', 'FR']).optional(),
     status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
     aiFeatures: z.boolean().optional(),
     autoApprove: z.boolean().optional(),
   })
-  .strict();
-
-const secretsSchema = z
-  .object(
-    Object.fromEntries(
-      Object.keys(SETTABLE_SECRETS).map((k) => [
-        k,
-        z.string().trim().max(200).nullable().optional(),
-      ]),
-    ) as Record<keyof typeof SETTABLE_SECRETS, z.ZodOptional<z.ZodNullable<z.ZodString>>>,
-  )
   .strict();
 
 /**

@@ -13,6 +13,7 @@ import {
   ShieldIcon,
   Sidebar,
   type SidebarItem,
+  SettingsIcon,
   SignOutIcon,
   StaffIcon,
 } from '@kora/ui';
@@ -80,6 +81,16 @@ export function ConsoleNav({
               <KitIcon />
               UI kit
             </Link>
+            {me.role === 'ADMIN' ? (
+              <Link
+                href="/settings/company"
+                className={footerLink}
+                aria-current={isActive('/settings/company') ? 'page' : undefined}
+              >
+                <SettingsIcon />
+                Company
+              </Link>
+            ) : null}
             {me.role === 'ADMIN' || me.role === 'MANAGER' ? (
               <Link
                 href="/settings/staff"
