@@ -19,7 +19,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { disbursementLines } from '../ledger/posting';
+import { disbursementPosting, loanTerms, quoteFor } from '../products/terms';
 import { PaymentPoster } from '../loans/payment-poster';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvidersService } from '../providers/providers.service';
@@ -229,7 +229,17 @@ export class MoneyService {
           loanId: loan.id,
           effectiveOn: today,
           memo: `Disbursement of ${loan.code}`,
-          lines: disbursementLines(d.amount, 'MOMO_FLOAT'),
+          // Fees depend only on the amount and the loan's terms, so the quote
+          // made when the transfer was requested is reproduced exactly.
+          lines: disbursementPosting(
+            quoteFor({
+              amount: loan.application?.amount ?? loan.principal,
+              termMonths: loan.termMonths,
+              terms: loanTerms(loan),
+              disbursedOn: today,
+            }),
+            'MOMO_FLOAT',
+          ),
           postedById: d.initiatedById,
         });
         await tx.disbursement.update({ where: { id: d.id }, data: { ledgerTransactionId } });

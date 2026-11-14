@@ -9,10 +9,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import {
-  addMonths,
   APPLICATION_STAGE_LABELS,
-  buildSchedule,
-  calcInstalment,
   canMoveStage,
   checkAffordability,
   formatBps,
@@ -20,6 +17,7 @@ import {
   initials,
   isoToUtcDate,
   kigaliDate,
+  monthlyEquivalent,
   normaliseRwPhone,
   PIPELINE_STAGES,
   shortStaffName,
@@ -33,10 +31,16 @@ import type { RequestMeta } from '../auth/auth.service';
 import type { PaymentChannel, Prisma } from '../generated/prisma/client';
 import { CHANNEL_ACCOUNT } from '../ledger/accounts';
 import { LedgerService } from '../ledger/ledger.service';
-import { disbursementLines } from '../ledger/posting';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  applicationQuote,
+  disbursementPosting,
+  instalmentRowsFrom,
+  loanFieldsFrom,
+  loanTerms,
+} from '../products/terms';
 import { companyFeatures } from '../tenancy/company-context';
 import { ProvidersService } from '../providers/providers.service';
 
@@ -70,6 +74,7 @@ type ApplicationRow = Prisma.ApplicationGetPayload<{ include: typeof cardInclude
 export type AiTone = 'ok' | 'warn' | 'flag';
 
 function toCard(app: ApplicationRow) {
+  const quote = applicationQuote(app);
   const score = app.creditScores[0] ?? null;
   const reasons = (score?.reasons as Array<{ kind: string; text: string }> | null) ?? [];
   const needsSecond =
@@ -89,7 +94,12 @@ function toCard(app: ApplicationRow) {
     amount: app.amount,
     termMonths: app.termMonths,
     annualRateBps: app.annualRateBps,
-    instalment: calcInstalment(app.amount, app.annualRateBps, app.termMonths),
+    instalment: quote.instalment,
+    frequency: quote.terms.frequency,
+    instalmentCount: quote.rows.length,
+    netDisbursed: quote.netDisbursed,
+    totalFees: quote.totalFees,
+    aprBps: quote.aprBps,
     score: score?.value ?? null,
     // Stored, advisory output. A person makes every decision.
     ai: score
@@ -207,7 +217,7 @@ export class ApplicationsService {
     const phone = normaliseRwPhone(input.phone);
     if (!phone) throw new BadRequestException('Enter a Rwandan mobile number, e.g. 078 812 3412');
     const product = await this.prisma.product.findFirst({
-      where: { code: input.productCode, isActive: true },
+      where: { code: input.productCode, status: 'PUBLISHED' },
     });
     if (!product) throw new BadRequestException('Choose a product');
     if (input.amount < product.minAmount || input.amount > product.maxAmount) {
@@ -398,14 +408,19 @@ export class ApplicationsService {
     // The affordability rule, whenever we hold a verified income.
     const income = app.borrower.monthlyIncome;
     if (income != null) {
-      const active = await this.prisma.loan.aggregate({
+      // Weekly and fortnightly instalments count at their monthly equivalent.
+      const active = await this.prisma.loan.findMany({
         where: { borrowerId: app.borrowerId, status: 'ACTIVE' },
-        _sum: { instalmentAmount: true },
+        select: { instalmentAmount: true, terms: true, annualRateBps: true },
       });
+      const quote = applicationQuote(app);
       const check = checkAffordability({
         monthlyIncome: income,
-        newInstalment: calcInstalment(app.amount, app.annualRateBps, app.termMonths),
-        existingInstalments: active._sum.instalmentAmount ?? 0n,
+        newInstalment: monthlyEquivalent(quote.instalment, quote.terms.frequency),
+        existingInstalments: active.reduce(
+          (sum, l) => sum + monthlyEquivalent(l.instalmentAmount, loanTerms(l).frequency),
+          0n,
+        ),
         limitBps: app.product.affordabilityBps,
       });
       if (!check.affordable) {
@@ -500,13 +515,7 @@ export class ApplicationsService {
     }
 
     const today = kigaliDate();
-    const firstDue = addMonths(today, 1);
-    const schedule = buildSchedule({
-      principal: app.amount,
-      annualRateBps: app.annualRateBps,
-      termMonths: app.termMonths,
-      firstDueDate: firstDue,
-    });
+    const quote = applicationQuote(app, today);
 
     const loanCode = await this.prisma.$transaction(async (tx) => {
       const moved = await tx.application.updateMany({
@@ -523,25 +532,15 @@ export class ApplicationsService {
           borrowerId: app.borrowerId,
           applicationId: app.id,
           productId: app.productId,
-          principal: app.amount,
+          ...loanFieldsFrom(quote, app.product.version),
           annualRateBps: app.annualRateBps,
           termMonths: app.termMonths,
-          instalmentAmount: schedule.instalment,
           status: 'ACTIVE',
           disbursedOn: isoToUtcDate(today),
-          firstDueDate: isoToUtcDate(firstDue),
-          maturityDate: isoToUtcDate(schedule.rows[schedule.rows.length - 1]!.dueDate),
           collateral: input.collateral?.trim() || null,
           officerId: app.officerId,
           branchId: app.branchId,
-          instalments: {
-            create: schedule.rows.map((row) => ({
-              number: row.number,
-              dueDate: isoToUtcDate(row.dueDate),
-              principalDue: row.principal,
-              interestDue: row.interest,
-            })),
-          },
+          instalments: { create: instalmentRowsFrom(quote, today) },
         },
       });
       const key = `disbursement:${app.code}`;
@@ -551,13 +550,13 @@ export class ApplicationsService {
         loanId: loan.id,
         effectiveOn: today,
         memo: `Disbursement of ${newCode}`,
-        lines: disbursementLines(app.amount, CHANNEL_ACCOUNT[input.channel]),
+        lines: disbursementPosting(quote, CHANNEL_ACCOUNT[input.channel]),
         postedById: user.id,
       });
       await tx.disbursement.create({
         data: {
           loanId: loan.id,
-          amount: app.amount,
+          amount: quote.netDisbursed,
           channel: input.channel,
           status: 'SUCCESSFUL',
           idempotencyKey: key,
@@ -610,13 +609,7 @@ export class ApplicationsService {
     }
 
     const today = kigaliDate();
-    const firstDue = addMonths(today, 1);
-    const schedule = buildSchedule({
-      principal: app.amount,
-      annualRateBps: app.annualRateBps,
-      termMonths: app.termMonths,
-      firstDueDate: firstDue,
-    });
+    const quote = applicationQuote(app, today);
     const referenceId = randomUUID();
 
     const { loanCode, disbursementId, phone } = await this.prisma.$transaction(async (tx) => {
@@ -633,30 +626,20 @@ export class ApplicationsService {
           borrowerId: app.borrowerId,
           applicationId: app.id,
           productId: app.productId,
-          principal: app.amount,
+          ...loanFieldsFrom(quote, app.product.version),
           annualRateBps: app.annualRateBps,
           termMonths: app.termMonths,
-          instalmentAmount: schedule.instalment,
           status: 'PENDING_DISBURSEMENT',
-          firstDueDate: isoToUtcDate(firstDue),
-          maturityDate: isoToUtcDate(schedule.rows[schedule.rows.length - 1]!.dueDate),
           collateral: collateral?.trim() || null,
           officerId: app.officerId,
           branchId: app.branchId,
-          instalments: {
-            create: schedule.rows.map((row) => ({
-              number: row.number,
-              dueDate: isoToUtcDate(row.dueDate),
-              principalDue: row.principal,
-              interestDue: row.interest,
-            })),
-          },
+          instalments: { create: instalmentRowsFrom(quote, today) },
         },
       });
       const d = await tx.disbursement.create({
         data: {
           loanId: loan.id,
-          amount: app.amount,
+          amount: quote.netDisbursed,
           channel: 'MTN_MOMO',
           status: 'PENDING',
           idempotencyKey: `momo:${referenceId}`,
@@ -684,7 +667,7 @@ export class ApplicationsService {
         await this.providers.momo()
       ).transfer({
         referenceId,
-        amount: app.amount,
+        amount: quote.netDisbursed,
         phone,
         externalId: loanCode,
         message: `Kora Lend loan ${loanCode}`,
@@ -723,7 +706,7 @@ export class ApplicationsService {
     const d = await this.prisma.disbursement.create({
       data: {
         loanId: loan.id,
-        amount: loan.principal,
+        amount: loan.netDisbursed ?? loan.principal,
         channel: 'MTN_MOMO',
         status: 'PENDING',
         idempotencyKey: `momo:${referenceId}`,
@@ -744,7 +727,7 @@ export class ApplicationsService {
         await this.providers.momo()
       ).transfer({
         referenceId,
-        amount: loan.principal,
+        amount: loan.netDisbursed ?? loan.principal,
         phone: loan.borrower.phone,
         externalId: loan.code,
         message: `Kora Lend loan ${loan.code}`,

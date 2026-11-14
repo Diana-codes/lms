@@ -94,7 +94,8 @@ export class CollectionsService {
       JOIN "Borrower" b ON b."id" = l."borrowerId"
       JOIN LATERAL (
         SELECT MIN(i."dueDate") AS oldest,
-               SUM(i."principalDue" - i."principalPaid" + i."interestDue" - i."interestPaid") AS overdue
+               SUM(i."principalDue" - i."principalPaid" + i."interestDue" - i."interestPaid"
+                   + i."feeDue" - i."feePaid" + i."penaltyDue" - i."penaltyPaid") AS overdue
         FROM "ScheduleInstalment" i
         WHERE i."loanId" = l."id" AND i."status" <> 'PAID' AND i."supersededAt" IS NULL
           AND i."dueDate" < ${today}::date

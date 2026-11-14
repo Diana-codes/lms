@@ -185,6 +185,40 @@ export const RW_DEFAULT_TERMS: LoanTerms = {
   roundingUnit: 1,
 };
 
+/**
+ * Loans issued before products had their own terms: equal monthly
+ * instalments at the loan's annual rate, no fees, no late charges, and extra
+ * money paying the next instalments ahead. Their schedules were built this way.
+ */
+export function legacyTerms(annualRateBpsValue: number): LoanTerms {
+  return {
+    ...RW_DEFAULT_TERMS,
+    rateBps: annualRateBpsValue,
+    ratePeriod: 'YEAR',
+    moveOffNonWorkingDays: false,
+    fees: [],
+    penalty: { method: 'NONE', graceDays: 0, amount: 0, bps: 0, capBps: null },
+    overpayment: 'PAY_AHEAD',
+    payoff: { interest: 'ALL_SCHEDULED', feeBps: 0, feeVat: false },
+  };
+}
+
+/**
+ * How many instalments a term of whole months has. Terms are agreed in
+ * months whatever the frequency: 6 months repaid weekly is 26 instalments.
+ */
+export function instalmentCount(termMonths: number, frequency: Frequency): number {
+  if (frequency === 'MONTHLY') return termMonths;
+  return Math.max(1, Math.round((termMonths * PERIODS_PER_YEAR[frequency]) / 12));
+}
+
+/** An instalment expressed per month, for affordability checks. */
+export function monthlyEquivalent(instalment: bigint, frequency: Frequency): bigint {
+  if (frequency === 'MONTHLY') return instalment;
+  const ppy = BigInt(PERIODS_PER_YEAR[frequency]);
+  return (instalment * ppy + 6n) / 12n;
+}
+
 /** The nominal annual rate in basis points. */
 export function annualRateBps(terms: Pick<LoanTerms, 'rateBps' | 'ratePeriod'>): number {
   return terms.ratePeriod === 'MONTH' ? terms.rateBps * 12 : terms.rateBps;

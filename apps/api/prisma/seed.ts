@@ -25,8 +25,17 @@ import {
   isoToUtcDate,
   type IsoDate,
   kigaliDate,
+  type LoanTerms,
+  RW_DEFAULT_TERMS,
   type Schedule,
 } from '@kora/core';
+
+/** Seeded products: Rwanda defaults at the product's rate, with a 1.5% processing fee (+18% VAT). */
+const productTermsFor = (rateBps: number): LoanTerms => ({
+  ...RW_DEFAULT_TERMS,
+  rateBps,
+  fees: [{ ...RW_DEFAULT_TERMS.fees[0]!, value: 150 }],
+});
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/auth/password';
 import { PiiCrypto } from '../src/common/pii-crypto';
 import { loadEnv } from '../src/config/env';
@@ -1969,8 +1978,19 @@ async function seedCompany(passwordHash: string): Promise<void> {
         maxTermMonths: Math.max(...p.terms),
         minAmount: p.min,
         maxAmount: p.max,
-        originationFeeBps: 150,
-        latePenaltyBps: 200,
+        terms: productTermsFor(p.rateBps) as object,
+        versions: {
+          create: {
+            version: 1,
+            terms: productTermsFor(p.rateBps) as object,
+            limits: {
+              minAmount: p.min.toString(),
+              maxAmount: p.max.toString(),
+              minTermMonths: Math.min(...p.terms),
+              maxTermMonths: Math.max(...p.terms),
+            },
+          },
+        },
         autoApproveMinScore: p.autoScore,
         autoApproveMaxAmount: p.autoMax,
         secondApprovalAbove: p.secondAbove,

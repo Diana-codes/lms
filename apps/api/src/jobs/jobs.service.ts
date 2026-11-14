@@ -9,8 +9,10 @@ import {
   daysPastDue,
   dpdBucket,
   isoToUtcDate,
+  type IsoDate,
   kigaliDate,
   kigaliDayStart,
+  penaltyToCharge,
   utcDateToIso,
 } from '@kora/core';
 import { Queue, Worker } from 'bullmq';
@@ -19,7 +21,9 @@ import { AuditService } from '../audit/audit.service';
 import { ENV, type Env } from '../config/env';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { loanTerms, toLedger } from '../products/terms';
 import { SmsService } from '../sms/sms.service';
 import { CompaniesService, type CompanyInfo } from '../tenancy/companies.service';
 import { requireCompanyId } from '../tenancy/company-context';
@@ -144,9 +148,78 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     return this.money.pollPending();
   }
 
+  /**
+   * Late charges under each loan's own terms, counted up to today. Each loan
+   * is locked while it is charged, as payments lock it too. Running twice in
+   * a day charges nothing the second time.
+   */
+  async chargeLateFees(today: IsoDate = kigaliDate()) {
+    const candidates = await this.prisma.loan.findMany({
+      where: {
+        status: 'ACTIVE',
+        terms: { not: Prisma.DbNull },
+        instalments: {
+          some: {
+            supersededAt: null,
+            status: { not: 'PAID' },
+            dueDate: { lt: isoToUtcDate(today) },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    let instalments = 0;
+    let total = 0n;
+    for (const { id } of candidates) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Loan" WHERE "id" = ${id}::uuid FOR UPDATE`;
+        const loan = await tx.loan.findUniqueOrThrow({
+          where: { id },
+          include: {
+            instalments: {
+              where: { supersededAt: null },
+              orderBy: [{ scheduleVersion: 'asc' }, { number: 'asc' }],
+            },
+          },
+        });
+        const terms = loanTerms(loan);
+        if (terms.penalty.method === 'NONE') return;
+        const ledgerRows = toLedger(loan.instalments, loan.disbursedOn);
+        let chargedOnLoan = loan.instalments.reduce((s, i) => s + i.penaltyDue, 0n);
+        for (const [i, row] of loan.instalments.entries()) {
+          if (row.status === 'PAID') continue;
+          const countedTo = row.penaltyThrough ? utcDateToIso(row.penaltyThrough) : null;
+          const { charge, accruedThrough } = penaltyToCharge({
+            instalment: ledgerRows[i]!,
+            terms,
+            asOf: today,
+            accruedThrough: countedTo,
+            chargedOnLoan,
+            loanPrincipal: loan.principal,
+          });
+          if (charge === 0n && accruedThrough === countedTo) continue;
+          await tx.scheduleInstalment.update({
+            where: { id: row.id },
+            data: {
+              penaltyDue: { increment: charge },
+              penaltyThrough: accruedThrough ? isoToUtcDate(accruedThrough) : null,
+            },
+          });
+          if (charge > 0n) {
+            chargedOnLoan += charge;
+            instalments += 1;
+            total += charge;
+          }
+        }
+      });
+    }
+    return { instalments, total };
+  }
+
   /** The end-of-day run for the current company. Safe to run more than once a day. */
   async nightly() {
     const today = kigaliDate();
+    const lateCharges = await this.chargeLateFees(today);
     const loans = await this.prisma.loan.findMany({
       where: { status: 'ACTIVE' },
       select: {
@@ -228,6 +301,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       buckets,
       casesOpened: opened,
       casesClosed: closed,
+      lateCharges: { instalments: lateCharges.instalments, total: lateCharges.total.toString() },
       promisesBroken: broken.count,
       reminders,
       earlyWarnings: warnings?.flagged.length ?? null,

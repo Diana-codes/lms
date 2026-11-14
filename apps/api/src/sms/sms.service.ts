@@ -1,5 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { addDays, formatDate, formatRwf, isoToUtcDate, kigaliDate, utcDateToIso } from '@kora/core';
+import {
+  addDays,
+  formatDate,
+  formatRwf,
+  instalmentRemaining,
+  isoToUtcDate,
+  kigaliDate,
+  utcDateToIso,
+} from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
@@ -231,7 +239,7 @@ export class SmsService {
         sentById: opts.sentById,
         body: this.render('reminder.due_soon', {
           firstName: borrower.type === 'BUSINESS' ? undefined : borrower.fullName.split(' ')[0],
-          amount: inst.principalDue - inst.principalPaid + (inst.interestDue - inst.interestPaid),
+          amount: instalmentRemaining(inst),
           loanCode: inst.loan.code,
           date: formatDate(utcDateToIso(inst.dueDate), { year: false }),
           payCode,

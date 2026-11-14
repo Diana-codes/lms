@@ -137,18 +137,16 @@ export class BorrowerAppController {
     @Req() req: BorrowerRequest,
     @Query(new ZodPipe(quoteSchema)) q: z.infer<typeof quoteSchema>,
   ) {
-    const options = await this.app.applyOptions(req.borrower.borrowerId);
-    const product = options.products.find((p) => p.code === q.productCode);
-    if (!product) return { error: 'Choose a product' };
-    const quote = this.app.quote(q.amount, q.termMonths, product.annualRateBps);
+    const quote = await this.app.quote(q.productCode, q.amount, q.termMonths);
+    if (!quote) return { error: 'Choose a product' };
+    const { terms, ...figures } = quote;
     const affordability = await this.app.affordability(
       req.borrower.borrowerId,
-      q.amount,
-      q.termMonths,
-      product.annualRateBps,
+      quote.instalment,
+      terms.frequency,
       3500,
     );
-    return { ...quote, annualRateBps: product.annualRateBps, affordability };
+    return { ...figures, affordability };
   }
 
   @UseGuards(BorrowerGuard)

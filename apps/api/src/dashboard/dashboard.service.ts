@@ -6,6 +6,7 @@ import {
   collectionRateBps,
   dpdBucket,
   initials,
+  instalmentRemaining,
   isoToUtcDate,
   kigaliDate,
   par30Bps,
@@ -91,8 +92,8 @@ export class DashboardService {
           GROUP BY 1`,
         // Collection rate: of what fell due this month so far, how much has come in.
         this.prisma.$queryRaw<Array<{ due: bigint; paid: bigint }>>`
-          SELECT COALESCE(SUM(i."principalDue" + i."interestDue"), 0)::bigint AS due,
-                 COALESCE(SUM(i."principalPaid" + i."interestPaid"), 0)::bigint AS paid
+          SELECT COALESCE(SUM(i."principalDue" + i."interestDue" + i."feeDue"), 0)::bigint AS due,
+                 COALESCE(SUM(i."principalPaid" + i."interestPaid" + i."feePaid"), 0)::bigint AS paid
           FROM "ScheduleInstalment" i JOIN "Loan" l ON l."id" = i."loanId"
           WHERE i."supersededAt" IS NULL AND i."dueDate" >= ${thisMonth}::date AND i."dueDate" <= ${today}::date ${mine}`,
         this.prisma.application.findMany({
@@ -220,7 +221,7 @@ export class DashboardService {
             weekday: WEEKDAYS[i.dueDate.getUTCDay()]!,
             day: Number(due.slice(8)),
             note: i.number === count ? 'Final instalment' : `Instalment ${i.number} of ${count}`,
-            amount: i.principalDue - i.principalPaid + (i.interestDue - i.interestPaid),
+            amount: instalmentRemaining(i),
           };
         }),
       },

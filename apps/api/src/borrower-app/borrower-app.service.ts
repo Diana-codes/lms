@@ -6,9 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  addMonths,
-  buildSchedule,
-  calcInstalment,
   checkAffordability,
   formatBps,
   formatDate,
@@ -20,8 +17,10 @@ import {
   kigaliDate,
   maskNationalId,
   maskPhone,
+  monthlyEquivalent,
   PAYMENT_CHANNEL_LABELS,
   utcDateToIso,
+  type Frequency,
 } from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
@@ -30,6 +29,7 @@ import { PiiCrypto } from '../common/pii-crypto';
 import { ENV, type Env } from '../config/env';
 import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ScoringService } from '../ai/scoring.service';
+import { loanTerms, productTerms, quoteFor } from '../products/terms';
 import { MoneyService } from '../money/money.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
@@ -260,7 +260,7 @@ export class BorrowerAppService {
           },
         },
       }),
-      this.prisma.product.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+      this.prisma.product.findMany({ where: { status: 'PUBLISHED' }, orderBy: { name: 'asc' } }),
     ]);
     return {
       products: products.map((p) => ({
@@ -287,20 +287,28 @@ export class BorrowerAppService {
     };
   }
 
-  /** The figures for step 1, with the same calculator the console uses. */
-  quote(amount: bigint, termMonths: number, annualRateBps: number) {
-    const today = kigaliDate();
-    const s = buildSchedule({
-      principal: amount,
-      annualRateBps,
-      termMonths,
-      firstDueDate: addMonths(today, 1),
+  /** The figures for step 1, from the same loan engine the console uses. */
+  async quote(productCode: string, amount: bigint, termMonths: number) {
+    const product = await this.prisma.product.findFirst({
+      where: { code: productCode, status: 'PUBLISHED' },
     });
+    if (!product) return null;
+    const terms = productTerms(product);
+    const q = quoteFor({ amount, termMonths, terms, disbursedOn: kigaliDate() });
     return {
-      monthly: s.instalment,
-      totalInterest: s.totalInterest,
-      totalToRepay: s.totalPayable,
-      firstPayment: s.rows[0]!.dueDate,
+      terms,
+      annualRateBps: product.annualRateBps,
+      /** The regular instalment (weekly, fortnightly or monthly, per `frequency`). */
+      monthly: q.instalment,
+      instalment: q.instalment,
+      frequency: terms.frequency,
+      instalmentCount: q.rows.length,
+      totalInterest: q.totalInterest,
+      totalFees: q.totalFees,
+      netDisbursed: q.netDisbursed,
+      totalToRepay: q.totalRepayable,
+      aprBps: q.aprBps,
+      firstPayment: q.rows[0]!.dueDate,
     };
   }
 
@@ -311,7 +319,7 @@ export class BorrowerAppService {
     if (!PURPOSES.includes(input.purpose))
       throw new BadRequestException('Choose what the loan is for');
     const product = await this.prisma.product.findFirst({
-      where: { code: input.productCode, isActive: true },
+      where: { code: input.productCode, status: 'PUBLISHED' },
     });
     if (!product) throw new BadRequestException('Choose a product');
     if (input.amount < product.minAmount || input.amount > product.maxAmount)
@@ -487,20 +495,27 @@ export class BorrowerAppService {
   /** Whether an amount and term would pass the affordability rule, for the app to warn early. */
   async affordability(
     borrowerId: string,
-    amount: bigint,
-    termMonths: number,
-    annualRateBps: number,
+    instalment: bigint,
+    frequency: Frequency,
     limitBps: number,
   ) {
     const b = await this.prisma.borrower.findUniqueOrThrow({
       where: { id: borrowerId },
-      include: { loans: { where: { status: 'ACTIVE' }, select: { instalmentAmount: true } } },
+      include: {
+        loans: {
+          where: { status: 'ACTIVE' },
+          select: { instalmentAmount: true, terms: true, annualRateBps: true },
+        },
+      },
     });
     if (!b.monthlyIncome) return null;
     const check = checkAffordability({
       monthlyIncome: b.monthlyIncome,
-      newInstalment: calcInstalment(amount, annualRateBps, termMonths),
-      existingInstalments: b.loans.reduce((s, l) => s + l.instalmentAmount, 0n),
+      newInstalment: monthlyEquivalent(instalment, frequency),
+      existingInstalments: b.loans.reduce(
+        (s, l) => s + monthlyEquivalent(l.instalmentAmount, loanTerms(l).frequency),
+        0n,
+      ),
       limitBps,
     });
     return {

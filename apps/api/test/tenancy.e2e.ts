@@ -1,3 +1,4 @@
+import { legacyTerms } from '@kora/core';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -11,6 +12,7 @@ import { hashPassword } from '../src/auth/password';
 import { generateTotpSecret, totpCode, totpStep } from '../src/auth/totp';
 import { PiiCrypto } from '../src/common/pii-crypto';
 import { PrismaClient } from '../src/generated/prisma/client';
+import { ACCOUNTS } from '../src/ledger/accounts';
 import { ProvidersService } from '../src/providers/providers.service';
 import { runAsCompany } from '../src/tenancy/company-context';
 import { lastCodeTo, signInWithSms, smsTwoFactor, testPhone } from './sign-in';
@@ -109,6 +111,7 @@ async function createCompany(key: 'a' | 'b', aiFeatures = false): Promise<Compan
       name: 'Tenancy test loan',
       shortName: 'Test',
       kind: 'SME',
+      terms: legacyTerms(1800) as object,
       annualRateBps: 1800,
       minTermMonths: 3,
       maxTermMonths: 24,
@@ -277,7 +280,8 @@ describe('platform administration', () => {
       where: { companyId: { in: [co.a.id, co.b.id] } },
       _count: true,
     });
-    expect(accounts.map((a) => a._count)).toEqual([13, 13]);
+    const chart = Object.keys(ACCOUNTS).length;
+    expect(accounts.map((a) => a._count)).toEqual([chart, chart]);
   });
 });
 

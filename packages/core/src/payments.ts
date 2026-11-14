@@ -8,6 +8,11 @@ export interface InstalmentBalance {
   interestDue: Rwf;
   principalPaid: Rwf;
   interestPaid: Rwf;
+  /** Fees collected with the instalment and late charges on it (loans with product terms). */
+  feeDue?: Rwf;
+  feePaid?: Rwf;
+  penaltyDue?: Rwf;
+  penaltyPaid?: Rwf;
 }
 
 export interface InstalmentAllocation {
@@ -26,8 +31,15 @@ export interface PaymentAllocation {
   unallocated: Rwf;
 }
 
+/** Everything still owed on an instalment: principal, interest, fees and late charges. */
 export function instalmentRemaining(i: InstalmentBalance): Rwf {
-  return i.principalDue - i.principalPaid + (i.interestDue - i.interestPaid);
+  return (
+    i.principalDue -
+    i.principalPaid +
+    (i.interestDue - i.interestPaid) +
+    ((i.feeDue ?? 0n) - (i.feePaid ?? 0n)) +
+    ((i.penaltyDue ?? 0n) - (i.penaltyPaid ?? 0n))
+  );
 }
 
 /**
@@ -94,7 +106,14 @@ export function instalmentState(
 ): InstalmentState {
   if (instalmentRemaining(inst) === 0n) return 'PAID';
   if (daysBetween(inst.dueDate, today) > 0) return 'OVERDUE';
-  if (inst.principalPaid > 0n || inst.interestPaid > 0n) return 'PARTIAL';
+  if (
+    inst.principalPaid > 0n ||
+    inst.interestPaid > 0n ||
+    (inst.feePaid ?? 0n) > 0n ||
+    (inst.penaltyPaid ?? 0n) > 0n
+  ) {
+    return 'PARTIAL';
+  }
   return isFirstUnpaid ? 'DUE_NEXT' : 'UPCOMING';
 }
 

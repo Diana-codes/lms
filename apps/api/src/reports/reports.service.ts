@@ -90,8 +90,8 @@ export class ReportsService {
       }),
       // Collection rate per officer: of what fell due in the period, how much has been paid.
       this.prisma.$queryRaw<Array<{ officerId: string | null; due: bigint; paid: bigint }>>`
-        SELECT l."officerId", SUM(i."principalDue" + i."interestDue")::bigint AS due,
-               SUM(i."principalPaid" + i."interestPaid")::bigint AS paid
+        SELECT l."officerId", SUM(i."principalDue" + i."interestDue" + i."feeDue")::bigint AS due,
+               SUM(i."principalPaid" + i."interestPaid" + i."feePaid")::bigint AS paid
         FROM "ScheduleInstalment" i JOIN "Loan" l ON l."id" = i."loanId"
         WHERE i."supersededAt" IS NULL AND i."dueDate" >= ${periodStart}::date AND i."dueDate" <= ${today}::date
         GROUP BY l."officerId"`,

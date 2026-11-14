@@ -1,7 +1,14 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { addMonths, buildSchedule, calcInstalment, kigaliDate, monthlyInterest } from '@kora/core';
+import {
+  addMonths,
+  buildSchedule,
+  calcInstalment,
+  kigaliDate,
+  monthlyInterest,
+  legacyTerms,
+} from '@kora/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -102,6 +109,7 @@ beforeAll(async () => {
       name: 'E2E working capital',
       shortName: 'E2E',
       kind: 'SME',
+      terms: legacyTerms(1800) as object,
       annualRateBps: 1800,
       minTermMonths: 3,
       maxTermMonths: 36,
@@ -119,7 +127,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.product.updateMany({ where: { code: PRODUCT }, data: { isActive: false } });
+  await prisma.product.updateMany({ where: { code: PRODUCT }, data: { status: 'RETIRED' } });
   await prisma.user.updateMany({
     where: { email: { startsWith: 'e2e-' } },
     data: { isActive: false },

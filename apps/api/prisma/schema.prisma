@@ -69,6 +69,7 @@ model Company {
   kycDocuments       KycDocument[]
   consents           Consent[]
   products           Product[]
+  productVersions    ProductVersion[]
   applications       Application[]
   creditScores       CreditScore[]
   loans              Loan[]
@@ -485,24 +486,32 @@ enum ProductKind {
 }
 
 model Product {
-  id                String      @id @default(uuid(7)) @db.Uuid
-  companyId         String      @default(dbgenerated("current_company_id()")) @db.Uuid
-  company           Company     @relation(fields: [companyId], references: [id])
-  code              String
-  name              String
+  id               String        @id @default(uuid(7)) @db.Uuid
+  companyId        String        @default(dbgenerated("current_company_id()")) @db.Uuid
+  company          Company       @relation(fields: [companyId], references: [id])
+  code             String
+  name             String
   /// Short name used on pipeline cards, e.g. "Agri input".
-  shortName         String
-  kind              ProductKind
+  shortName        String
+  kind             ProductKind
   /// Default annual nominal rate in basis points (17% = 1700).
-  annualRateBps     Int
-  minTermMonths     Int
-  maxTermMonths     Int
-  minAmount         BigInt
-  maxAmount         BigInt
-  originationFeeBps Int         @default(0)
-  latePenaltyBps    Int         @default(0)
+  annualRateBps    Int
+  minTermMonths    Int
+  maxTermMonths    Int
+  minAmount        BigInt
+  maxAmount        BigInt
+  /// The loan engine's rules for this product (LoanTerms in @kora/core):
+  /// interest method, frequency, fees, late charges, payment order and so on.
+  /// `annualRateBps` mirrors its rate as a nominal annual figure.
+  terms            Json
+  /// Bumped on every change to `terms`; each version is kept in ProductVersion.
+  version          Int           @default(1)
+  /// Customers can apply, and staff can issue loans, only while published.
+  /// Retired products keep their loans but take no new applications.
+  status           ProductStatus @default(PUBLISHED)
+  description      String?
   /// Instalments may be at most this share of verified income (35% = 3500).
-  affordabilityBps  Int         @default(3500)
+  affordabilityBps Int           @default(3500)
 
   /// Auto-approve policy. Null means every application needs an officer.
   autoApproveMinScore  Int?
@@ -510,15 +519,39 @@ model Product {
   /// Approvals above this amount need a second approver.
   secondApprovalAbove  BigInt?
 
-  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   applications Application[]
   loans        Loan[]
   offers       LoanOffer[]
+  versions     ProductVersion[]
 
   @@unique([companyId, code])
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+/// Every set of terms a product has had. Loans record the version they were issued under.
+model ProductVersion {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  companyId   String   @default(dbgenerated("current_company_id()")) @db.Uuid
+  company     Company  @relation(fields: [companyId], references: [id])
+  productId   String   @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  version     Int
+  terms       Json
+  /// Product limits at the time, for the record.
+  limits      Json
+  createdAt   DateTime @default(now())
+  createdById String?  @db.Uuid
+
+  @@unique([productId, version])
+  @@index([companyId])
 }
 
 enum ApplicationStage {
@@ -650,32 +683,46 @@ enum LoanStatus {
 }
 
 model Loan {
-  id               String     @id @default(uuid(7)) @db.Uuid
-  companyId        String     @default(dbgenerated("current_company_id()")) @db.Uuid
-  company          Company    @relation(fields: [companyId], references: [id])
+  id                  String     @id @default(uuid(7)) @db.Uuid
+  companyId           String     @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company    @relation(fields: [companyId], references: [id])
   /// Human reference, e.g. LN-0418-2026.
-  code             String
-  borrowerId       String     @db.Uuid
-  applicationId    String?    @unique @db.Uuid
-  productId        String     @db.Uuid
-  principal        BigInt
-  annualRateBps    Int
-  termMonths       Int
+  code                String
+  borrowerId          String     @db.Uuid
+  applicationId       String?    @unique @db.Uuid
+  productId           String     @db.Uuid
+  principal           BigInt
+  annualRateBps       Int
+  termMonths          Int
   /// The level instalment from the schedule calculator in @kora/core.
-  instalmentAmount BigInt
-  status           LoanStatus @default(PENDING_DISBURSEMENT)
-  disbursedOn      DateTime?  @db.Date
-  firstDueDate     DateTime   @db.Date
-  maturityDate     DateTime   @db.Date
-  closedOn         DateTime?  @db.Date
+  instalmentAmount    BigInt
+  status              LoanStatus @default(PENDING_DISBURSEMENT)
+  disbursedOn         DateTime?  @db.Date
+  firstDueDate        DateTime   @db.Date
+  maturityDate        DateTime   @db.Date
+  closedOn            DateTime?  @db.Date
   /// What secures the loan, if anything, e.g. "Equipment lien".
-  collateral       String?
+  collateral          String?
   /// Bumped on each restructure. Instalments from older versions are kept for history.
-  scheduleVersion  Int        @default(1)
-  officerId        String?    @db.Uuid
-  branchId         String?    @db.Uuid
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  scheduleVersion     Int        @default(1)
+  /// The product terms the loan was issued under (LoanTerms), copied so later
+  /// product changes never alter it. Null for loans issued before products
+  /// had terms: those follow legacyTerms() in @kora/core.
+  terms               Json?
+  productVersion      Int?
+  /// Paid out to the borrower after fees taken at disbursement.
+  netDisbursed        BigInt?
+  /// The APR disclosed in the Key Facts Statement, basis points.
+  aprBps              Int?
+  /// Fees collected with instalments (VAT included), and how they split, so
+  /// each collection posts to fee income, VAT payable or third parties exactly.
+  spreadFeeTotal      BigInt     @default(0)
+  spreadFeeVat        BigInt     @default(0)
+  spreadFeeThirdParty BigInt     @default(0)
+  officerId           String?    @db.Uuid
+  branchId            String?    @db.Uuid
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   // No balance columns here on purpose: outstanding principal and interest
   // are derived from LedgerEntry.
@@ -724,6 +771,16 @@ model ScheduleInstalment {
   /// database transaction as the ledger entries that paid it.
   principalPaid   BigInt           @default(0)
   interestPaid    BigInt           @default(0)
+  /// Fees collected with this instalment (SPREAD fees, VAT included).
+  feeDue          BigInt           @default(0)
+  feePaid         BigInt           @default(0)
+  /// Late charges added by the nightly run, and how far they have been counted.
+  penaltyDue      BigInt           @default(0)
+  penaltyPaid     BigInt           @default(0)
+  penaltyThrough  DateTime?        @db.Date
+  /// The day this instalment's interest period began. Null on older rows:
+  /// the previous due date (or disbursement) is used.
+  periodStart     DateTime?        @db.Date
   status          InstalmentStatus @default(PENDING)
   paidAt          DateTime?
   /// Set when a restructure replaces this instalment.

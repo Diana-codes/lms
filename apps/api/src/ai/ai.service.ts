@@ -53,11 +53,11 @@ const AnswerSchema = z.object({
 
 /** What the reporting views hold, for the model writing SQL. */
 const REPORTING_SCHEMA = `PostgreSQL views (schema "reporting"; refer to them unqualified). Money columns end in _rwf and are whole Rwandan francs.
-products(code, name, kind, annual_rate_pct, min_term_months, max_term_months, is_active)
+products(code, name, kind, annual_rate_pct, min_term_months, max_term_months, status ['DRAFT','PUBLISHED','RETIRED'], interest_method, frequency)
 officers(officer_id, officer, role, branch)
 borrowers(borrower_code, type, gender, district, sector, kyc_status, risk_level, customer_since, monthly_income_rwf, business_sector, officer_id)
 loans(loan_code, borrower_code, product, product_kind, status ['PENDING_DISBURSEMENT','ACTIVE','REPAID','WRITTEN_OFF'], principal_rwf, annual_rate_pct, term_months, instalment_rwf, disbursed_on, maturity_date, closed_on, officer_id, district, outstanding_principal_rwf, days_past_due)
-instalments(loan_code, number, due_date, principal_due_rwf, interest_due_rwf, principal_paid_rwf, interest_paid_rwf, status ['PENDING','PARTIAL','PAID'], paid_on)
+instalments(loan_code, number, due_date, principal_due_rwf, interest_due_rwf, principal_paid_rwf, interest_paid_rwf, status ['PENDING','PARTIAL','PAID'], paid_on, fee_due_rwf, fee_paid_rwf, penalty_due_rwf, penalty_paid_rwf)
 payments(loan_code, amount_rwf, channel ['MTN_MOMO','AIRTEL_MONEY','BANK_TRANSFER','CASH'], status, received_on)
 applications(application_code, borrower_code, product, amount_rwf, term_months, stage ['NEW','UNDER_REVIEW','CREDIT_CHECK','APPROVED','DISBURSED','DECLINED','WITHDRAWN'], channel, submitted_on, decided_on, officer_id, district)
 collection_cases(loan_code, status, next_action, opened_on, closed_on, officer_id)

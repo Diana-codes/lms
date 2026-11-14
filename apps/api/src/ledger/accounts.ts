@@ -13,6 +13,9 @@ export const ACCOUNTS = {
   INTEREST_RECEIVABLE: { code: '1110', name: 'Interest receivable', type: 'ASSET' },
   FEES_RECEIVABLE: { code: '1120', name: 'Fees receivable', type: 'ASSET' },
   BORROWER_CREDIT: { code: '2000', name: 'Borrower overpayments', type: 'LIABILITY' },
+  VAT_PAYABLE: { code: '2100', name: 'VAT payable', type: 'LIABILITY' },
+  /** Insurance premiums and other charges collected on someone else's behalf. */
+  THIRD_PARTY_PAYABLE: { code: '2200', name: 'Collected for third parties', type: 'LIABILITY' },
   FUNDING: { code: '3000', name: 'Lending capital', type: 'EQUITY' },
   INTEREST_INCOME: { code: '4000', name: 'Interest income', type: 'INCOME' },
   FEE_INCOME: { code: '4010', name: 'Fee income', type: 'INCOME' },

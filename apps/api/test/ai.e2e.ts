@@ -1,3 +1,4 @@
+import { legacyTerms } from '@kora/core';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -150,6 +151,7 @@ beforeAll(async () => {
       name: 'E2E scored product',
       shortName: 'E2E',
       kind: 'SME',
+      terms: legacyTerms(1700) as object,
       annualRateBps: 1700,
       minTermMonths: 3,
       maxTermMonths: 36,
@@ -179,7 +181,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.product.updateMany({ where: { code: PRODUCT }, data: { isActive: false } });
+  await prisma.product.updateMany({ where: { code: PRODUCT }, data: { status: 'RETIRED' } });
   await prisma.user.updateMany({
     where: { email: { startsWith: 'e2e-' } },
     data: { isActive: false },

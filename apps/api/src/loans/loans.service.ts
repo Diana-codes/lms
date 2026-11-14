@@ -18,7 +18,9 @@ import {
   isoToUtcDate,
   kigaliDate,
   maskPhone,
+  owingTotal,
   PAYMENT_CHANNEL_LABELS,
+  payoffQuote,
   quoteExtendTerm,
   quotePaymentHoliday,
   scoreLabel,
@@ -37,6 +39,7 @@ import type { LoanStatus, PaymentChannel, RestructureType } from '../generated/p
 import { ACCOUNTS } from '../ledger/accounts';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { loanTerms, toLedger } from '../products/terms';
 import { PaymentPoster } from './payment-poster';
 
 export const LOANS_PAGE_SIZE = 25;
@@ -240,9 +243,7 @@ export class LoansService {
     const outstanding = await this.ledger.outstandingPrincipal(loan.id);
 
     // The schedule, with the principal balance left after each instalment.
-    const firstUnpaid = loan.instalments.find(
-      (i) => i.principalDue - i.principalPaid + (i.interestDue - i.interestPaid) > 0n,
-    );
+    const firstUnpaid = loan.instalments.find((i) => instalmentRemaining(i) > 0n);
     let balance = loan.instalments.reduce((sum, i) => sum + i.principalDue, 0n);
     const schedule = loan.instalments.map((i) => {
       balance -= i.principalDue;
@@ -252,8 +253,10 @@ export class LoansService {
         dueDate,
         principal: i.principalDue,
         interest: i.interestDue,
-        payment: i.principalDue + i.interestDue,
-        paid: i.principalPaid + i.interestPaid,
+        fee: i.feeDue,
+        penalty: i.penaltyDue,
+        payment: i.principalDue + i.interestDue + i.feeDue,
+        paid: i.principalPaid + i.interestPaid + i.feePaid + i.penaltyPaid,
         remaining: instalmentRemaining(i),
         balanceAfter: balance,
         state: instalmentState({ ...i, dueDate }, today, i.id === firstUnpaid?.id),
@@ -272,6 +275,11 @@ export class LoansService {
     const score = loan.borrower.creditScores[0] ?? null;
     const others = loan.borrower.loans.filter((l) => l.id !== loan.id);
     const pending = loan.restructures.find((r) => r.status === 'PENDING') ?? null;
+
+    // What it takes to close the loan today, under its own payoff rule.
+    const terms = loanTerms(loan);
+    const live = toLedger(loan.instalments, loan.disbursedOn).filter((i) => owingTotal(i) > 0n);
+    const payoff = loan.status === 'ACTIVE' ? payoffQuote(live, terms, today) : null;
 
     const statusLabel =
       loan.status === 'REPAID'
@@ -383,11 +391,37 @@ export class LoansService {
         maturityDate: utcDateToIso(loan.maturityDate),
         channel: disbursement ? PAYMENT_CHANNEL_LABELS[disbursement.channel] : null,
         collateral: loan.collateral,
+        interestMethod: terms.interestMethod,
+        frequency: terms.frequency,
+        rateBps: terms.rateBps,
+        ratePeriod: terms.ratePeriod,
+        aprBps: loan.aprBps,
+        netDisbursed: loan.netDisbursed,
+        productVersion: loan.productVersion,
+        fees: terms.fees.map((f) => ({
+          name: f.name,
+          basis: f.basis,
+          value: f.value,
+          timing: f.timing,
+        })),
+        penalty: terms.penalty,
+        overpayment: terms.overpayment,
+        payoffInterest: terms.payoff.interest,
       },
       figures: {
         outstandingPrincipal: outstanding,
         totalRepaid,
         totalRemaining: totalRemaining(loan.instalments),
+        payoff: payoff
+          ? {
+              total: payoff.total,
+              principal: payoff.principal + payoff.arrears.PRINCIPAL,
+              interest: payoff.currentInterest + payoff.laterInterest + payoff.arrears.INTEREST,
+              fees: payoff.arrears.FEE + payoff.fee + payoff.feeVat,
+              penalties: payoff.arrears.PENALTY,
+              waived: payoff.waived,
+            }
+          : null,
         repaidPercent: Number((principalRepaid * 100n + loan.principal / 2n) / loan.principal),
         paidCount,
         lateCount,
@@ -507,6 +541,12 @@ export class LoansService {
     if (!loan) throw new NotFoundException(`No loan ${code}`);
     if (loan.status !== 'ACTIVE')
       throw new ConflictException('Only an active loan can be restructured');
+    const terms = loanTerms(loan);
+    if (terms.interestMethod !== 'DECLINING_EQUAL_INSTALMENT' || terms.frequency !== 'MONTHLY') {
+      throw new ConflictException(
+        'Restructuring is available for monthly equal-instalment loans only, for now',
+      );
+    }
     if (loan.restructures.length) {
       throw new ConflictException('A restructure request is already waiting for approval');
     }
@@ -661,14 +701,20 @@ export class LoansService {
             where: { id: { in: unpaid.map((i) => i.id) } },
             data: { supersededAt: new Date() },
           });
+          // Unpaid late charges and fees are not forgiven: they move to the first new instalment.
+          const carriedPenalty = unpaid.reduce((s, i) => s + i.penaltyDue - i.penaltyPaid, 0n);
+          const carriedFee = unpaid.reduce((s, i) => s + i.feeDue - i.feePaid, 0n);
           await tx.scheduleInstalment.createMany({
-            data: schedule.rows.map((row) => ({
+            data: schedule.rows.map((row, i) => ({
               loanId: loan.id,
               scheduleVersion: version,
               number: paid.length + row.number,
+              periodStart: isoToUtcDate(i === 0 ? today : schedule.rows[i - 1]!.dueDate),
               dueDate: isoToUtcDate(row.dueDate),
               principalDue: row.principal,
               interestDue: row.interest,
+              feeDue: i === 0 ? carriedFee : 0n,
+              penaltyDue: i === 0 ? carriedPenalty : 0n,
             })),
           });
           await tx.loan.update({

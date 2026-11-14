@@ -1,8 +1,9 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { addMonths, calcInstalment, daysBetween, kigaliDate, utcDateToIso } from '@kora/core';
+import { addMonths, daysBetween, kigaliDate, monthlyEquivalent, utcDateToIso } from '@kora/core';
 import type { Prisma, ScoreRecommendation } from '../generated/prisma/client';
 import { ENV, type Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { applicationQuote, productTerms } from '../products/terms';
 
 interface MlReason {
   kind: 'why' | 'watch';
@@ -102,7 +103,9 @@ export class ScoringService {
         monthly_income:
           app.borrower.monthlyIncome != null ? Number(app.borrower.monthlyIncome) : null,
         stated_income: app.statedMonthlyIncome != null ? Number(app.statedMonthlyIncome) : null,
-        new_instalment: Number(calcInstalment(app.amount, app.annualRateBps, app.termMonths)),
+        new_instalment: Number(
+          monthlyEquivalent(applicationQuote(app).instalment, productTerms(app.product).frequency),
+        ),
         existing_instalments: Number(
           app.borrower.loans
             .filter((l) => l.status === 'ACTIVE')

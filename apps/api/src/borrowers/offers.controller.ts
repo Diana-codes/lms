@@ -62,7 +62,7 @@ export class OffersController {
       throw new BadRequestException('An offer is already open for this borrower');
     const product =
       b.loans[0]?.product ??
-      (await this.prisma.product.findFirstOrThrow({ where: { isActive: true, kind: 'SME' } }));
+      (await this.prisma.product.findFirstOrThrow({ where: { status: 'PUBLISHED', kind: 'SME' } }));
     const offer = await this.prisma.loanOffer.create({
       data: {
         borrowerId: b.id,

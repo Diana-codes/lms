@@ -36,6 +36,7 @@ import { ReportsService } from './reports/reports.service';
 import { SmsController } from './sms/sms.controller';
 import { SmsService } from './sms/sms.service';
 import { ProductsController } from './products/products.controller';
+import { ProductsService } from './products/products.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { SystemController } from './system/system.controller';
 import { PlatformModule } from './platform/platform.module';
@@ -96,6 +97,7 @@ import { UsersController } from './users/users.controller';
     ScoringService,
     StaffService,
     CompanySettingsService,
+    ProductsService,
   ],
 })
 export class AppModule {}
