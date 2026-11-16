@@ -79,7 +79,12 @@ export default async function CompaniesPage() {
                     <div className="flex flex-wrap gap-1.5">
                       {c.aiFeatures ? <Pill tone="ai">AI</Pill> : null}
                       {c.autoApprove ? <Pill tone="info">Bulk approve</Pill> : null}
-                      {!c.aiFeatures && !c.autoApprove ? (
+                      {c.staffTwoFactor ? <Pill tone="warning">Staff 2FA</Pill> : null}
+                      {c.borrowerOtp ? <Pill tone="warning">Borrower OTP</Pill> : null}
+                      {!c.aiFeatures &&
+                      !c.autoApprove &&
+                      !c.staffTwoFactor &&
+                      !c.borrowerOtp ? (
                         <span className="text-xs text-ink-muted">None</span>
                       ) : null}
                     </div>

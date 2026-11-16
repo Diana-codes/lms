@@ -10,6 +10,7 @@ import { hashPassword } from '../src/auth/password';
 import { ACCOUNTS } from '../src/ledger/accounts';
 import { MomoSimulator } from '../src/providers/momo.simulator';
 import type { PrismaClient } from '../src/generated/prisma/client';
+import { CompaniesService } from '../src/tenancy/companies.service';
 import { signInWithSms, smsTwoFactor } from './sign-in';
 import { testPrisma, byCode, E2E_COMPANY_ID } from './test-db';
 
@@ -95,6 +96,12 @@ beforeAll(async () => {
   setupApp(app);
   await app.init();
   prisma = testPrisma();
+  // These tests cover the SMS OTP path; the company flag defaults to off.
+  await prisma.company.update({
+    where: { id: E2E_COMPANY_ID },
+    data: { borrowerOtp: true },
+  });
+  app.get(CompaniesService).invalidate();
   for (const account of Object.values(ACCOUNTS))
     await prisma.ledgerAccount.upsert({
       where: byCode(account.code),
@@ -150,12 +157,34 @@ describe('sign-in by phone', () => {
       .post('/app/auth/request-code')
       .send({ phone: phone() })
       .expect(200);
+    expect(unknown.body.otpRequired).toBe(true);
     expect(unknown.body.sent).toBe(true);
     expect(unknown.body.phone).toMatch(/^\+250 78• ••• \d{3}$/);
     expect(
       await prisma.otpChallenge.count({ where: { phone: `+250${unknown.body.phone.slice(-3)}` } }),
     ).toBe(0);
     await http().post('/app/auth/request-code').send({ phone: '12345' }).expect(400);
+  });
+
+  it('signs in with the phone alone when borrower OTP is off', async () => {
+    await prisma.company.update({
+      where: { id: E2E_COMPANY_ID },
+      data: { borrowerOtp: false },
+    });
+    app.get(CompaniesService).invalidate();
+    const number = phone();
+    await borrowerWithLoan(number);
+    const res = await http().post('/app/auth/request-code').send({ phone: number }).expect(200);
+    expect(res.body.otpRequired).toBe(false);
+    expect(res.body.accessToken).toBeTruthy();
+    await http().get('/app/home').set(bearer(res.body.accessToken)).expect(200);
+    await http().post('/app/auth/request-code').send({ phone: phone() }).expect(400);
+    // Put OTP back on for the remaining tests.
+    await prisma.company.update({
+      where: { id: E2E_COMPANY_ID },
+      data: { borrowerOtp: true },
+    });
+    app.get(CompaniesService).invalidate();
   });
 
   it('signs in with the texted code, and the code works once', async () => {

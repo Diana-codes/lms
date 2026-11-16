@@ -40,15 +40,53 @@ export function disbursementLines(principal: bigint, cash: AccountKey): PostingL
   ]);
 }
 
-/** A repayment: cash comes in, split between principal and interest income. */
+/**
+ * Interest falling due: the receivable goes up and income is recognised.
+ * Cash collection later clears the receivable (see repaymentLines).
+ */
+export function interestAccrualLines(interest: bigint): PostingLine[] {
+  return balancedLines([
+    { account: 'INTEREST_RECEIVABLE', direction: 'DEBIT', amount: interest },
+    { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: interest },
+  ]);
+}
+
+/**
+ * Move the loan-loss allowance toward the BNR 59/2023 required level.
+ * Positive `delta` increases the allowance (expense); negative releases it.
+ */
+export function provisionAdjustmentLines(delta: bigint): PostingLine[] {
+  if (delta === 0n) throw new UnbalancedPostingError('No provision adjustment');
+  if (delta > 0n) {
+    return balancedLines([
+      { account: 'PROVISION_EXPENSE', direction: 'DEBIT', amount: delta },
+      { account: 'LOAN_LOSS_ALLOWANCE', direction: 'CREDIT', amount: delta },
+    ]);
+  }
+  const release = -delta;
+  return balancedLines([
+    { account: 'LOAN_LOSS_ALLOWANCE', direction: 'DEBIT', amount: release },
+    { account: 'PROVISION_EXPENSE', direction: 'CREDIT', amount: release },
+  ]);
+}
+
+/**
+ * A repayment: cash comes in. Interest that was already accrued clears the
+ * receivable; any interest not yet accrued (paid early, or never accrued
+ * while suspended) is recognised as income on collection.
+ */
 export function repaymentLines(
   principal: bigint,
   interest: bigint,
   cash: AccountKey,
+  accruedInterest = interest,
 ): PostingLine[] {
+  const fromReceivable = accruedInterest > interest ? interest : accruedInterest;
+  const asIncome = interest - fromReceivable;
   return balancedLines([
     { account: cash, direction: 'DEBIT', amount: principal + interest },
     { account: 'LOANS_PRINCIPAL', direction: 'CREDIT', amount: principal },
-    { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: interest },
+    { account: 'INTEREST_RECEIVABLE', direction: 'CREDIT', amount: fromReceivable },
+    { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: asIncome },
   ]);
 }

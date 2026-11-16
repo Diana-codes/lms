@@ -13,6 +13,8 @@ test.describe('collections', () => {
     await signIn(page, STAFF.collections);
     await page.getByRole('link', { name: /^Collections/ }).click();
     await expect(page.getByRole('heading', { name: 'Collections', level: 1 })).toBeVisible();
+    const early = page.getByRole('region', { name: 'AI early warning' });
+    await expect(early.getByText(/Early warning:/)).toBeVisible({ timeout: 15_000 });
     const metrics = page.getByRole('region', { name: 'Collection metrics' });
     await expect(metrics.getByText('121', { exact: true })).toBeVisible();
 
@@ -26,7 +28,7 @@ test.describe('collections', () => {
 
     const panel = page.getByRole('complementary', { name: 'Selected account' });
     await expect(panel.getByText('LN-0377-2026 · +250 72• ••• 118')).toBeVisible();
-    await expect(panel.getByText('Call — no answer')).toBeVisible();
+    await expect(panel.getByText('Call — no answer', { exact: true })).toBeVisible();
     // Without Claude configured the AI box says so; nothing breaks.
     await expect(panel.getByText(/AI service is not configured/)).toBeVisible();
 
@@ -97,6 +99,9 @@ test.describe('reports', () => {
     const ask = page.getByRole('region', { name: 'Ask your data' });
     await expect(ask.getByLabel('Ask your data')).toBeDisabled();
     await expect(ask.getByLabel('Ask your data')).toHaveAttribute('placeholder', /not configured/);
+    await expect(page.getByRole('heading', { name: 'Score fairness check' })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('officers are told reports are for managers', async ({ page }) => {

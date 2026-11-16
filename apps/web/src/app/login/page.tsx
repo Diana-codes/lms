@@ -52,7 +52,12 @@ export default async function LoginPage({
         </div>
         <p className="m-0 text-xs text-forest-muted">
           Staff access only. Sign-ins are logged.
-          {company ? ` Runs on ${PRODUCT_NAME}.` : null}
+          {company ? ` Runs on ${PRODUCT_NAME}.` : null}{' '}
+          {company ? (
+            <a href="/portal" className="text-lime underline-offset-2 hover:underline">
+              Borrower portal
+            </a>
+          ) : null}
         </p>
       </section>
       <section className="flex flex-[2_1_420px] items-center justify-center p-6 md:p-12">

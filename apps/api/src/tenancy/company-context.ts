@@ -30,11 +30,22 @@ export interface CompanyFeatures {
   ai: boolean;
   /** The "approve low-risk" bulk action for policy-eligible applications. */
   autoApprove: boolean;
+  /** Staff SMS/authenticator second factor at sign-in. */
+  staffTwoFactor: boolean;
+  /** Borrower phone one-time code for the app and portal. */
+  borrowerOtp: boolean;
 }
+
+const FEATURES_OFF: CompanyFeatures = {
+  ai: false,
+  autoApprove: false,
+  staffTwoFactor: false,
+  borrowerOtp: false,
+};
 
 /** The current company's optional features; all off when no company is known. */
 export function companyFeatures(): CompanyFeatures {
-  return storage.getStore()?.features ?? { ai: false, autoApprove: false };
+  return storage.getStore()?.features ?? FEATURES_OFF;
 }
 
 const storage = new AsyncLocalStorage<CompanyContext>();

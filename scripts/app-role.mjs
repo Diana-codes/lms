@@ -66,12 +66,13 @@ try {
   }
   // Companies are created by the platform, never through a company login.
   await client.query(`REVOKE INSERT, DELETE ON TABLE "Company" FROM ${user}`);
-  // A company may change its branding and webhook secret, nothing else about
-  // itself: status, features, name and time zone are the platform's.
+  // A company may change its branding, auth flags and webhook secret. Status,
+  // AI/bulk-approve, name and time zone stay with the platform.
   await client.query(`REVOKE UPDATE ON TABLE "Company" FROM ${user}`);
   await client.query(
     `GRANT UPDATE ("brandName", "brandColor", "accentColor", "logoUrl", "defaultLanguage", ` +
-      `"supportPhone", "supportEmail", "address", ` +
+      `"supportPhone", "supportEmail", "address", "creditClassProfile", ` +
+      `"staffTwoFactor", "borrowerOtp", ` +
       `"webhookTokenHash", "updatedAt") ON TABLE "Company" TO ${user}`,
   );
   // The reporting context: the API registers which company a reporting

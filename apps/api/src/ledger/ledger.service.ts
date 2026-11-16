@@ -45,9 +45,12 @@ export class LedgerService {
           entries: {
             create: lines.map((line) => ({
               accountId: accounts.get(line.account)!,
-              // Only the loan's receivable carries the loan id, so a loan's
-              // balance is a plain sum over its entries.
-              loanId: line.account === 'LOANS_PRINCIPAL' ? loanId : null,
+              // Principal and interest receivables carry the loan id so a
+              // loan's balances are plain sums over its entries.
+              loanId:
+                line.account === 'LOANS_PRINCIPAL' || line.account === 'INTEREST_RECEIVABLE'
+                  ? loanId
+                  : null,
               direction: line.direction,
               amount: line.amount,
             })),
@@ -69,11 +72,40 @@ export class LedgerService {
     loanId: string,
     db: Prisma.TransactionClient = this.prisma,
   ): Promise<bigint> {
+    return this.loanBalance(loanId, ACCOUNTS.LOANS_PRINCIPAL.code, db);
+  }
+
+  /** Accrued interest not yet collected on one loan. */
+  async outstandingInterestReceivable(
+    loanId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<bigint> {
+    return this.loanBalance(loanId, ACCOUNTS.INTEREST_RECEIVABLE.code, db);
+  }
+
+  /**
+   * Credit balance on the loan-loss allowance (contra-asset). The amount
+   * already set aside against the portfolio under BNR 59/2023.
+   */
+  async loanLossAllowance(db: Prisma.TransactionClient = this.prisma): Promise<bigint> {
+    const rows = await db.$queryRaw<Array<{ balance: bigint }>>`
+      SELECT COALESCE(SUM(CASE WHEN e."direction" = 'CREDIT' THEN e."amount" ELSE -e."amount" END), 0)::bigint AS balance
+      FROM "LedgerEntry" e
+      JOIN "LedgerAccount" a ON a."id" = e."accountId"
+      WHERE a."code" = ${ACCOUNTS.LOAN_LOSS_ALLOWANCE.code}`;
+    return rows[0]?.balance ?? 0n;
+  }
+
+  private async loanBalance(
+    loanId: string,
+    accountCode: string,
+    db: Prisma.TransactionClient,
+  ): Promise<bigint> {
     const rows = await db.$queryRaw<Array<{ outstanding: bigint }>>`
       SELECT COALESCE(SUM(CASE WHEN e."direction" = 'DEBIT' THEN e."amount" ELSE -e."amount" END), 0)::bigint AS outstanding
       FROM "LedgerEntry" e
       JOIN "LedgerAccount" a ON a."id" = e."accountId"
-      WHERE e."loanId" = ${loanId}::uuid AND a."code" = ${ACCOUNTS.LOANS_PRINCIPAL.code}`;
+      WHERE e."loanId" = ${loanId}::uuid AND a."code" = ${accountCode}`;
     return rows[0]?.outstanding ?? 0n;
   }
 

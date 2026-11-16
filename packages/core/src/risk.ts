@@ -28,6 +28,18 @@ export function dpdBucket(dpd: number): DpdBucket {
 }
 
 /**
+ * Days past due at which interest stops being recognised as income (BNR /
+ * IFRS 9 practice for non-performing loans). Accrual resumes when the loan
+ * cures below this threshold.
+ */
+export const INTEREST_ACCRUAL_SUSPEND_DPD = 91;
+
+/** True when further interest accruals must not be posted. */
+export function interestAccrualSuspended(dpd: number): boolean {
+  return dpd >= INTEREST_ACCRUAL_SUSPEND_DPD;
+}
+
+/**
  * PAR 30 in basis points: outstanding principal of loans with DPD > 30,
  * divided by total outstanding principal.
  */

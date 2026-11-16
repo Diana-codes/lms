@@ -215,22 +215,26 @@ export function ReportView({ report }: { report: Report }) {
               Share of <Money amount={total} compact /> outstanding
             </span>
           </div>
-          {report.products.map((prod, i) => (
-            <div key={prod.name} className="flex flex-col gap-1.5">
-              <div className="flex justify-between gap-2 text-sm">
-                <span className="font-medium">{prod.name}</span>
-                <span className="text-ink-muted tabular-nums">
-                  <Money amount={prod.outstanding} compact /> · {formatBps(prod.shareBps, 0)}
-                </span>
+          {report.products.length === 0 ? (
+            <p className="m-0 text-sm text-ink-muted">No outstanding loans in this period.</p>
+          ) : (
+            report.products.map((prod, i) => (
+              <div key={prod.name} className="flex flex-col gap-1.5">
+                <div className="flex justify-between gap-2 text-sm">
+                  <span className="font-medium">{prod.name}</span>
+                  <span className="text-ink-muted tabular-nums">
+                    <Money amount={prod.outstanding} compact /> · {formatBps(prod.shareBps, 0)}
+                  </span>
+                </div>
+                <div className="h-2.5 rounded-pill bg-neutral-bg">
+                  <div
+                    className={cx('h-2.5 rounded-pill', PRODUCT_COLOURS[i] ?? 'bg-lime')}
+                    style={{ width: `${Number((BigInt(prod.outstanding) * 1000n) / top) / 10}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2.5 rounded-pill bg-neutral-bg">
-                <div
-                  className={cx('h-2.5 rounded-pill', PRODUCT_COLOURS[i] ?? 'bg-lime')}
-                  style={{ width: `${Number((BigInt(prod.outstanding) * 1000n) / top) / 10}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </Card>
       </div>
 
@@ -310,54 +314,62 @@ export function ReportView({ report }: { report: Report }) {
                 </tr>
               </thead>
               <tbody>
-                {report.officers.map((o) => (
-                  <tr
-                    key={o.name}
-                    className="[&>td]:border-b [&>td]:border-line-soft [&>td]:px-2 [&>td]:py-3 [&>td:first-child]:pl-0 [&>td:last-child]:pr-0"
-                  >
-                    <td>
-                      <span className="flex items-center gap-2.5">
-                        <span className="flex size-[30px] items-center justify-center rounded-full bg-avatar-bg text-[11px] font-semibold text-forest">
-                          {o.initials}
-                        </span>
-                        <span className="font-medium">{o.name}</span>
-                      </span>
-                    </td>
-                    <td className="text-right">{count(o.activeLoans)}</td>
-                    <td className="text-right font-semibold">
-                      <Money amount={o.portfolio} compact />
-                    </td>
-                    <td>
-                      <span
-                        className={cx(
-                          'rounded-pill px-2 py-[3px] font-semibold',
-                          o.par30Bps > PAR_TARGET_BPS
-                            ? 'bg-danger-bg text-danger-fg'
-                            : 'bg-success-bg text-success-fg',
-                        )}
-                      >
-                        {formatBps(o.par30Bps)}
-                      </span>
-                    </td>
-                    <td>
-                      {o.collectionRateBps == null ? (
-                        '—'
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <span className="h-1.5 w-20 rounded-pill bg-neutral-bg">
-                            <span
-                              className="block h-1.5 rounded-pill bg-forest"
-                              style={{
-                                width: `${Math.max(0, Math.min(100, (o.collectionRateBps / 100 - 90) * 10))}%`,
-                              }}
-                            />
-                          </span>
-                          <span className="font-semibold">{formatBps(o.collectionRateBps)}</span>
-                        </span>
-                      )}
+                {report.officers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-0 py-6 text-sm text-ink-muted">
+                      No officers with active loans yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  report.officers.map((o) => (
+                    <tr
+                      key={o.name}
+                      className="[&>td]:border-b [&>td]:border-line-soft [&>td]:px-2 [&>td]:py-3 [&>td:first-child]:pl-0 [&>td:last-child]:pr-0"
+                    >
+                      <td>
+                        <span className="flex items-center gap-2.5">
+                          <span className="flex size-[30px] items-center justify-center rounded-full bg-avatar-bg text-[11px] font-semibold text-forest">
+                            {o.initials}
+                          </span>
+                          <span className="font-medium">{o.name}</span>
+                        </span>
+                      </td>
+                      <td className="text-right">{count(o.activeLoans)}</td>
+                      <td className="text-right font-semibold">
+                        <Money amount={o.portfolio} compact />
+                      </td>
+                      <td>
+                        <span
+                          className={cx(
+                            'rounded-pill px-2 py-[3px] font-semibold',
+                            o.par30Bps > PAR_TARGET_BPS
+                              ? 'bg-danger-bg text-danger-fg'
+                              : 'bg-success-bg text-success-fg',
+                          )}
+                        >
+                          {formatBps(o.par30Bps)}
+                        </span>
+                      </td>
+                      <td>
+                        {o.collectionRateBps == null ? (
+                          '—'
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <span className="h-1.5 w-20 rounded-pill bg-neutral-bg">
+                              <span
+                                className="block h-1.5 rounded-pill bg-forest"
+                                style={{
+                                  width: `${Math.max(0, Math.min(100, (o.collectionRateBps / 100 - 90) * 10))}%`,
+                                }}
+                              />
+                            </span>
+                            <span className="font-semibold">{formatBps(o.collectionRateBps)}</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

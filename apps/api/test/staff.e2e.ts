@@ -7,8 +7,9 @@ import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
 import type { PrismaClient, StaffRole } from '../src/generated/prisma/client';
+import { CompaniesService } from '../src/tenancy/companies.service';
 import { lastCodeTo, smsTwoFactor, testPhone } from './sign-in';
-import { testPrisma } from './test-db';
+import { E2E_COMPANY_ID, testPrisma } from './test-db';
 
 /** Staff management by company administrators, and password changes. */
 const PASSWORD = `e2e-${randomUUID()}`;
@@ -66,6 +67,12 @@ beforeAll(async () => {
   setupApp(app);
   await app.init();
   prisma = testPrisma();
+  // This suite checks forced 2FA enrolment; the company flag defaults to off.
+  await prisma.company.update({
+    where: { id: E2E_COMPANY_ID },
+    data: { staffTwoFactor: true },
+  });
+  app.get(CompaniesService).invalidate();
   passwordHash = await hashPassword(PASSWORD);
 });
 

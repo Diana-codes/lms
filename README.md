@@ -11,7 +11,7 @@ Loan management for lenders in Rwanda: a web console for staff and a mobile app 
 | `packages/core` | Money helpers (integer RWF), the repayment schedule calculator, days-past-due and PAR maths, PII masking, shared enums |
 | `packages/ui`   | Design tokens and the shared React components (buttons, pills, cards, tables, sidebar, AI panel)                       |
 | `apps/api`      | NestJS API, Prisma schema and migrations, seed data                                                                    |
-| `apps/web`      | Next.js lender console                                                                                                 |
+| `apps/web`      | Next.js lender console + borrower web portal (`/portal`)                                                               |
 | `apps/mobile`   | Expo borrower app: phone + code sign-in, home, pay with MoMo, 3-step apply                                             |
 | `services/ml`   | FastAPI scoring service: transparent rules-based score and early warning                                               |
 
@@ -32,11 +32,13 @@ pnpm db:seed        # sample data that matches the designs, in the "demo" compan
 pnpm dev            # API on :4000, console on :3000
 ```
 
-**Borrower app:** `cd apps/mobile && pnpm start`, then open it in Expo Go or an Android emulator. Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's address (the emulator uses `http://10.0.2.2:4000`). Sign in with a seeded borrower's phone number; with no SMS key the code is not texted; in development the API log prints it ("Development sign-in code for …"). The easiest way in: create an application in the console with your own phone number, then sign in to the app with that number.
+**Borrower portal (web):** http://demo.localhost:3000/portal — phone + SMS code, same `/app` API as the mobile app (home, MoMo pay, apply, schedule, alerts, profile). Staff sign-in links to it from the console login page.
+
+**Borrower app (mobile):** `cd apps/mobile && pnpm start`, then open it in Expo Go or an Android emulator. Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's address (the emulator uses `http://10.0.2.2:4000`). Sign in with a seeded borrower's phone number; with no SMS key the code is not texted; in development the API log prints it ("Development sign-in code for …"). The easiest way in: create an application in the console with your own phone number, then sign in to the app or portal with that number.
 
 **Providers:** each company brings its own MoMo and Africa's Talking keys, set by a platform admin on the company's page. A company without them uses the local simulators in development (the API logs which); in production MoMo and SMS stay off for it. In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. Keys still in `apps/api/.env` from older setups are copied into the demo company by `pnpm db:seed`. With no `ANTHROPIC_API_KEY`, the Claude-written features (summaries, collections advice, Ask your data) say they are not configured; scoring still works.
 
-Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. Then enter the 6-digit code texted to the account's phone: with no `PLATFORM_SMS_API_KEY`, nothing is sent and the code appears in the API log (`Development code for +250 78• ••• 002: …`). The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
+Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. **Staff 2FA and borrower SMS OTP are off by default**; company admins turn them on under Company settings → Sign-in security (platform admin can set them too). When staff 2FA is on, enter the 6-digit code texted to the account's phone: with no `PLATFORM_SMS_API_KEY`, nothing is sent and the code appears in the API log (`Development code for +250 78• ••• 002: …`). The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
 
 ## Companies (multi-tenancy)
 
@@ -81,7 +83,15 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every push and pull req
 - **Payments** are applied to the oldest instalment first, interest before principal (`allocatePayment` in `@kora/core`). Each request carries an idempotency key, so a retry or a double click is counted once.
 - **Restructures** (extend the term, or a one-month payment holiday) are requests. Nothing changes until a manager other than the requester approves; then the unpaid instalments are replaced by a new schedule built from the ledger balance.
 - **Who sees what:** loan officers see their own book on the Overview; managers, administrators and collections agents see the whole portfolio. Lists show everything, with an "Assigned to me" filter.
-- **AI output** shown in Phase 1 is the stored sample data from the seed, always in the purple treatment. Nothing generates scores until Phase 5, and new applications show "Not scored yet".
+- **Scoring** runs live against `services/ml` (`rules-v1`) when the scoring service is up; reasons and model version are stored on every `CreditScore`. Claude-written features (borrower summary, collections approach, Ask your data) need `ANTHROPIC_API_KEY` and the company's AI assistance flag.
+
+## AI (Phase 5)
+
+- **Rules score** on new applications (repayment history, MoMo inflow stability when consented, affordability). Recommendations never include decline; a person decides. Swap in a trained model later behind the same `/v1/score` contract and re-run fairness tests.
+- **Early warning** flags up-to-date borrowers who may miss the next payment; collections can send a friendly check-in SMS.
+- **Borrower summary** and **collections approach** (including a Kinyarwanda SMS draft) are advisory; staff must review drafts before sending.
+- **Ask your data** turns a manager question into SQL on the read-only reporting login, shows the query, then runs it.
+- **Score fairness** on Reports compares average scores by gender and district (never used as model inputs).
 
 ## Sign-in
 

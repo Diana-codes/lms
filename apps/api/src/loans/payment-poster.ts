@@ -176,17 +176,30 @@ export class PaymentPoster {
         ? new Date()
         : new Date(isoToUtcDate(input.receivedOn).getTime() + 10 * 3_600_000);
 
-    // Instalments paid in part or in full.
+    // Instalments paid in part or in full. Interest already accrued clears
+    // the receivable; anything beyond that is income on collection.
     const totals = zero();
+    let interestFromReceivable = 0n;
     const byNumberDue = new Map(live.map((r) => [r.led.number, r]));
     for (const part of allocations) {
       const row = byNumberDue.get(part.number)!;
       addInto(totals, part.amounts);
+      const accruedUnpaid =
+        row.db.interestAccrued > row.db.interestPaid
+          ? row.db.interestAccrued - row.db.interestPaid
+          : 0n;
+      const clear =
+        part.amounts.INTEREST < accruedUnpaid ? part.amounts.INTEREST : accruedUnpaid;
+      interestFromReceivable += clear;
       await tx.scheduleInstalment.update({
         where: { id: row.db.id },
         data: {
           principalPaid: row.db.principalPaid + part.amounts.PRINCIPAL,
           interestPaid: row.db.interestPaid + part.amounts.INTEREST,
+          // Mark unaccrued interest as recognised so the nightly job does not
+          // post it again after a cash collection.
+          interestAccrued:
+            row.db.interestAccrued + (part.amounts.INTEREST - clear),
           feePaid: row.db.feePaid + part.amounts.FEE,
           penaltyPaid: row.db.penaltyPaid + part.amounts.PENALTY,
           status: part.settles ? 'PAID' : 'PARTIAL',
@@ -208,12 +221,19 @@ export class PaymentPoster {
               : 0n;
         totals.PRINCIPAL += o.PRINCIPAL;
         totals.INTEREST += charged;
+        const accruedUnpaid =
+          r.db.interestAccrued > r.db.interestPaid
+            ? r.db.interestAccrued - r.db.interestPaid
+            : 0n;
+        const clear = charged < accruedUnpaid ? charged : accruedUnpaid;
+        interestFromReceivable += clear;
         await tx.scheduleInstalment.update({
           where: { id: r.db.id },
           data: {
             principalPaid: r.db.principalDue,
             interestDue: r.db.interestPaid + charged,
             interestPaid: r.db.interestPaid + charged,
+            interestAccrued: r.db.interestAccrued + (charged - clear),
             feeDue: r.db.feePaid,
             status: 'PAID',
             paidAt,
@@ -274,10 +294,12 @@ export class PaymentPoster {
 
     // Spread fees split exactly between income, VAT and third parties over the loan's life.
     const feeLines = await this.feeLines(tx, loan, totals.FEE);
+    const interestAsIncome = totals.INTEREST - interestFromReceivable;
     const lines: PostingLine[] = [
       { account: CHANNEL_ACCOUNT[input.channel], direction: 'DEBIT', amount: input.amount },
       { account: 'LOANS_PRINCIPAL', direction: 'CREDIT', amount: totals.PRINCIPAL },
-      { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: totals.INTEREST },
+      { account: 'INTEREST_RECEIVABLE', direction: 'CREDIT', amount: interestFromReceivable },
+      { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: interestAsIncome },
       { account: 'PENALTY_INCOME', direction: 'CREDIT', amount: totals.PENALTY },
       ...feeLines,
       { account: 'BORROWER_CREDIT', direction: 'CREDIT', amount: credit },

@@ -29,6 +29,8 @@ export function NewCompanyForm({ platformHost }: { platformHost: string | null }
     defaultLanguage: 'EN',
     aiFeatures: false,
     autoApprove: false,
+    staffTwoFactor: false,
+    borrowerOtp: false,
     adminEmail: '',
     adminFirstName: '',
     adminLastName: '',
@@ -62,6 +64,8 @@ export function NewCompanyForm({ platformHost }: { platformHost: string | null }
           defaultLanguage: form.defaultLanguage,
           aiFeatures: form.aiFeatures,
           autoApprove: form.autoApprove,
+          staffTwoFactor: form.staffTwoFactor,
+          borrowerOtp: form.borrowerOtp,
           admin: {
             email: form.adminEmail,
             firstName: form.adminFirstName,
@@ -188,6 +192,22 @@ export function NewCompanyForm({ platformHost }: { platformHost: string | null }
               onChange={(e) => set('autoApprove')(e.target.checked)}
             />
             Bulk-approve applications that meet a product&apos;s auto-approve policy
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.staffTwoFactor}
+              onChange={(e) => set('staffTwoFactor')(e.target.checked)}
+            />
+            Staff two-factor sign-in (SMS or authenticator)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.borrowerOtp}
+              onChange={(e) => set('borrowerOtp')(e.target.checked)}
+            />
+            Borrower SMS sign-in code
           </label>
         </fieldset>
       </Card>

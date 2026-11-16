@@ -12,7 +12,12 @@ export interface CompanyProfile {
   accentColor: string | null;
   logoUrl: string | null;
   defaultLanguage: 'EN' | 'RW' | 'FR';
-  features: { ai: boolean; autoApprove: boolean };
+  features: {
+    ai: boolean;
+    autoApprove: boolean;
+    staffTwoFactor: boolean;
+    borrowerOtp: boolean;
+  };
 }
 
 export { PRODUCT_NAME } from './config';

@@ -15,11 +15,19 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ phone: string }>('/app/auth/request-code', {
+      const r = await api<
+        | ({ otpRequired: false; phone: string } & Tokens)
+        | { otpRequired: true; sent: true; phone: string }
+      >('/app/auth/request-code', {
         method: 'POST',
         body: { phone },
         auth: false,
       });
+      if (r.otpRequired === false) {
+        await saveTokens(r);
+        onSignedIn();
+        return;
+      }
       setMasked(r.phone);
     } catch (err) {
       setError(errorMessage(err));
@@ -65,7 +73,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <Muted>
           {masked
             ? `We sent a 6-digit code by SMS to ${masked}.`
-            : 'We will text you a 6-digit code. No password needed.'}
+            : 'Enter the phone number on your account. You may get a texted code if your lender requires one.'}
         </Muted>
         {masked ? (
           <TextInput
@@ -95,7 +103,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         )}
         <ErrorText>{error}</ErrorText>
         <Button
-          label={busy ? 'One moment…' : masked ? 'Sign in' : 'Send me a code'}
+          label={busy ? 'One moment…' : masked ? 'Sign in' : 'Continue'}
           loading={busy}
           disabled={masked ? code.length !== 6 : phone.replace(/\D/g, '').length < 9}
           onPress={masked ? verify : requestCode}

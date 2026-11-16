@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import { ENV, type Env } from '../config/env';
-import type { Language } from '../generated/prisma/client';
+import type { CreditClassProfile, Language } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompaniesService } from './companies.service';
 import {
@@ -23,6 +23,10 @@ export interface BrandingInput {
   supportPhone?: string | null;
   supportEmail?: string | null;
   address?: string | null;
+  /** BNR 59/2023 DPD schedule: company vs cooperative. */
+  creditClassProfile?: CreditClassProfile;
+  staffTwoFactor?: boolean;
+  borrowerOtp?: boolean;
 }
 
 /**
@@ -60,7 +64,13 @@ export class CompanySettingsService {
       supportPhone: company.supportPhone,
       supportEmail: company.supportEmail,
       address: company.address,
-      features: { ai: company.aiFeatures, autoApprove: company.autoApprove },
+      creditClassProfile: company.creditClassProfile,
+      features: {
+        ai: company.aiFeatures,
+        autoApprove: company.autoApprove,
+        staffTwoFactor: company.staffTwoFactor,
+        borrowerOtp: company.borrowerOtp,
+      },
       secrets,
       webhookConfigured: secrets[SECRET.webhookToken],
     };
@@ -81,6 +91,9 @@ export class CompanySettingsService {
         supportEmail:
           input.supportEmail === undefined ? undefined : input.supportEmail?.trim() || null,
         address: input.address === undefined ? undefined : input.address?.trim() || null,
+        creditClassProfile: input.creditClassProfile,
+        staffTwoFactor: input.staffTwoFactor,
+        borrowerOtp: input.borrowerOtp,
       },
     });
     this.companies.invalidate();

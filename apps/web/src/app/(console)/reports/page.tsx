@@ -2,7 +2,8 @@ import { EmptyState, ShieldIcon, WarningIcon } from '@kora/ui';
 import type { Metadata } from 'next';
 import { PageHeader } from '@/components/page-header';
 import { serverApi } from '@/lib/server-api';
-import type { Report, ReportPeriod } from '@/lib/types';
+import type { ClassificationReport, Report, ReportPeriod } from '@/lib/types';
+import { Classification } from './classification';
 import { ReportView } from './report-view';
 
 export const metadata: Metadata = { title: 'Reports' };
@@ -14,7 +15,10 @@ export default async function ReportsPage({
 }) {
   const raw = (await searchParams).period;
   const period: ReportPeriod = raw === 'Q' || raw === 'YTD' ? raw : '12M';
-  const res = await serverApi<Report>(`/reports?period=${period}`);
+  const [res, classification] = await Promise.all([
+    serverApi<Report>(`/reports?period=${period}`),
+    serverApi<ClassificationReport>('/reports/classification'),
+  ]);
   if (!res.ok) {
     return (
       <>
@@ -31,5 +35,10 @@ export default async function ReportsPage({
       </>
     );
   }
-  return <ReportView report={res.data} />;
+  return (
+    <>
+      <ReportView report={res.data} />
+      {classification.ok ? <Classification report={classification.data} /> : null}
+    </>
+  );
 }

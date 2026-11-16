@@ -15,9 +15,11 @@ export interface NewCompany {
   currency?: string;
   timezone?: string;
   defaultLanguage?: Language;
-  /** Optional features. Both default to off. */
+  /** Optional features. Default off. */
   aiFeatures?: boolean;
   autoApprove?: boolean;
+  staffTwoFactor?: boolean;
+  borrowerOtp?: boolean;
 }
 
 export interface ProvisionOptions {
@@ -58,6 +60,8 @@ export async function provisionCompany(
         defaultLanguage: input.defaultLanguage,
         aiFeatures: input.aiFeatures ?? false,
         autoApprove: input.autoApprove ?? false,
+        staffTwoFactor: input.staffTwoFactor ?? false,
+        borrowerOtp: input.borrowerOtp ?? false,
         webhookTokenHash: options.crypto.lookupHash(webhookToken!),
       },
     }));

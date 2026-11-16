@@ -26,6 +26,7 @@ import { JobsController } from './jobs/jobs.controller';
 import { JobsService } from './jobs/jobs.service';
 import { LedgerModule } from './ledger/ledger.module';
 import { LoansController } from './loans/loans.controller';
+import { LoanSecurityService } from './loans/loan-security.service';
 import { LoansService } from './loans/loans.service';
 import { PaymentPoster } from './loans/payment-poster';
 import { MoneyController } from './money/money.controller';
@@ -81,6 +82,7 @@ import { UsersController } from './users/users.controller';
     ApplicationsService,
     LoansService,
     PaymentPoster,
+    LoanSecurityService,
     BorrowersService,
     DashboardService,
     MoneyService,

@@ -1,0 +1,42 @@
+'use client';
+
+import { cx } from '@kora/ui';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+const LINKS = [
+  { href: '/portal/home', label: 'Home' },
+  { href: '/portal/apply', label: 'Apply' },
+  { href: '/portal/notifications', label: 'Alerts' },
+  { href: '/portal/profile', label: 'Profile' },
+] as const;
+
+export function PortalNav({ unread = 0 }: { unread?: number }) {
+  const pathname = usePathname();
+  return (
+    <nav
+      aria-label="Borrower"
+      className="sticky bottom-0 grid grid-cols-4 border-t border-line bg-surface"
+    >
+      {LINKS.map((link) => {
+        const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={cx(
+              'relative flex flex-col items-center gap-0.5 px-2 py-3 text-xs font-semibold no-underline',
+              active ? 'text-forest' : 'text-ink-muted',
+            )}
+            aria-current={active ? 'page' : undefined}
+          >
+            {link.label}
+            {link.href === '/portal/notifications' && unread > 0 ? (
+              <span className="absolute top-2 right-[28%] size-1.5 rounded-full bg-amber" />
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

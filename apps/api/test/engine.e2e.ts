@@ -397,3 +397,79 @@ describe('servicing under the engine', () => {
     expect(loan.instalments.reduce((s, i) => s + i.interestDue, 0n)).toBe(0n);
   });
 });
+
+describe('interest accrual', () => {
+  it('posts receivable on the due date; repayment clears it, not income again', async () => {
+    const { loan: code } = await disburse(1_200_000n);
+    const loan = await prisma.loan.findFirstOrThrow({
+      where: { code },
+      include: { instalments: { orderBy: { number: 'asc' } } },
+    });
+    const first = loan.instalments[0]!;
+    await prisma.scheduleInstalment.update({
+      where: { id: first.id },
+      data: { dueDate: isoToUtcDate(today) },
+    });
+
+    const jobs = app.get(JobsService);
+    const once = await runAsCompany(E2E_COMPANY_ID, () => jobs.accrueInterest(today));
+    const twice = await runAsCompany(E2E_COMPANY_ID, () => jobs.accrueInterest(today));
+    expect(once.instalments).toBeGreaterThanOrEqual(1);
+    expect(twice.instalments).toBe(0);
+
+    const accrued = await prisma.scheduleInstalment.findUniqueOrThrow({ where: { id: first.id } });
+    expect(accrued.interestAccrued).toBe(first.interestDue);
+    const { by: byAccrual } = await ledgerOf(`interest-accrual:${first.id}:0`);
+    expect(byAccrual(ACCOUNTS.INTEREST_RECEIVABLE.code, 'DEBIT')).toBe(first.interestDue);
+    expect(byAccrual(ACCOUNTS.INTEREST_INCOME.code, 'CREDIT')).toBe(first.interestDue);
+
+    const owed = first.penaltyDue + first.feeDue + first.interestDue + first.principalDue;
+    const res = await pay(code, owed).expect(200);
+    const payment = await prisma.payment.findFirstOrThrow({ where: { id: res.body.paymentId } });
+    const { by } = await ledgerOf(payment.idempotencyKey);
+    expect(by(ACCOUNTS.INTEREST_RECEIVABLE.code, 'CREDIT')).toBe(first.interestDue);
+    expect(by(ACCOUNTS.INTEREST_INCOME.code, 'CREDIT')).toBe(0n);
+  });
+
+  it('does not accrue interest once the loan is 91+ days late, and resumes on cure', async () => {
+    const { loan: code } = await disburse(900_000n, 6);
+    const loan = await prisma.loan.findFirstOrThrow({
+      where: { code },
+      include: { instalments: { orderBy: { number: 'asc' } } },
+    });
+    const first = loan.instalments[0]!;
+    const second = loan.instalments[1]!;
+    // Oldest unpaid instalment 91 days late → accrual suspended.
+    await prisma.scheduleInstalment.update({
+      where: { id: first.id },
+      data: { dueDate: isoToUtcDate(addDays(today, -91)) },
+    });
+    await prisma.scheduleInstalment.update({
+      where: { id: second.id },
+      data: { dueDate: isoToUtcDate(today) },
+    });
+
+    const jobs = app.get(JobsService);
+    const stopped = await runAsCompany(E2E_COMPANY_ID, () => jobs.accrueInterest(today));
+    expect(stopped.suspended).toBeGreaterThanOrEqual(1);
+    const afterStop = await prisma.loan.findFirstOrThrow({ where: { code } });
+    expect(afterStop.interestSuspendedAt).not.toBeNull();
+    const rows = await prisma.scheduleInstalment.findMany({
+      where: { id: { in: [first.id, second.id] } },
+    });
+    expect(rows.every((r) => r.interestAccrued === 0n)).toBe(true);
+
+    // Cure: pay the overdue instalment so DPD returns to current, then accrue.
+    const overdue =
+      first.penaltyDue + first.feeDue + first.interestDue + first.principalDue;
+    await pay(code, overdue).expect(200);
+    const resumed = await runAsCompany(E2E_COMPANY_ID, () => jobs.accrueInterest(today));
+    expect(resumed.resumed).toBeGreaterThanOrEqual(1);
+    const cured = await prisma.loan.findFirstOrThrow({ where: { code } });
+    expect(cured.interestSuspendedAt).toBeNull();
+    const secondAfter = await prisma.scheduleInstalment.findUniqueOrThrow({
+      where: { id: second.id },
+    });
+    expect(secondAfter.interestAccrued).toBe(second.interestDue);
+  });
+});

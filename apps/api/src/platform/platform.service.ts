@@ -30,6 +30,8 @@ export interface CreateCompanyInput {
   defaultLanguage?: Language;
   aiFeatures?: boolean;
   autoApprove?: boolean;
+  staffTwoFactor?: boolean;
+  borrowerOtp?: boolean;
   admin: { email: string; firstName: string; lastName: string; password: string };
 }
 
@@ -45,6 +47,8 @@ export interface UpdateCompanyInput {
   status?: CompanyStatus;
   aiFeatures?: boolean;
   autoApprove?: boolean;
+  staffTwoFactor?: boolean;
+  borrowerOtp?: boolean;
 }
 
 /**
@@ -78,6 +82,8 @@ export class PlatformService {
       status: c.status,
       aiFeatures: c.aiFeatures,
       autoApprove: c.autoApprove,
+      staffTwoFactor: c.staffTwoFactor,
+      borrowerOtp: c.borrowerOtp,
       createdAt: c.createdAt,
       activeStaff: c._count.users,
       borrowers: c._count.borrowers,
@@ -118,6 +124,8 @@ export class PlatformService {
         defaultLanguage: input.defaultLanguage,
         aiFeatures: input.aiFeatures ?? false,
         autoApprove: input.autoApprove ?? false,
+        staffTwoFactor: input.staffTwoFactor ?? false,
+        borrowerOtp: input.borrowerOtp ?? false,
       },
       { crypto: this.crypto },
     );

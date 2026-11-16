@@ -28,8 +28,8 @@ export function lastCodeTo(app: INestApplication, phone: string): string {
 }
 
 /**
- * Staff sign-in for an account with texted codes: password, then the code
- * from the simulator. Returns the response that carries the session.
+ * Staff sign-in. When the company has staff 2FA off, password alone is enough.
+ * When it is on and the account uses SMS codes, completes the second step.
  */
 export async function signInWithSms(
   app: INestApplication,
@@ -48,6 +48,7 @@ export async function signInWithSms(
     .post('/auth/login')
     .send({ email: account.email, password })
     .expect(200);
+  if (first.body.status === 'OK') return first;
   expect(first.body.status).toBe('TWO_FACTOR_REQUIRED');
   expect(first.body.method).toBe('sms');
   return http()

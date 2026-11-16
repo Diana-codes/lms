@@ -41,6 +41,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { keyFactsStatement } from '../products/kfs';
 import { loanTerms, quoteFor, toLedger } from '../products/terms';
+import { LoanSecurityService } from './loan-security.service';
 import { PaymentPoster } from './payment-poster';
 
 export const LOANS_PAGE_SIZE = 25;
@@ -111,6 +112,7 @@ export class LoansService {
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
     private readonly poster: PaymentPoster,
+    private readonly security: LoanSecurityService,
   ) {}
 
   async list(query: LoanListQuery, user: AuthUser) {
@@ -274,12 +276,15 @@ export class LoansService {
           where: { channel: { in: ['CALL', 'VISIT', 'LETTER'] } },
           include: { staff: { select: { firstName: true, lastName: true } } },
         },
+        collaterals: { orderBy: { createdAt: 'asc' } },
+        guarantors: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!loan) throw new NotFoundException(`No loan ${code}`);
 
     const today = kigaliDate();
     const outstanding = await this.ledger.outstandingPrincipal(loan.id);
+    const admissibleCollateral = await this.security.admissibleForLoan(loan.id);
 
     // The schedule, with the principal balance left after each instalment.
     const firstUnpaid = loan.instalments.find((i) => instalmentRemaining(i) > 0n);
@@ -406,6 +411,8 @@ export class LoansService {
       status: loan.status,
       statusLabel,
       dpd,
+      creditClass: loan.creditClass,
+      classifiedOn: loan.classifiedOn ? utcDateToIso(loan.classifiedOn) : null,
       asOf: today,
       borrower: {
         code: loan.borrower.code,
@@ -430,6 +437,7 @@ export class LoansService {
         maturityDate: utcDateToIso(loan.maturityDate),
         channel: disbursement ? PAYMENT_CHANNEL_LABELS[disbursement.channel] : null,
         collateral: loan.collateral,
+        admissibleCollateral,
         interestMethod: terms.interestMethod,
         frequency: terms.frequency,
         rateBps: terms.rateBps,
@@ -497,6 +505,8 @@ export class LoansService {
             requestedAt: pending.requestedAt,
           }
         : null,
+      collaterals: loan.collaterals.map((c) => this.security.serializeCollateral(c)),
+      guarantors: loan.guarantors.map((g) => this.security.serializeGuarantor(g)),
       activity: activity.slice(0, 8),
     };
   }
@@ -690,6 +700,28 @@ export class LoansService {
             throw new ConflictException('There is nothing left to restructure');
 
           let principal = await this.ledger.outstandingPrincipal(loan.id, tx);
+          // Accrued interest on instalments being replaced joins the principal
+          // so the receivable is not left orphaned after the schedule changes.
+          const accruedUnpaid = unpaid.reduce((s, i) => {
+            const left = i.interestAccrued - i.interestPaid;
+            return s + (left > 0n ? left : 0n);
+          }, 0n);
+          if (accruedUnpaid > 0n) {
+            await this.ledger.post(tx, {
+              type: 'ADJUSTMENT',
+              idempotencyKey: `restructure:${id}:accrued-interest`,
+              loanId: loan.id,
+              effectiveOn: today,
+              memo: 'Accrued interest capitalised into principal',
+              lines: [
+                { account: 'LOANS_PRINCIPAL', direction: 'DEBIT', amount: accruedUnpaid },
+                { account: 'INTEREST_RECEIVABLE', direction: 'CREDIT', amount: accruedUnpaid },
+              ],
+              postedById: user.id,
+            });
+            principal += accruedUnpaid;
+          }
+
           const holiday = request.type === 'PAYMENT_HOLIDAY';
           let term = request.newTermMonths;
           let firstDue = utcDateToIso(unpaid[0]!.dueDate);

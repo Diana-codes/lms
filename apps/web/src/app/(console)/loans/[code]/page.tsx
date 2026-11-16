@@ -16,6 +16,7 @@ import type { LoanDetail, Me } from '@/lib/types';
 import { LoanActions, RestructureBanner } from './loan-actions';
 import { MomoRequestButton, PendingMomoBanner } from './momo-actions';
 import { ScheduleTable } from './schedule-table';
+import { SecurityPanel } from './security-panel';
 
 export async function generateMetadata({
   params,
@@ -84,6 +85,10 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
   const { borrower, terms, figures, next } = loan;
   const late = loan.dpd > 0;
   const closed = loan.status !== 'ACTIVE';
+  const canEditSecurity =
+    me.data.role === 'LOAN_OFFICER' ||
+    me.data.role === 'MANAGER' ||
+    me.data.role === 'ADMIN';
   const ring = Math.round(figures.repaidPercent * 3.6);
   const subtitle = [
     loan.productName,
@@ -209,7 +214,6 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
                 {terms.disbursedOn ? formatDate(terms.disbursedOn) : 'Not yet'}
               </Term>
               <Term label="Channel">{terms.channel ?? '—'}</Term>
-              <Term label="Collateral">{terms.collateral ?? 'None recorded'}</Term>
               <Term label="Late charges">{describePenalty(terms.penalty)}</Term>
               {terms.fees.length ? (
                 <Term label="Fees">
@@ -227,6 +231,8 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
               ) : null}
             </dl>
           </Card>
+
+          <SecurityPanel loan={loan} canEdit={canEditSecurity} />
 
           {figures.payoff ? (
             <Card className="gap-3 p-[22px]">

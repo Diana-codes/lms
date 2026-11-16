@@ -31,6 +31,8 @@ const SELECT = {
   timezone: true,
   aiFeatures: true,
   autoApprove: true,
+  staffTwoFactor: true,
+  borrowerOtp: true,
 } as const;
 
 type Row = {
@@ -42,6 +44,8 @@ type Row = {
   timezone: string;
   aiFeatures: boolean;
   autoApprove: boolean;
+  staffTwoFactor: boolean;
+  borrowerOtp: boolean;
 };
 
 const toInfo = (r: Row): CompanyInfo => ({
@@ -51,7 +55,12 @@ const toInfo = (r: Row): CompanyInfo => ({
   displayName: r.brandName?.trim() || r.name,
   status: r.status,
   timezone: r.timezone,
-  features: { ai: r.aiFeatures, autoApprove: r.autoApprove },
+  features: {
+    ai: r.aiFeatures,
+    autoApprove: r.autoApprove,
+    staffTwoFactor: r.staffTwoFactor,
+    borrowerOtp: r.borrowerOtp,
+  },
 });
 
 /**
@@ -138,6 +147,8 @@ export class CompaniesService {
         defaultLanguage: true,
         aiFeatures: true,
         autoApprove: true,
+        staffTwoFactor: true,
+        borrowerOtp: true,
       },
     });
     if (!c) return null;
@@ -149,7 +160,12 @@ export class CompaniesService {
       accentColor: c.accentColor,
       logoUrl: c.logoUrl,
       defaultLanguage: c.defaultLanguage,
-      features: { ai: c.aiFeatures, autoApprove: c.autoApprove },
+      features: {
+        ai: c.aiFeatures,
+        autoApprove: c.autoApprove,
+        staffTwoFactor: c.staffTwoFactor,
+        borrowerOtp: c.borrowerOtp,
+      },
     };
   }
 

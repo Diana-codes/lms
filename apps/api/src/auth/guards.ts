@@ -10,7 +10,7 @@ import type { StaffRole } from '@kora/core';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompaniesService } from '../tenancy/companies.service';
-import { companyContext } from '../tenancy/company-context';
+import { companyContext, companyFeatures } from '../tenancy/company-context';
 import { AuthService } from './auth.service';
 import { ACCESS_COOKIE, type AuthUser, twoFactorView } from './auth.types';
 import {
@@ -128,7 +128,11 @@ export class JwtAuthGuard implements CanActivate {
     if (u.mustChangePassword && !this.allows(context, ALLOW_WHILE_PASSWORD_CHANGE)) {
       throw new ForbiddenException('Choose a new password first');
     }
-    if (!req.user.twoFactorEnabled && !this.allows(context, ALLOW_WITHOUT_TWO_FACTOR)) {
+    if (
+      companyFeatures().staffTwoFactor &&
+      !req.user.twoFactorEnabled &&
+      !this.allows(context, ALLOW_WITHOUT_TWO_FACTOR)
+    ) {
       throw new ForbiddenException('Turn on two-factor sign-in first');
     }
     return true;

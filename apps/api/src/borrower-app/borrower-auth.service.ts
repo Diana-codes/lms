@@ -16,7 +16,7 @@ import { ENV, type Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvidersService } from '../providers/providers.service';
 import { SmsService } from '../sms/sms.service';
-import { requireCompanyId } from '../tenancy/company-context';
+import { companyFeatures, requireCompanyId } from '../tenancy/company-context';
 
 export interface BorrowerClaims {
   sub: string;
@@ -56,9 +56,44 @@ export class BorrowerAuthService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async requestCode(input: string, meta: RequestMeta): Promise<{ sent: true; phone: string }> {
+  async requestCode(
+    input: string,
+    meta: RequestMeta,
+  ): Promise<
+    | { otpRequired: true; sent: true; phone: string }
+    | ({ otpRequired: false; phone: string } & BorrowerTokens)
+  > {
     const phone = normaliseRwPhone(input);
     if (!phone) throw new BadRequestException('Enter a Rwandan mobile number, e.g. 078 812 3412');
+
+    const borrower = await this.prisma.borrower.findFirst({
+      where: { phone },
+      select: { id: true, code: true },
+    });
+
+    // Company has borrower OTP off: known phones sign in with the number alone.
+    if (!companyFeatures().borrowerOtp) {
+      if (!borrower) {
+        throw new BadRequestException(
+          'We do not have an account for that number. Ask your lender to register you first.',
+        );
+      }
+      await this.audit.record({
+        action: 'borrower.login',
+        actorType: 'BORROWER',
+        actorId: borrower.id,
+        entityType: 'Borrower',
+        entityId: borrower.code,
+        metadata: { otp: false },
+        ...meta,
+      });
+      return {
+        otpRequired: false,
+        phone: maskPhone(phone),
+        ...(await this.startSession(borrower.id, meta)),
+      };
+    }
+
     const recent = await this.prisma.otpChallenge.count({
       where: { phone, createdAt: { gte: new Date(Date.now() - 3_600_000) } },
     });
@@ -69,10 +104,6 @@ export class BorrowerAuthService {
       );
     }
     // A code is only sent to numbers we know, but the answer is the same either way.
-    const borrower = await this.prisma.borrower.findFirst({
-      where: { phone },
-      select: { id: true },
-    });
     if (borrower) {
       const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
       await this.prisma.otpChallenge.create({
@@ -103,7 +134,7 @@ export class BorrowerAuthService {
       metadata: { phone: maskPhone(phone), known: !!borrower },
       ...meta,
     });
-    return { sent: true, phone: maskPhone(phone) };
+    return { otpRequired: true, sent: true, phone: maskPhone(phone) };
   }
 
   async verifyCode(input: string, code: string, meta: RequestMeta): Promise<BorrowerTokens> {

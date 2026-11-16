@@ -57,6 +57,8 @@ const createSchema = z.object({
   defaultLanguage: z.enum(['EN', 'RW', 'FR']).optional(),
   aiFeatures: z.boolean().optional(),
   autoApprove: z.boolean().optional(),
+  staffTwoFactor: z.boolean().optional(),
+  borrowerOtp: z.boolean().optional(),
   admin: z.object({
     email: z.email(),
     firstName: z.string().trim().min(1).max(60),
@@ -81,6 +83,8 @@ const updateSchema = z
     status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
     aiFeatures: z.boolean().optional(),
     autoApprove: z.boolean().optional(),
+    staffTwoFactor: z.boolean().optional(),
+    borrowerOtp: z.boolean().optional(),
   })
   .strict();
 

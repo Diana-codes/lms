@@ -2,6 +2,8 @@ export * from './money';
 export * from './dates';
 export * from './schedule';
 export * from './risk';
+export * from './classification';
+export * from './collateral';
 export * from './mask';
 export * from './domain';
 export * from './payments';

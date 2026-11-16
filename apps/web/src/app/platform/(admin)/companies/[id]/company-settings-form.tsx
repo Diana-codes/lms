@@ -22,6 +22,8 @@ export function CompanySettingsForm({ company }: { company: CompanyDetail }) {
     defaultLanguage: company.defaultLanguage,
     aiFeatures: company.aiFeatures,
     autoApprove: company.autoApprove,
+    staffTwoFactor: company.staffTwoFactor,
+    borrowerOtp: company.borrowerOtp,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,8 @@ export function CompanySettingsForm({ company }: { company: CompanyDetail }) {
         defaultLanguage: form.defaultLanguage,
         aiFeatures: form.aiFeatures,
         autoApprove: form.autoApprove,
+        staffTwoFactor: form.staffTwoFactor,
+        borrowerOtp: form.borrowerOtp,
       },
       'Settings saved',
     );
@@ -131,6 +135,22 @@ export function CompanySettingsForm({ company }: { company: CompanyDetail }) {
               onChange={(e) => set('autoApprove')(e.target.checked)}
             />
             Bulk-approve low-risk applications
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.staffTwoFactor}
+              onChange={(e) => set('staffTwoFactor')(e.target.checked)}
+            />
+            Staff two-factor sign-in (SMS or authenticator)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.borrowerOtp}
+              onChange={(e) => set('borrowerOtp')(e.target.checked)}
+            />
+            Borrower SMS sign-in code
           </label>
         </fieldset>
         <FormError>{error}</FormError>

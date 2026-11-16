@@ -28,6 +28,8 @@ export interface CompanyRow {
   status: 'ACTIVE' | 'SUSPENDED';
   aiFeatures: boolean;
   autoApprove: boolean;
+  staffTwoFactor: boolean;
+  borrowerOtp: boolean;
   createdAt: string;
   activeStaff: number;
   borrowers: number;
@@ -50,6 +52,8 @@ export interface CompanyDetail {
   defaultLanguage: 'EN' | 'RW' | 'FR';
   aiFeatures: boolean;
   autoApprove: boolean;
+  staffTwoFactor: boolean;
+  borrowerOtp: boolean;
   createdAt: string;
   webhookConfigured: boolean;
   admins: Array<{

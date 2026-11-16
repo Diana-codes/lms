@@ -6,8 +6,12 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
+  classifyLoan,
+  classifyPortfolio,
+  type CreditClassProfile,
   daysPastDue,
   dpdBucket,
+  interestAccrualSuspended,
   isoToUtcDate,
   type IsoDate,
   kigaliDate,
@@ -20,6 +24,9 @@ import IORedis from 'ioredis';
 import { AuditService } from '../audit/audit.service';
 import { ENV, type Env } from '../config/env';
 import { ScoringService } from '../ai/scoring.service';
+import { interestAccrualLines, provisionAdjustmentLines } from '../ledger/posting';
+import { LedgerService } from '../ledger/ledger.service';
+import { LoanSecurityService } from '../loans/loan-security.service';
 import { MoneyService } from '../money/money.service';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -47,9 +54,11 @@ export function localHour(timezone: string, at: Date = new Date()): number {
  * Background work on BullMQ + Redis, done company by company (each in its
  * own company context, so row-level security applies as for a request):
  *  - every minute, follow up MoMo requests still waiting on the provider;
- *  - every night at 01:00 in the company's time zone, recompute days past
- *    due, open and close collection cases, mark broken promises, send
- *    due-soon reminders, and record the day's usage for billing.
+ *  - every night at 01:00 in the company's time zone, accrue interest that
+ *    has fallen due (unless the loan is 91+ days late), charge late fees,
+ *    classify and provision under BNR 59/2023, recompute days past due, open
+ *    and close collection cases, mark broken promises, send due-soon
+ *    reminders, and record the day's usage for billing.
  * The nightly run can also be started by hand from the API, for demos.
  */
 @Injectable()
@@ -62,6 +71,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+    private readonly security: LoanSecurityService,
     private readonly money: MoneyService,
     private readonly sms: SmsService,
     private readonly audit: AuditService,
@@ -216,10 +227,253 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     return { instalments, total };
   }
 
+  /**
+   * Recognise interest that has fallen due: DR interest receivable /
+   * CR interest income. Skips loans at 91+ DPD. Safe to run more than once
+   * a day — already-accrued amounts are not posted again.
+   */
+  async accrueInterest(today: IsoDate = kigaliDate()) {
+    const candidates = await this.prisma.loan.findMany({
+      where: {
+        status: 'ACTIVE',
+        instalments: {
+          some: {
+            supersededAt: null,
+            status: { not: 'PAID' },
+            dueDate: { lte: isoToUtcDate(today) },
+          },
+        },
+      },
+      select: {
+        id: true,
+        interestSuspendedAt: true,
+        instalments: {
+          where: { supersededAt: null, status: { not: 'PAID' } },
+          orderBy: { dueDate: 'asc' },
+          select: {
+            id: true,
+            number: true,
+            scheduleVersion: true,
+            dueDate: true,
+            interestDue: true,
+            interestAccrued: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    let instalments = 0;
+    let total = 0n;
+    let suspended = 0;
+    let resumed = 0;
+
+    for (const loan of candidates) {
+      const oldestUnpaid = loan.instalments[0] ?? null;
+      const dpd = daysPastDue(
+        oldestUnpaid ? utcDateToIso(oldestUnpaid.dueDate) : null,
+        today,
+      );
+      const stop = interestAccrualSuspended(dpd);
+
+      if (stop && !loan.interestSuspendedAt) {
+        await this.prisma.loan.update({
+          where: { id: loan.id },
+          data: { interestSuspendedAt: new Date() },
+        });
+        suspended += 1;
+      } else if (!stop && loan.interestSuspendedAt) {
+        await this.prisma.loan.update({
+          where: { id: loan.id },
+          data: { interestSuspendedAt: null },
+        });
+        resumed += 1;
+      }
+
+      if (stop) continue;
+
+      const due = loan.instalments.filter(
+        (row) =>
+          daysPastDue(utcDateToIso(row.dueDate), today) >= 0 &&
+          row.interestDue > row.interestAccrued,
+      );
+      if (due.length === 0) continue;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "Loan" WHERE "id" = ${loan.id}::uuid FOR UPDATE`;
+        const locked = await tx.loan.findUniqueOrThrow({
+          where: { id: loan.id },
+          include: {
+            instalments: {
+              where: { supersededAt: null, status: { not: 'PAID' } },
+              orderBy: { dueDate: 'asc' },
+            },
+          },
+        });
+        const lockedOldest = locked.instalments[0] ?? null;
+        const lockedDpd = daysPastDue(
+          lockedOldest ? utcDateToIso(lockedOldest.dueDate) : null,
+          today,
+        );
+        if (interestAccrualSuspended(lockedDpd)) return;
+
+        for (const row of locked.instalments) {
+          if (daysPastDue(utcDateToIso(row.dueDate), today) < 0) continue;
+          const amount = row.interestDue - row.interestAccrued;
+          if (amount <= 0n) continue;
+          await this.ledger.post(tx, {
+            type: 'INTEREST_ACCRUAL',
+            idempotencyKey: `interest-accrual:${row.id}:${row.interestAccrued}`,
+            loanId: loan.id,
+            effectiveOn: utcDateToIso(row.dueDate),
+            memo: `Interest due on instalment ${row.number}`,
+            lines: interestAccrualLines(amount),
+          });
+          await tx.scheduleInstalment.update({
+            where: { id: row.id },
+            data: { interestAccrued: row.interestDue },
+          });
+          instalments += 1;
+          total += amount;
+        }
+      });
+    }
+
+    return { instalments, total, suspended, resumed };
+  }
+
+  /**
+   * BNR Regulation 59/2023: classify every active loan by DPD, store the
+   * day's portfolio snapshot, and move the loan-loss allowance to the
+   * required general/specific provision. Safe to run more than once a day.
+   */
+  async classifyAndProvision(today: IsoDate = kigaliDate()) {
+    const company = await this.prisma.company.findUniqueOrThrow({
+      where: { id: requireCompanyId() },
+      select: { creditClassProfile: true },
+    });
+    const profile = company.creditClassProfile as CreditClassProfile;
+
+    const loans = await this.prisma.loan.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        instalments: {
+          where: { supersededAt: null, status: { not: 'PAID' } },
+          orderBy: { dueDate: 'asc' },
+          take: 1,
+          select: { dueDate: true },
+        },
+      },
+    });
+
+    const classified: Array<{
+      id: string;
+      outstandingPrincipal: bigint;
+      dpd: number;
+      admissibleCollateral: bigint;
+      creditClass: ReturnType<typeof classifyLoan>['creditClass'];
+      requiredProvision: bigint;
+    }> = [];
+
+    for (const loan of loans) {
+      const outstanding = await this.ledger.outstandingPrincipal(loan.id);
+      if (outstanding <= 0n) continue;
+      const dpd = daysPastDue(
+        loan.instalments[0] ? utcDateToIso(loan.instalments[0].dueDate) : null,
+        today,
+      );
+      const admissibleCollateral = await this.security.admissibleForLoan(loan.id);
+      const row = classifyLoan(outstanding, dpd, profile, admissibleCollateral);
+      classified.push({ id: loan.id, ...row });
+      await this.prisma.loan.update({
+        where: { id: loan.id },
+        data: {
+          creditClass: row.creditClass,
+          classifiedOn: isoToUtcDate(today),
+        },
+      });
+    }
+
+    const portfolio = classifyPortfolio(
+      classified.map((c) => ({
+        outstandingPrincipal: c.outstandingPrincipal,
+        dpd: c.dpd,
+        admissibleCollateral: c.admissibleCollateral,
+      })),
+      profile,
+    );
+
+    const day = isoToUtcDate(today);
+    for (const bucket of portfolio.buckets) {
+      await this.prisma.loanClassificationDaily.upsert({
+        where: {
+          companyId_day_creditClass: {
+            companyId: requireCompanyId(),
+            day,
+            creditClass: bucket.creditClass,
+          },
+        },
+        update: {
+          loanCount: bucket.loanCount,
+          outstandingPrincipal: bucket.outstandingPrincipal,
+          requiredProvision: bucket.requiredProvision,
+          recordedAt: new Date(),
+        },
+        create: {
+          day,
+          creditClass: bucket.creditClass,
+          loanCount: bucket.loanCount,
+          outstandingPrincipal: bucket.outstandingPrincipal,
+          requiredProvision: bucket.requiredProvision,
+        },
+      });
+    }
+
+    const held = await this.ledger.loanLossAllowance();
+    const required = portfolio.requiredProvision;
+    const delta = required - held;
+    let posted = 0n;
+    if (delta !== 0n) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.ledger.post(tx, {
+          type: 'PROVISION',
+          idempotencyKey: `provision:${today}:${held}:${required}`,
+          effectiveOn: today,
+          memo:
+            delta > 0n
+              ? `Loan-loss provision to BNR required level (${required})`
+              : `Loan-loss allowance released to BNR required level (${required})`,
+          lines: provisionAdjustmentLines(delta),
+        });
+      });
+      posted = delta;
+    }
+
+    return {
+      profile,
+      loans: portfolio.loans,
+      outstandingPrincipal: portfolio.outstandingPrincipal,
+      requiredProvision: required,
+      allowanceBefore: held,
+      allowanceAfter: held + posted,
+      provisionPosted: posted,
+      nplBps: portfolio.nplBps,
+      buckets: portfolio.buckets.map((b) => ({
+        creditClass: b.creditClass,
+        loanCount: b.loanCount,
+        outstandingPrincipal: b.outstandingPrincipal.toString(),
+        requiredProvision: b.requiredProvision.toString(),
+      })),
+    };
+  }
+
   /** The end-of-day run for the current company. Safe to run more than once a day. */
   async nightly() {
     const today = kigaliDate();
+    const accruals = await this.accrueInterest(today);
     const lateCharges = await this.chargeLateFees(today);
+    const classification = await this.classifyAndProvision(today);
     const loans = await this.prisma.loan.findMany({
       where: { status: 'ACTIVE' },
       select: {
@@ -227,6 +481,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         code: true,
         officerId: true,
         principal: true,
+        interestSuspendedAt: true,
         instalments: {
           where: { supersededAt: null, status: { not: 'PAID' } },
           orderBy: { dueDate: 'asc' },
@@ -301,7 +556,21 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       buckets,
       casesOpened: opened,
       casesClosed: closed,
+      interestAccruals: {
+        instalments: accruals.instalments,
+        total: accruals.total.toString(),
+        suspended: accruals.suspended,
+        resumed: accruals.resumed,
+      },
       lateCharges: { instalments: lateCharges.instalments, total: lateCharges.total.toString() },
+      classification: {
+        profile: classification.profile,
+        loans: classification.loans,
+        requiredProvision: classification.requiredProvision.toString(),
+        provisionPosted: classification.provisionPosted.toString(),
+        nplBps: classification.nplBps,
+        buckets: classification.buckets,
+      },
       promisesBroken: broken.count,
       reminders,
       earlyWarnings: warnings?.flagged.length ?? null,

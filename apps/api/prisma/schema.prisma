@@ -32,6 +32,22 @@ enum CompanyStatus {
   SUSPENDED
 }
 
+/// BNR Regulation 59/2023 institution type: companies and cooperatives
+/// use different DPD bands for the same five credit classes.
+enum CreditClassProfile {
+  COMPANY
+  COOPERATIVE
+}
+
+/// BNR Regulation 59/2023 credit classification (Arts. 4–12).
+enum CreditClass {
+  NORMAL
+  WATCH
+  SUBSTANDARD
+  DOUBTFUL
+  LOSS
+}
+
 /// A lending company using the platform.
 model Company {
   id              String        @id @default(uuid(7)) @db.Uuid
@@ -44,6 +60,8 @@ model Company {
   currency        String        @default("RWF")
   timezone        String        @default("Africa/Kigali")
   defaultLanguage Language      @default(EN)
+  /// Which 59/2023 DPD schedule to use for classification and provisioning.
+  creditClassProfile CreditClassProfile @default(COMPANY)
 
   /// Where borrowers ask questions and complain (on the Key Facts Statement).
   supportPhone String?
@@ -59,6 +77,10 @@ model Company {
   /// Optional features, off unless the company turns them on.
   aiFeatures  Boolean @default(false)
   autoApprove Boolean @default(false)
+  /// Staff must complete SMS or authenticator 2FA at sign-in (and enrol if missing).
+  staffTwoFactor Boolean @default(false)
+  /// Borrowers must enter a texted one-time code to sign in to the app/portal.
+  borrowerOtp Boolean @default(false)
 
   /// HMAC of the secret in this company's provider webhook URLs.
   webhookTokenHash String? @unique
@@ -103,6 +125,25 @@ model Company {
   dataQuestions      DataQuestion[]
   aiNotes            AiNote[]
   usage              CompanyUsageDaily[]
+  classificationDays LoanClassificationDaily[]
+  loanCollaterals    LoanCollateral[]
+  loanGuarantors     LoanGuarantor[]
+}
+
+/// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
+model LoanClassificationDaily {
+  id                    String      @id @default(uuid(7)) @db.Uuid
+  companyId             String      @default(dbgenerated("current_company_id()")) @db.Uuid
+  company               Company     @relation(fields: [companyId], references: [id])
+  day                   DateTime    @db.Date
+  creditClass           CreditClass
+  loanCount             Int
+  outstandingPrincipal  BigInt
+  requiredProvision     BigInt
+  recordedAt            DateTime    @default(now())
+
+  @@unique([companyId, day, creditClass])
+  @@index([day])
 }
 
 /// One day's usage figures for a company, recorded by the nightly job, for billing.
@@ -706,7 +747,8 @@ model Loan {
   firstDueDate        DateTime   @db.Date
   maturityDate        DateTime   @db.Date
   closedOn            DateTime?  @db.Date
-  /// What secures the loan, if anything, e.g. "Equipment lien".
+  /// Short summary of what secures the loan (for KFS / lists). Kept in sync
+  /// with LoanCollateral rows when staff manage structured collateral.
   collateral          String?
   /// Bumped on each restructure. Instalments from older versions are kept for history.
   scheduleVersion     Int        @default(1)
@@ -726,6 +768,12 @@ model Loan {
   spreadFeeThirdParty BigInt     @default(0)
   officerId           String?    @db.Uuid
   branchId            String?    @db.Uuid
+  /// Set when the loan first hits 91+ DPD and interest accruals stop.
+  /// Cleared when the loan cures below that threshold.
+  interestSuspendedAt DateTime?
+  /// Latest BNR 59/2023 class from the nightly run (objective DPD criteria).
+  creditClass         CreditClass @default(NORMAL)
+  classifiedOn        DateTime?   @db.Date
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
@@ -739,6 +787,8 @@ model Loan {
   branch      Branch?      @relation(fields: [branchId], references: [id])
 
   instalments        ScheduleInstalment[]
+  collaterals        LoanCollateral[]
+  guarantors         LoanGuarantor[]
   ledgerEntries      LedgerEntry[]
   ledgerTransactions LedgerTransaction[]
   payments           Payment[]
@@ -754,6 +804,71 @@ model Loan {
   @@index([borrowerId])
   @@index([status])
   @@index([officerId])
+}
+
+/// BNR Regulation 59/2023 Art. 19(3) collateral kinds. OTHER is on file only.
+enum CollateralKind {
+  CASH
+  GOVT_SECURITIES
+  BANK_SECURITIES
+  RESIDENTIAL_MORTGAGE
+  COMMERCIAL_MORTGAGE
+  LAND
+  MOVABLE
+  OTHER
+}
+
+/// An item of security attached to a loan. Admissible items reduce the
+/// provision base for Watch and worse classes (Art. 19).
+model LoanCollateral {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  companyId   String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company     Company        @relation(fields: [companyId], references: [id])
+  loanId      String         @db.Uuid
+  kind        CollateralKind
+  description String
+  /// Market / face value in RWF before the Art. 19 haircut.
+  marketValue BigInt
+  /// Mortgages and land must be registered to count toward provisioning.
+  registered  Boolean        @default(false)
+  /// Movable assets must be insured to count toward provisioning.
+  insured     Boolean        @default(false)
+  valuedOn    DateTime?      @db.Date
+  valuerName  String?
+  documentRef String?
+  releasedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([companyId])
+}
+
+/// A person who guarantees repayment. Guarantors are for recovery and
+/// disclosure; they do not themselves reduce provisions unless they post
+/// admissible collateral as a LoanCollateral row.
+model LoanGuarantor {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  companyId       String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company         Company   @relation(fields: [companyId], references: [id])
+  loanId          String    @db.Uuid
+  fullName        String
+  phone           String?
+  nationalIdLast3 String?
+  relationship    String?
+  /// Optional cap on the guarantee, in RWF.
+  guaranteeAmount BigInt?
+  notes           String?
+  releasedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([companyId])
 }
 
 enum InstalmentStatus {
@@ -776,6 +891,9 @@ model ScheduleInstalment {
   /// database transaction as the ledger entries that paid it.
   principalPaid   BigInt           @default(0)
   interestPaid    BigInt           @default(0)
+  /// How much of interestDue has been posted as INTEREST_ACCRUAL
+  /// (DR receivable / CR income). Cash collections clear the receivable.
+  interestAccrued BigInt           @default(0)
   /// Fees collected with this instalment (SPREAD fees, VAT included).
   feeDue          BigInt           @default(0)
   feePaid         BigInt           @default(0)
@@ -829,6 +947,7 @@ enum LedgerTransactionType {
   FEE
   INTEREST_ACCRUAL
   PENALTY
+  PROVISION
   WRITE_OFF
   REVERSAL
   ADJUSTMENT

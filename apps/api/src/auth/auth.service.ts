@@ -16,7 +16,11 @@ import { ENV, type Env } from '../config/env';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvidersService } from '../providers/providers.service';
-import { companyDisplayName, currentCompanyId } from '../tenancy/company-context';
+import {
+  companyDisplayName,
+  companyFeatures,
+  currentCompanyId,
+} from '../tenancy/company-context';
 import {
   type AccessTokenClaims,
   type TwoFactorChallengeClaims,
@@ -136,19 +140,21 @@ export class AuthService {
       throw new UnauthorizedException(BAD_CREDENTIALS);
     }
 
-    const method = twoFactorMethod(user);
-    if (method) {
-      const sent = method === 'sms' ? await this.sendSignInCode(user) : undefined;
-      return {
-        status: 'TWO_FACTOR_REQUIRED',
-        method,
-        challengeToken: await this.challengeToken(user, method),
-        sentTo: sent?.sentTo,
-      };
+    // Second factor only when this company has staff 2FA switched on.
+    if (companyFeatures().staffTwoFactor) {
+      const method = twoFactorMethod(user);
+      if (method) {
+        const sent = method === 'sms' ? await this.sendSignInCode(user) : undefined;
+        return {
+          status: 'TWO_FACTOR_REQUIRED',
+          method,
+          challengeToken: await this.challengeToken(user, method),
+          sentTo: sent?.sentTo,
+        };
+      }
+      // No second factor yet: session can only be used to set it up (see JwtAuthGuard).
     }
 
-    // No second factor yet. Two-factor is required, so the session can only
-    // be used to set it up (see JwtAuthGuard).
     return { status: 'OK', ...(await this.startSession(user, meta)) };
   }
 

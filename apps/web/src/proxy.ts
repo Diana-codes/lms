@@ -52,7 +52,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
-  if (pathname === '/login') return NextResponse.next();
+  // Borrower portal uses its own Bearer tokens in the browser, not staff cookies.
+  if (pathname === '/login' || pathname === '/portal' || pathname.startsWith('/portal/')) {
+    return NextResponse.next();
+  }
   if (request.cookies.has(ACCESS_COOKIE)) return NextResponse.next();
 
   const login = new URL('/login', request.url);

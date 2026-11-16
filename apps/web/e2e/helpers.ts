@@ -57,7 +57,7 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
-  await submitWithTextedCode(page);
+  await submitPasswordAndMaybeCode(page);
   await page.waitForURL((url) => !url.pathname.startsWith('/login'));
   const cookies = await page.context().cookies();
   sessions.set(
@@ -66,11 +66,22 @@ export async function signIn(page: Page, email: string): Promise<void> {
   );
 }
 
-/** Press "Sign in" (password already filled), then enter the code that was texted. */
-export async function submitWithTextedCode(page: Page): Promise<void> {
+/**
+ * Press "Sign in" (password already filled). When the company has staff 2FA
+ * on, enter the texted code; otherwise the console opens straight away.
+ */
+export async function submitPasswordAndMaybeCode(page: Page): Promise<void> {
   const since = Date.now() - 1000;
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Enter your code' })).toBeVisible();
+  const codeStep = page.getByRole('heading', { name: 'Enter your code' });
+  try {
+    await expect(codeStep).toBeVisible({ timeout: 2_000 });
+  } catch {
+    return;
+  }
   await page.getByLabel('6-digit code').fill(await textedCode(since));
   await page.getByRole('button', { name: 'Verify and sign in' }).click();
 }
+
+/** @deprecated Use submitPasswordAndMaybeCode */
+export const submitWithTextedCode = submitPasswordAndMaybeCode;

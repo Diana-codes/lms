@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { checkAffordability, collectionRateBps, daysPastDue, dpdBucket, par30Bps } from './risk';
+import {
+  checkAffordability,
+  collectionRateBps,
+  daysPastDue,
+  dpdBucket,
+  INTEREST_ACCRUAL_SUSPEND_DPD,
+  interestAccrualSuspended,
+  par30Bps,
+} from './risk';
 
 describe('days past due', () => {
   it('counts days since the oldest unpaid due date', () => {
@@ -18,6 +26,13 @@ describe('days past due', () => {
     expect(dpdBucket(31)).toBe('DPD_31_90');
     expect(dpdBucket(90)).toBe('DPD_31_90');
     expect(dpdBucket(91)).toBe('DPD_90_PLUS');
+  });
+
+  it('stops recognising interest from 91 days past due', () => {
+    expect(INTEREST_ACCRUAL_SUSPEND_DPD).toBe(91);
+    expect(interestAccrualSuspended(90)).toBe(false);
+    expect(interestAccrualSuspended(91)).toBe(true);
+    expect(interestAccrualSuspended(120)).toBe(true);
   });
 });
 

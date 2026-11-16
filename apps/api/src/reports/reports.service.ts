@@ -2,16 +2,26 @@ import { Injectable } from '@nestjs/common';
 import {
   addDays,
   addMonths,
+  CREDIT_CLASS_LABELS,
+  type CreditClass,
+  type CreditClassProfile,
+  classifyPortfolio,
   daysBetween,
+  daysPastDue,
   initials,
+  isoToUtcDate,
   kigaliDate,
+  PROVISION_BPS,
   ratioBps,
   shortStaffName,
   utcDateToIso,
   type IsoDate,
 } from '@kora/core';
 import { ACCOUNTS } from '../ledger/accounts';
+import { LedgerService } from '../ledger/ledger.service';
+import { LoanSecurityService } from '../loans/loan-security.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { requireCompanyId } from '../tenancy/company-context';
 
 export type Period = 'Q' | 'YTD' | '12M';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -36,6 +46,60 @@ export function monthEnds(period: Period, today: IsoDate): IsoDate[] {
   });
 }
 
+/** Shape passed to {@link reportToCsv} (matches {@link ReportsService.report}). */
+export interface ReportCsvInput {
+  period: Period;
+  asOf: string;
+  series: Array<{
+    month: string;
+    outstanding: bigint;
+    activeLoans: number;
+    averageLoan: bigint;
+    par30Bps: number;
+    yieldBps: number;
+  }>;
+  products: Array<{ name: string; outstanding: bigint; shareBps: number }>;
+  officers: Array<{
+    name: string;
+    activeLoans: number;
+    portfolio: bigint;
+    par30Bps: number;
+    collectionRateBps: number | null;
+  }>;
+}
+
+/** Spreadsheet-safe CSV for the portfolio report. */
+export function reportToCsv(r: ReportCsvInput): string {
+  const esc = (v: string | number | bigint | null) => {
+    const s = v == null ? '' : String(v);
+    // Neutralise spreadsheet formulas in text cells.
+    const safe = /^[=+\-@]/.test(s) && !/^-?\d+$/.test(s) ? `'${s}` : s;
+    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  const pct = (bps: number | null) => (bps == null ? '' : (bps / 100).toFixed(2));
+  const lines = [
+    `Kora Lend report,${esc(r.period)},as of ${r.asOf}`,
+    '',
+    'Month end,Outstanding principal (RWF),Active loans,Average loan (RWF),PAR 30 (%),Yield (% a year)',
+    ...r.series.map((m) =>
+      [m.month, m.outstanding, m.activeLoans, m.averageLoan, pct(m.par30Bps), pct(m.yieldBps)]
+        .map(esc)
+        .join(','),
+    ),
+    '',
+    'Product,Outstanding principal (RWF),Share (%)',
+    ...r.products.map((p) => [p.name, p.outstanding, pct(p.shareBps)].map(esc).join(',')),
+    '',
+    'Loan officer,Active loans,Portfolio (RWF),PAR 30 (%),Collection rate (%)',
+    ...r.officers.map((o) =>
+      [o.name, o.activeLoans, o.portfolio, pct(o.par30Bps), pct(o.collectionRateBps)]
+        .map(esc)
+        .join(','),
+    ),
+  ];
+  return `${lines.join('\r\n')}\r\n`;
+}
+
 /**
  * Reports, rebuilt from the ledger and the repayment schedules for each
  * month end, so history reflects what was true then:
@@ -45,7 +109,112 @@ export function monthEnds(period: Period, today: IsoDate): IsoDate[] {
  */
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+    private readonly security: LoanSecurityService,
+  ) {}
+
+  /**
+   * BNR Regulation 59/2023 Art. 34 portfolio classification: today's live
+   * figures (or the stored snapshot for a past day), with the allowance
+   * held on the ledger.
+   */
+  async classification(asOf?: IsoDate) {
+    const today = kigaliDate();
+    const day = asOf && asOf <= today ? asOf : today;
+    const company = await this.prisma.company.findUniqueOrThrow({
+      where: { id: requireCompanyId() },
+      select: { creditClassProfile: true, name: true },
+    });
+    const profile = company.creditClassProfile as CreditClassProfile;
+
+    if (day < today) {
+      const rows = await this.prisma.loanClassificationDaily.findMany({
+        where: { day: isoToUtcDate(day) },
+        orderBy: { creditClass: 'asc' },
+      });
+      if (rows.length) {
+        const outstanding = rows.reduce((s, r) => s + r.outstandingPrincipal, 0n);
+        const required = rows.reduce((s, r) => s + r.requiredProvision, 0n);
+        const npl = rows
+          .filter((r) => r.creditClass === 'SUBSTANDARD' || r.creditClass === 'DOUBTFUL' || r.creditClass === 'LOSS')
+          .reduce((s, r) => s + r.outstandingPrincipal, 0n);
+        return {
+          asOf: day,
+          source: 'snapshot' as const,
+          profile,
+          company: company.name,
+          loans: rows.reduce((s, r) => s + r.loanCount, 0),
+          outstandingPrincipal: outstanding,
+          requiredProvision: required,
+          allowanceHeld: await this.ledger.loanLossAllowance(),
+          nonPerformingPrincipal: npl,
+          nplBps: ratioBps(npl, outstanding),
+          buckets: rows.map((r) => ({
+            creditClass: r.creditClass,
+            label: CREDIT_CLASS_LABELS[r.creditClass as CreditClass],
+            loanCount: r.loanCount,
+            outstandingPrincipal: r.outstandingPrincipal,
+            requiredProvision: r.requiredProvision,
+            provisionBps: PROVISION_BPS[r.creditClass as CreditClass],
+            nonPerforming:
+              r.creditClass === 'SUBSTANDARD' ||
+              r.creditClass === 'DOUBTFUL' ||
+              r.creditClass === 'LOSS',
+          })),
+        };
+      }
+    }
+
+    const loans = await this.prisma.loan.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        code: true,
+        creditClass: true,
+        instalments: {
+          where: { supersededAt: null, status: { not: 'PAID' } },
+          orderBy: { dueDate: 'asc' },
+          take: 1,
+          select: { dueDate: true },
+        },
+      },
+    });
+    const withBal = [];
+    for (const loan of loans) {
+      const outstandingPrincipal = await this.ledger.outstandingPrincipal(loan.id);
+      if (outstandingPrincipal <= 0n) continue;
+      const dpd = daysPastDue(
+        loan.instalments[0] ? utcDateToIso(loan.instalments[0].dueDate) : null,
+        day,
+      );
+      const admissibleCollateral = await this.security.admissibleForLoan(loan.id);
+      withBal.push({
+        outstandingPrincipal,
+        dpd,
+        admissibleCollateral,
+        code: loan.code,
+        creditClass: loan.creditClass,
+      });
+    }
+    const portfolio = classifyPortfolio(withBal, profile);
+    const allowanceHeld = await this.ledger.loanLossAllowance();
+    return {
+      asOf: day,
+      source: 'live' as const,
+      profile,
+      company: company.name,
+      loans: portfolio.loans,
+      outstandingPrincipal: portfolio.outstandingPrincipal,
+      requiredProvision: portfolio.requiredProvision,
+      allowanceHeld,
+      nonPerformingPrincipal: portfolio.nonPerformingPrincipal,
+      nplBps: portfolio.nplBps,
+      buckets: portfolio.buckets,
+      shortfall: portfolio.requiredProvision - allowanceHeld,
+    };
+  }
 
   async report(period: Period) {
     const today = kigaliDate();
@@ -168,34 +337,6 @@ export class ReportsService {
 
   /** The same figures as CSV, for spreadsheets. */
   async csv(period: Period): Promise<string> {
-    const r = await this.report(period);
-    const esc = (v: string | number | bigint | null) => {
-      const s = v == null ? '' : String(v);
-      // Neutralise spreadsheet formulas in text cells.
-      const safe = /^[=+\-@]/.test(s) && !/^-?\d+$/.test(s) ? `'${s}` : s;
-      return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-    };
-    const pct = (bps: number | null) => (bps == null ? '' : (bps / 100).toFixed(2));
-    const lines = [
-      `Kora Lend report,${esc(r.period)},as of ${r.asOf}`,
-      '',
-      'Month end,Outstanding principal (RWF),Active loans,Average loan (RWF),PAR 30 (%),Yield (% a year)',
-      ...r.series.map((m) =>
-        [m.month, m.outstanding, m.activeLoans, m.averageLoan, pct(m.par30Bps), pct(m.yieldBps)]
-          .map(esc)
-          .join(','),
-      ),
-      '',
-      'Product,Outstanding principal (RWF),Share (%)',
-      ...r.products.map((p) => [p.name, p.outstanding, pct(p.shareBps)].map(esc).join(',')),
-      '',
-      'Loan officer,Active loans,Portfolio (RWF),PAR 30 (%),Collection rate (%)',
-      ...r.officers.map((o) =>
-        [o.name, o.activeLoans, o.portfolio, pct(o.par30Bps), pct(o.collectionRateBps)]
-          .map(esc)
-          .join(','),
-      ),
-    ];
-    return `${lines.join('\r\n')}\r\n`;
+    return reportToCsv(await this.report(period));
   }
 }

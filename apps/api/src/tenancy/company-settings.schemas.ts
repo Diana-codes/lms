@@ -4,6 +4,8 @@ import { SETTABLE_SECRETS } from './company-secrets.service';
 /** Shared by the company admin and platform admin settings routes. */
 export const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a colour like #0E3B2E');
 export const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+/** BNR 59/2023 institution type — drives DPD bands for classification. */
+export const creditClassProfile = z.enum(['COMPANY', 'COOPERATIVE']);
 
 /** A logo must be an https address, so the console never loads it over plain http. */
 export const logoUrl = z

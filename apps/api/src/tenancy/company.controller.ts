@@ -17,7 +17,13 @@ import { requestMeta } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import { CompaniesService } from './companies.service';
 import { currentCompanyId } from './company-context';
-import { hexColour, logoUrl, optionalText, secretsSchema } from './company-settings.schemas';
+import {
+  creditClassProfile,
+  hexColour,
+  logoUrl,
+  optionalText,
+  secretsSchema,
+} from './company-settings.schemas';
 import { CompanySettingsService } from './company-settings.service';
 
 const brandingSchema = z
@@ -30,6 +36,9 @@ const brandingSchema = z
     supportPhone: optionalText(30),
     supportEmail: z.email().max(254).nullable().optional(),
     address: optionalText(200),
+    creditClassProfile: creditClassProfile.optional(),
+    staffTwoFactor: z.boolean().optional(),
+    borrowerOtp: z.boolean().optional(),
   })
   .strict();
 

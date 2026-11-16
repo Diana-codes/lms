@@ -43,6 +43,32 @@ export interface StaffMember {
 }
 
 /** GET /company/settings: what a company's administrators see and can change. */
+export type CreditClassProfile = 'COMPANY' | 'COOPERATIVE';
+export type CreditClass = 'NORMAL' | 'WATCH' | 'SUBSTANDARD' | 'DOUBTFUL' | 'LOSS';
+
+export interface ClassificationReport {
+  asOf: string;
+  source: 'live' | 'snapshot';
+  profile: CreditClassProfile;
+  company: string;
+  loans: number;
+  outstandingPrincipal: string;
+  requiredProvision: string;
+  allowanceHeld: string;
+  nonPerformingPrincipal: string;
+  nplBps: number;
+  buckets: Array<{
+    creditClass: CreditClass;
+    label: string;
+    loanCount: number;
+    outstandingPrincipal: string;
+    requiredProvision: string;
+    provisionBps: number;
+    nonPerforming: boolean;
+  }>;
+  shortfall?: string;
+}
+
 export interface CompanySettings {
   slug: string;
   name: string;
@@ -59,7 +85,14 @@ export interface CompanySettings {
   supportPhone: string | null;
   supportEmail: string | null;
   address: string | null;
-  features: { ai: boolean; autoApprove: boolean };
+  /** BNR 59/2023 DPD schedule for classification and provisioning. */
+  creditClassProfile: CreditClassProfile;
+  features: {
+    ai: boolean;
+    autoApprove: boolean;
+    staffTwoFactor: boolean;
+    borrowerOtp: boolean;
+  };
   /** Which provider settings are set, by key. Never their values. */
   secrets: Record<string, boolean>;
   webhookConfigured: boolean;
@@ -350,11 +383,48 @@ export interface ScheduleRow {
   paidAt: string | null;
 }
 
+export type CollateralKind =
+  | 'CASH'
+  | 'GOVT_SECURITIES'
+  | 'BANK_SECURITIES'
+  | 'RESIDENTIAL_MORTGAGE'
+  | 'COMMERCIAL_MORTGAGE'
+  | 'LAND'
+  | 'MOVABLE'
+  | 'OTHER';
+
+export interface LoanCollateral {
+  id: string;
+  kind: CollateralKind;
+  kindLabel: string;
+  description: string;
+  marketValue: string;
+  registered: boolean;
+  insured: boolean;
+  valuedOn: string | null;
+  valuerName: string | null;
+  documentRef: string | null;
+  released: boolean;
+}
+
+export interface LoanGuarantor {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  nationalIdLast3: string | null;
+  relationship: string | null;
+  guaranteeAmount: string | null;
+  notes: string | null;
+  released: boolean;
+}
+
 export interface LoanDetail {
   code: string;
   status: LoanListItem['status'];
   statusLabel: string;
   dpd: number;
+  creditClass?: string;
+  classifiedOn?: string | null;
   asOf: string;
   borrower: {
     code: string;
@@ -379,6 +449,7 @@ export interface LoanDetail {
     maturityDate: string;
     channel: string | null;
     collateral: string | null;
+    admissibleCollateral?: string;
     interestMethod: LoanTerms['interestMethod'];
     frequency: LoanTerms['frequency'];
     rateBps: number;
@@ -442,6 +513,8 @@ export interface LoanDetail {
     requestedBy: string | null;
     requestedAt: string;
   } | null;
+  collaterals: LoanCollateral[];
+  guarantors: LoanGuarantor[];
   activity: Array<{
     kind: 'payment' | 'system' | 'disbursement' | 'restructure' | 'contact';
     title: string;
