@@ -64,6 +64,8 @@ export default async function setup(): Promise<() => Promise<void>> {
       data: {
         aiFeatures: true,
         autoApprove: true,
+        // Staff 2FA is optional per company; the sign-in tests cover it switched on.
+        staffTwoFactor: true,
         webhookTokenHash: crypto.lookupHash(E2E_WEBHOOK_TOKEN),
       },
     });
