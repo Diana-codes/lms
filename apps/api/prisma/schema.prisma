@@ -134,6 +134,10 @@ model Company {
   writeOffs          WriteOff[]
   accountingPeriods  AccountingPeriod[]
   migrationBatches   MigrationBatch[]
+  cashflowDocuments  CashflowDocument[]
+  cashflowAnalyses   CashflowAnalysis[]
+  cashflowTxns       CashflowTransaction[]
+  cashflowFlags      CashflowFlag[]
 }
 
 /// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
@@ -500,6 +504,8 @@ enum ConsentType {
   MOMO_HISTORY
   CREDIT_BUREAU
   MARKETING_SMS
+  /// Automated reading of payslips and statements (PRD §6.15).
+  CASHFLOW_ANALYSIS
 }
 
 enum ConsentChannel {
@@ -1694,4 +1700,142 @@ model MigrationBatch {
   loans            Loan[]
 
   @@index([companyId, createdAt])
+}
+
+enum CashflowDocKind {
+  PAYSLIP
+  BANK_STATEMENT
+  MOMO_STATEMENT
+}
+
+enum CashflowDocStatus {
+  UPLOADED
+  READ
+  /// Layout not supported or not readable: goes to manual review.
+  UNREADABLE
+}
+
+enum CashflowStatus {
+  PROCESSING
+  READY_FOR_REVIEW
+  REVIEWED
+  /// Nothing could be read: the application continues on manual review.
+  FAILED
+  /// Replaced by a newer analysis (new documents were added).
+  SUPERSEDED
+}
+
+enum FlagOutcome {
+  PENDING
+  DISMISSED
+  CONFIRMED
+}
+
+/**
+ * A payslip or statement uploaded for cash-flow analysis (PRD §6.15).
+ */
+model CashflowDocument {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  companyId     String            @default(dbgenerated("current_company_id()")) @db.Uuid
+  company       Company           @relation(fields: [companyId], references: [id])
+  applicationId String            @db.Uuid
+  borrowerId    String            @db.Uuid
+  kind          CashflowDocKind
+  fileName      String
+  mimeType      String
+  size          Int
+  storageKey    String
+  /// Content hash, to spot the same file submitted for another borrower.
+  sha256        String
+  status        CashflowDocStatus @default(UPLOADED)
+  /// How it was read: "csv-v1" or the AI model id.
+  extractor     String?
+  /// Account holder or employee name printed on the document.
+  holderName    String?
+  /// Payslip figures (gross, deductions, net, employer, period), digits as strings.
+  payslip       Json?
+  error         String?
+  uploadedById  String            @db.Uuid
+  createdAt     DateTime          @default(now())
+
+  @@index([applicationId])
+  @@index([companyId, sha256])
+}
+
+/**
+ * One run of the analysis for an application, with the analyst's review.
+ */
+model CashflowAnalysis {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  companyId       String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company         Company        @relation(fields: [companyId], references: [id])
+  applicationId   String         @db.Uuid
+  borrowerId      String         @db.Uuid
+  status          CashflowStatus @default(PROCESSING)
+  /// The rules version and the extractors used, so a result can be reproduced.
+  modelVersion    String
+  extractors      Json
+  /// The CashflowReport from @kora/core, amounts as digit strings.
+  report          Json?
+  error           String?
+  /// The AI average monthly income, kept for pilot comparisons.
+  aiAverageIncome BigInt?
+  createdById     String         @db.Uuid
+  createdAt       DateTime       @default(now())
+  /// The analyst's own figure. The AI never sets verified income.
+  confirmedIncome BigInt?
+  reviewNote      String?
+  reviewedById    String?        @db.Uuid
+  reviewedAt      DateTime?
+
+  transactions CashflowTransaction[]
+  flags        CashflowFlag[]
+
+  @@index([applicationId, createdAt])
+  @@index([companyId, status])
+}
+
+model CashflowTransaction {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  companyId         String           @default(dbgenerated("current_company_id()")) @db.Uuid
+  company           Company          @relation(fields: [companyId], references: [id])
+  analysisId        String           @db.Uuid
+  analysis          CashflowAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  documentId        String           @db.Uuid
+  date              DateTime         @db.Date
+  description       String
+  amount            BigInt
+  /// IN or OUT.
+  direction         String
+  balance           BigInt?
+  /// A CASHFLOW_CATEGORIES value from @kora/core.
+  category          String
+  /// What the rules first suggested, kept when an analyst corrects it.
+  suggestedCategory String
+  correctedById     String?          @db.Uuid
+  correctedAt       DateTime?
+  correctionReason  String?
+  position          Int
+
+  @@index([analysisId, date])
+  @@index([companyId])
+}
+
+model CashflowFlag {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  companyId    String           @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company          @relation(fields: [companyId], references: [id])
+  analysisId   String           @db.Uuid
+  analysis     CashflowAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  code         String
+  severity     String
+  message      String
+  evidence     Json
+  outcome      FlagOutcome      @default(PENDING)
+  outcomeNote  String?
+  reviewedById String?          @db.Uuid
+  reviewedAt   DateTime?
+
+  @@index([analysisId])
+  @@index([companyId])
 }

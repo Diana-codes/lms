@@ -13,6 +13,11 @@ export interface StructuredRequest<T extends z.ZodType> {
   user: string;
   effort?: 'low' | 'medium' | 'high';
   maxTokens?: number;
+  /** A document for Claude to read (a PDF or a photo), sent before the instructions. */
+  file?: {
+    mediaType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp';
+    base64: string;
+  };
 }
 
 /**
@@ -57,7 +62,33 @@ export class AiClient {
         fallbacks: 'default',
         output_config: { effort: req.effort ?? 'low', format: betaZodOutputFormat(req.schema) },
         system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: req.user }],
+        messages: [
+          {
+            role: 'user',
+            content: req.file
+              ? [
+                  req.file.mediaType === 'application/pdf'
+                    ? {
+                        type: 'document' as const,
+                        source: {
+                          type: 'base64' as const,
+                          media_type: 'application/pdf' as const,
+                          data: req.file.base64,
+                        },
+                      }
+                    : {
+                        type: 'image' as const,
+                        source: {
+                          type: 'base64' as const,
+                          media_type: req.file.mediaType,
+                          data: req.file.base64,
+                        },
+                      },
+                  { type: 'text' as const, text: req.user },
+                ]
+              : req.user,
+          },
+        ],
       });
       if (response.stop_reason === 'refusal')
         throw new AiUnavailableError('The AI model declined this request');

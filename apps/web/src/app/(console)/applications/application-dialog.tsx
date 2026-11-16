@@ -123,7 +123,14 @@ export function ApplicationDialog({
           {card.stageLabel}
         </Pill>
         <span className="text-[13px] text-ink-muted">{cardAge(card, now)}</span>
-        <Link href={`/borrowers/${card.borrowerCode}`} className="ml-auto text-sm font-semibold">
+        <Link
+          href={`/applications/${card.code}/cashflow`}
+          className="ml-auto text-sm font-semibold"
+          title="AI reading of payslips and statements, for the credit analyst"
+        >
+          Cash-flow analysis
+        </Link>
+        <Link href={`/borrowers/${card.borrowerCode}`} className="text-sm font-semibold">
           Borrower profile
         </Link>
       </div>

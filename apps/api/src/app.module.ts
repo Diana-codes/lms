@@ -10,6 +10,8 @@ import { ApplicationsService } from './applications/applications.service';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BorrowersController } from './borrowers/borrowers.controller';
+import { CashflowController } from './cashflow/cashflow.controller';
+import { CashflowService } from './cashflow/cashflow.service';
 import { BorrowersService } from './borrowers/borrowers.service';
 import { OffersController } from './borrowers/offers.controller';
 import { BorrowerAppController } from './borrower-app/borrower-app.controller';
@@ -68,6 +70,7 @@ import { UsersController } from './users/users.controller';
     HealthController,
     AccountingController,
     MigrationController,
+    CashflowController,
     CompanyController,
     UsersController,
     SystemController,
@@ -110,6 +113,7 @@ import { UsersController } from './users/users.controller';
     AccountingService,
     WriteOffService,
     MigrationService,
+    CashflowService,
   ],
 })
 export class AppModule {}
