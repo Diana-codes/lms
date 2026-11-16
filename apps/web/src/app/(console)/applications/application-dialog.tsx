@@ -130,6 +130,13 @@ export function ApplicationDialog({
         >
           Cash-flow analysis
         </Link>
+        <Link
+          href={`/applications/${card.code}/bureau`}
+          className="text-sm font-semibold"
+          title="Consent and credit bureau reports for the applicant and guarantors"
+        >
+          Credit bureau
+        </Link>
         <Link href={`/borrowers/${card.borrowerCode}`} className="text-sm font-semibold">
           Borrower profile
         </Link>

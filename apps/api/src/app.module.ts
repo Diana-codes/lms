@@ -10,6 +10,8 @@ import { ApplicationsService } from './applications/applications.service';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BorrowersController } from './borrowers/borrowers.controller';
+import { BureauController } from './bureau/bureau.controller';
+import { BureauService } from './bureau/bureau.service';
 import { CashflowController } from './cashflow/cashflow.controller';
 import { CashflowService } from './cashflow/cashflow.service';
 import { BorrowersService } from './borrowers/borrowers.service';
@@ -71,6 +73,7 @@ import { UsersController } from './users/users.controller';
     AccountingController,
     MigrationController,
     CashflowController,
+    BureauController,
     CompanyController,
     UsersController,
     SystemController,
@@ -114,6 +117,7 @@ import { UsersController } from './users/users.controller';
     WriteOffService,
     MigrationService,
     CashflowService,
+    BureauService,
   ],
 })
 export class AppModule {}

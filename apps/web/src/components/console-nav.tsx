@@ -48,6 +48,12 @@ const NAV: Array<{ href: string; label: string; icon: ReactNode; roles?: readonl
     roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'AUDITOR'],
   },
   {
+    href: '/bureau',
+    label: 'Credit bureau',
+    icon: <ShieldIcon />,
+    roles: [...OVERSIGHT_ROLES],
+  },
+  {
     href: '/audit-log',
     label: 'Audit log',
     icon: <AuditIcon />,

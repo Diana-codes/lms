@@ -138,6 +138,8 @@ model Company {
   cashflowAnalyses   CashflowAnalysis[]
   cashflowTxns       CashflowTransaction[]
   cashflowFlags      CashflowFlag[]
+  bureauSubmissions  BureauSubmission[]
+  bureauChecks       BureauCheck[]
 }
 
 /// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
@@ -679,6 +681,7 @@ model Application {
   branch         Branch?  @relation(fields: [branchId], references: [id])
 
   creditScores CreditScore[]
+  bureauChecks BureauCheck[]
   consents     Consent[]
   loan         Loan?
 
@@ -1837,5 +1840,86 @@ model CashflowFlag {
   reviewedAt   DateTime?
 
   @@index([analysisId])
+  @@index([companyId])
+}
+
+// ── credit bureau (PRD §15.6, Appendix A.11) ──
+
+enum BureauSubmissionStatus {
+  /// Built, not yet sent to the bureau.
+  GENERATED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+
+/// One monthly loan data file for the credit bureau. A file that was already
+/// sent is never changed: a correction is a new sequence for the same month.
+model BureauSubmission {
+  id              String                 @id @default(uuid(7)) @db.Uuid
+  companyId       String                 @default(dbgenerated("current_company_id()")) @db.Uuid
+  company         Company                @relation(fields: [companyId], references: [id])
+  /// Last day of the month reported.
+  periodEnd       DateTime               @db.Date
+  sequence        Int                    @default(1)
+  status          BureauSubmissionStatus @default(GENERATED)
+  formatVersion   String
+  lenderCode      String
+  recordCount     Int
+  excludedCount   Int
+  totalBalance    BigInt
+  totalArrears    BigInt
+  /// Loans left out of the file and why (loan references and field names only).
+  excluded        Json
+  /// SHA-256 of the file, so the copy sent can be matched to this record.
+  fileSha256      String
+  /// The file itself, AES-256-GCM encrypted: it carries full national IDs.
+  fileEnc         String
+  generatedById   String                 @db.Uuid
+  generatedAt     DateTime               @default(now())
+  submittedById   String?                @db.Uuid
+  submittedAt     DateTime?
+  bureauReference String?
+  respondedById   String?                @db.Uuid
+  respondedAt     DateTime?
+  rejectedCount   Int?
+  responseNote    String?
+
+  @@unique([companyId, periodEnd, sequence])
+  @@index([companyId, generatedAt])
+}
+
+enum BureauSubject {
+  BORROWER
+  GUARANTOR
+}
+
+/// A credit report looked up at the bureau for an applicant or a guarantor,
+/// recorded by staff, with the consent it relied on.
+model BureauCheck {
+  id               String        @id @default(uuid(7)) @db.Uuid
+  companyId        String        @default(dbgenerated("current_company_id()")) @db.Uuid
+  company          Company       @relation(fields: [companyId], references: [id])
+  applicationId    String        @db.Uuid
+  application      Application   @relation(fields: [applicationId], references: [id])
+  borrowerId       String        @db.Uuid
+  subject          BureauSubject
+  /// Guarantor checks: who was checked.
+  guarantorName    String?
+  /// Borrower checks: the CREDIT_BUREAU consent relied on.
+  consentId        String?       @db.Uuid
+  /// Guarantor checks: how their consent was given (e.g. "signed guarantee form").
+  consentNote      String?
+  bureau           String
+  reference        String?
+  score            Int?
+  openLoans        Int?
+  hasDefaults      Boolean
+  summary          String
+  checkedOn        DateTime      @db.Date
+  recordedById     String        @db.Uuid
+  createdAt        DateTime      @default(now())
+
+  @@index([applicationId])
   @@index([companyId])
 }
