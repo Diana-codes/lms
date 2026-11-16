@@ -20,7 +20,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
-import type { CollectionAction, ContactOutcome } from '../generated/prisma/client';
+import type { CollectionAction, ContactOutcome, Language } from '../generated/prisma/client';
 import { ACCOUNTS } from '../ledger/accounts';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
@@ -62,6 +62,7 @@ interface QueueRow {
   name: string;
   type: string;
   phone: string;
+  language: Language;
   officerId: string | null;
   outstanding: bigint;
   overdue: bigint;
@@ -87,6 +88,7 @@ export class CollectionsService {
       SELECT
         l."id" AS "loanId", l."code", l."borrowerId", l."officerId",
         b."code" AS "borrowerCode", b."fullName" AS "name", b."type", b."phone",
+        b."preferredLanguage" AS "language",
         COALESCE(bal.outstanding, 0)::bigint AS "outstanding",
         due.overdue::bigint AS "overdue", due.oldest,
         c."id" AS "caseId", c."nextAction", c."nextActionOn", c."assignedToId"
@@ -228,6 +230,7 @@ export class CollectionsService {
           ? loan.borrower.fullName
           : loan.borrower.fullName.split(' ')[0]!,
       phone: maskPhone(loan.borrower.phone),
+      language: loan.borrower.preferredLanguage,
       momoLinked: loan.borrower.momoLinked,
       overdue: overdue.reduce((sum, i) => sum + instalmentRemaining(i), 0n),
       outstanding: loan.instalments.reduce((sum, i) => sum + instalmentRemaining(i), 0n),
@@ -347,16 +350,19 @@ export class CollectionsService {
     return this.account(loanCode);
   }
 
-  /** The two SMS drafts for an account: the house wording, in English. */
+  /** The house reminder wording for an account, in English and Kinyarwanda. */
   async drafts(loanCode: string) {
     const account = await this.account(loanCode);
+    const vars = {
+      firstName: account.firstName,
+      amount: account.overdue,
+      loanCode,
+      payCode: await this.sms.payCode(),
+    };
     return {
-      english: this.sms.render('reminder.overdue', {
-        firstName: account.firstName,
-        amount: account.overdue,
-        loanCode,
-        payCode: await this.sms.payCode(),
-      }),
+      english: this.sms.render('reminder.overdue', vars, 'EN'),
+      kinyarwanda: this.sms.render('reminder.overdue', vars, 'RW'),
+      preferred: account.language,
     };
   }
 
@@ -386,13 +392,18 @@ export class CollectionsService {
         borrowerId: l.borrowerId,
         loanId: l.loanId,
         template: 'reminder.overdue',
+        language: l.language,
         sentById: user.id,
-        body: this.sms.render('reminder.overdue', {
-          firstName: l.type === 'BUSINESS' ? undefined : l.name.split(' ')[0],
-          amount: l.overdue,
-          loanCode: l.code,
-          payCode,
-        }),
+        body: this.sms.render(
+          'reminder.overdue',
+          {
+            firstName: l.type === 'BUSINESS' ? undefined : l.name.split(' ')[0],
+            amount: l.overdue,
+            loanCode: l.code,
+            payCode,
+          },
+          l.language,
+        ),
       });
       if (sms.status !== 'FAILED') {
         sent += 1;

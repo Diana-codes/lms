@@ -483,3 +483,80 @@ describe('applying in the app', () => {
       .expect(400);
   });
 });
+
+describe('Kinyarwanda for borrowers', () => {
+  it('saves the borrower’s language and uses it on screens and in every SMS', async () => {
+    const number = phone();
+    const { loanCode, borrowerCode } = await borrowerWithLoan(number);
+    const token = await signInBorrower(number);
+    expect((await http().get('/app/home').set(bearer(token)).expect(200)).body.language).toBe(
+      'EN',
+    );
+
+    await http()
+      .post('/app/profile/language')
+      .set(bearer(token))
+      .send({ language: 'FR' })
+      .expect(400);
+    const saved = await http()
+      .post('/app/profile/language')
+      .set(bearer(token))
+      .send({ language: 'RW' })
+      .expect(200);
+    expect(saved.body).toEqual({ language: 'RW' });
+    const borrower = await prisma.borrower.findFirstOrThrow({
+      where: { companyId: E2E_COMPANY_ID, code: borrowerCode },
+    });
+    expect(borrower.preferredLanguage).toBe('RW');
+    expect(
+      await prisma.auditLog.count({
+        where: { action: 'borrower.language.change', entityId: borrower.id },
+      }),
+    ).toBe(1);
+    expect((await http().get('/app/profile').set(bearer(token)).expect(200)).body.language).toBe(
+      'RW',
+    );
+
+    const pay = await http()
+      .post(`/app/loans/${loanCode}/pay`)
+      .set(bearer(token))
+      .send({})
+      .expect(202);
+    await http().get(`/app/payments/${pay.body.paymentId}`).set(bearer(token)).expect(200);
+    const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
+    expect(home.language).toBe('RW');
+    expect(home.loan.activity[0].title).toBe('Igice cya 1 cyishyuwe mbere y’igihe');
+
+    const receipt = await prisma.smsMessage.findFirstOrThrow({
+      where: { borrowerId: borrower.id, template: 'payment.received' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(receipt.language).toBe('RW');
+    expect(receipt.body).toMatch(/twakiriye RWF [\d,]+ ku nguzanyo LN-\d{4}-\d{4}\. Murakoze\./);
+    const notices = (await http().get('/app/notifications').set(bearer(token)).expect(200)).body;
+    expect(notices[0].title).toMatch(/^Twakiriye RWF [\d,]+ ku nguzanyo /);
+
+    // The sign-in code also arrives in Kinyarwanda, and the stored copy hides it.
+    await http().post('/app/auth/request-code').send({ phone: number }).expect(200);
+    const otp = await prisma.smsMessage.findFirstOrThrow({
+      where: { borrowerId: borrower.id, template: 'otp' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(otp.language).toBe('RW');
+    expect(otp.body).toMatch(/kode yawe yo kwinjira ni ••••••\./);
+  });
+
+  it('gives staff the house reminder in both languages', async () => {
+    const number = phone();
+    const { loanCode } = await borrowerWithLoan(number);
+    const drafts = (
+      await http()
+        .get(`/collections/accounts/${loanCode}/drafts`)
+        .set('Cookie', managerCookies)
+        .expect(200)
+    ).body;
+    expect(drafts.english).toMatch(/^Hello App, this is .+ A reminder that/);
+    expect(drafts.kinyarwanda).toMatch(/^Muraho App, ni .+ Turabibutsa ko/);
+    expect(drafts.preferred).toBe('EN');
+  });
+});

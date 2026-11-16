@@ -6,9 +6,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  borrowerLanguage,
+  type BorrowerLanguage,
   checkAffordability,
+  formatDateIn,
   formatBps,
-  formatDate,
   formatRwf,
   initials,
   instalmentRemaining,
@@ -19,6 +21,7 @@ import {
   maskPhone,
   monthlyEquivalent,
   PAYMENT_CHANNEL_LABELS,
+  translate,
   utcDateToIso,
   type Frequency,
 } from '@kora/core';
@@ -98,6 +101,7 @@ export class BorrowerAppService {
         notifications: { where: { readAt: null }, select: { id: true } },
       },
     });
+    const lang = borrowerLanguage(b.preferredLanguage);
     const loan = b.loans.find((l) => l.status === 'ACTIVE') ?? null;
     const firstName = b.type === 'BUSINESS' ? b.fullName : b.fullName.split(' ')[0]!;
 
@@ -144,9 +148,13 @@ export class BorrowerAppService {
             return {
               id: p.id,
               title: inst
-                ? `Instalment ${inst.number} paid${early ? ' early' : ''}`
-                : 'Payment received',
-              when: `${formatDate(on, { year: false })} · ${PAYMENT_CHANNEL_LABELS[p.channel]}`,
+                ? translate(
+                    lang,
+                    early ? 'activity.instalmentPaidEarly' : 'activity.instalmentPaid',
+                    { n: inst.number },
+                  )
+                : translate(lang, 'activity.paymentReceived'),
+              when: `${formatDateIn(lang, on, { year: false })} · ${PAYMENT_CHANNEL_LABELS[p.channel]}`,
               amount: p.amount,
             };
           }),
@@ -156,6 +164,7 @@ export class BorrowerAppService {
     const offer = b.offers[0];
     const pendingApp = b.applications[0];
     return {
+      language: lang,
       firstName,
       initials: initials(b.fullName),
       unread: b.notifications.length,
@@ -487,9 +496,20 @@ export class BorrowerAppService {
     await this.sms.send({
       toPhone: b.phone,
       borrowerId: b.id,
-      body: `Kora Lend: we received your application ${code} for ${formatRwf(input.amount)}. We will text you as soon as there is a decision.`,
+      template: 'application.received',
+      language: b.preferredLanguage,
+      body: this.sms.render(
+        'application.received',
+        { applicationCode: code, amount: input.amount },
+        b.preferredLanguage,
+      ),
     });
-    return { code, status: 'In review', expected: 'Within 1 working day' };
+    const lang = borrowerLanguage(b.preferredLanguage);
+    return {
+      code,
+      status: translate(lang, 'apply.inReview'),
+      expected: translate(lang, 'apply.withinOneDay'),
+    };
   }
 
   /** Whether an amount and term would pass the affordability rule, for the app to warn early. */
@@ -560,7 +580,7 @@ export class BorrowerAppService {
       nationalId: b.nationalIdLast3 ? maskNationalId(`0000000000000${b.nationalIdLast3}`) : null,
       kycStatus: b.kycStatus,
       business: b.business ? { name: b.business.name, sector: b.business.sector } : null,
-      language: b.preferredLanguage,
+      language: borrowerLanguage(b.preferredLanguage),
       loans: b.loans.map((l) => ({
         code: l.code,
         productName: l.product.name,
@@ -588,5 +608,29 @@ export class BorrowerAppService {
       metadata: { type },
       ...meta,
     });
+  }
+
+  /** The borrower's language for the app, the portal and every SMS we send them. */
+  async setLanguage(borrowerId: string, language: BorrowerLanguage, meta: RequestMeta) {
+    const before = await this.prisma.borrower.findUniqueOrThrow({
+      where: { id: borrowerId },
+      select: { preferredLanguage: true },
+    });
+    if (before.preferredLanguage !== language) {
+      await this.prisma.borrower.update({
+        where: { id: borrowerId },
+        data: { preferredLanguage: language },
+      });
+      await this.audit.record({
+        action: 'borrower.language.change',
+        actorType: 'BORROWER',
+        actorId: borrowerId,
+        entityType: 'Borrower',
+        entityId: borrowerId,
+        metadata: { from: before.preferredLanguage, to: language },
+        ...meta,
+      });
+    }
+    return { language };
   }
 }

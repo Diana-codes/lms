@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   addDays,
-  formatDate,
-  formatRwf,
+  borrowerLanguage,
+  type SmsTemplate,
+  type SmsVars as CoreSmsVars,
+  smsText,
   instalmentRemaining,
   isoToUtcDate,
   kigaliDate,
@@ -16,23 +18,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProvidersService } from '../providers/providers.service';
 import { companyDisplayName } from '../tenancy/company-context';
 
-export type SmsTemplate =
-  | 'reminder.due_soon'
-  | 'reminder.overdue'
-  | 'payment.received'
-  | 'disbursement.sent'
-  | 'checkin'
-  | 'otp';
+export type { SmsTemplate };
 
-export interface SmsVars {
-  firstName?: string;
-  amount?: bigint;
-  loanCode?: string;
-  date?: string;
-  code?: string;
-  /** The company's MoMo Pay merchant code, for reminders (see payCode()). */
-  payCode?: string;
-}
+/** The variables a template takes; the lender's name is filled in here. */
+export type SmsVars = Omit<CoreSmsVars, 'lender'>;
 
 export interface SendSms {
   toPhone: string;
@@ -60,34 +49,14 @@ export class SmsService {
     return this.providers.momoPayCode();
   }
 
-  /** How to pay, for the end of a message. The merchant code is only quoted once it is real. */
-  private payHint(payCode?: string): string {
-    return payCode ? `Pay with MoMo Pay ${payCode}` : 'Pay with MoMo or at a branch';
-  }
-
   /**
-   * The wording of each message, signed with the lender's own name. English
-   * only for now: Kinyarwanda and French versions should be written and
-   * checked by native speakers before use.
+   * The wording of each message in the borrower's language, signed with the
+   * lender's own name. Dates are ISO and written out in that language. The
+   * Kinyarwanda text lives in @kora/core (i18n.ts) with the rest of the
+   * borrower wording, so a native speaker can review it in one place.
    */
-  render(template: SmsTemplate, v: SmsVars): string {
-    const lender = companyDisplayName();
-    const hello = v.firstName ? `Hello ${v.firstName}, this is ${lender}.` : `${lender}:`;
-    const amount = v.amount != null ? formatRwf(v.amount) : '';
-    switch (template) {
-      case 'reminder.due_soon':
-        return `${hello} Your instalment of ${amount} on loan ${v.loanCode} is due on ${v.date}. ${this.payHint(v.payCode)}. Thank you.`;
-      case 'reminder.overdue':
-        return `${hello} A reminder that ${amount} on loan ${v.loanCode} is overdue. ${this.payHint(v.payCode)}, or reply to agree a date. Thank you.`;
-      case 'payment.received':
-        return `${lender}: we received ${amount} for loan ${v.loanCode}. Thank you.`;
-      case 'disbursement.sent':
-        return `${lender}: ${amount} for loan ${v.loanCode} has been sent to your MoMo wallet. Your first instalment is due on ${v.date}.`;
-      case 'checkin':
-        return `${hello} Your next instalment on loan ${v.loanCode} is due on ${v.date}. If anything has changed for you, reply and we will find a plan together.`;
-      case 'otp':
-        return `${lender}: your sign-in code is ${v.code}. It expires in 5 minutes. Do not share it with anyone.`;
-    }
+  render(template: SmsTemplate, v: SmsVars, language?: Language | null): string {
+    return smsText(borrowerLanguage(language), template, { ...v, lender: companyDisplayName() });
   }
 
   /** Send one message and keep a record of it, whatever happens. */
@@ -102,8 +71,7 @@ export class SmsService {
       data: {
         toPhone: input.toPhone,
         // One-time codes are never kept: the stored text has the code removed.
-        body:
-          input.template === 'otp' ? `${companyDisplayName()}: your sign-in code is ••••••.` : body,
+        body: input.template === 'otp' ? body.replace(/\b\d{6}\b/g, '••••••') : body,
         borrowerId: input.borrowerId ?? null,
         loanId: input.loanId ?? null,
         template: input.template ?? null,
@@ -236,14 +204,19 @@ export class SmsService {
         borrowerId: borrower.id,
         loanId: inst.loanId,
         template: 'reminder.due_soon',
+        language: borrower.preferredLanguage,
         sentById: opts.sentById,
-        body: this.render('reminder.due_soon', {
-          firstName: borrower.type === 'BUSINESS' ? undefined : borrower.fullName.split(' ')[0],
-          amount: instalmentRemaining(inst),
-          loanCode: inst.loan.code,
-          date: formatDate(utcDateToIso(inst.dueDate), { year: false }),
-          payCode,
-        }),
+        body: this.render(
+          'reminder.due_soon',
+          {
+            firstName: borrower.type === 'BUSINESS' ? undefined : borrower.fullName.split(' ')[0],
+            amount: instalmentRemaining(inst),
+            loanCode: inst.loan.code,
+            date: utcDateToIso(inst.dueDate),
+            payCode,
+          },
+          borrower.preferredLanguage,
+        ),
       });
       if (sms.status === 'FAILED') failed += 1;
       else sent += 1;

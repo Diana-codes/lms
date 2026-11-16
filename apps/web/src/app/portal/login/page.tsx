@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getCompany, PRODUCT_NAME } from '@/lib/company';
+import { T } from '@/lib/portal/i18n';
 import { PortalLoginForm } from './login-form';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -12,9 +13,11 @@ export default async function PortalLoginPage() {
     return (
       <main className="flex flex-1 items-center justify-center p-6">
         <div className="flex max-w-sm flex-col gap-3 text-center">
-          <h1 className="m-0 font-display text-2xl font-semibold">This address is not in use</h1>
+          <h1 className="m-0 font-display text-2xl font-semibold">
+            <T k="signin.unknownAddress" />
+          </h1>
           <p className="m-0 text-sm text-ink-muted">
-            Check the link your lender gave you. Each lender on {PRODUCT_NAME} has its own address.
+            <T k="signin.unknownAddressBody" vars={{ product: PRODUCT_NAME }} />
           </p>
         </div>
       </main>
@@ -37,7 +40,7 @@ export default async function PortalLoginPage() {
             {name}
           </p>
           <p className="m-0 max-w-sm text-sm text-forest-muted">
-            Check your loan, pay with MoMo, or apply — sign in with your phone.
+            <T k="signin.taglineWeb" />
           </p>
         </div>
       </section>

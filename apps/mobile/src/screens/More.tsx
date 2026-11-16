@@ -1,17 +1,19 @@
-import { formatDate, formatRwf } from '@kora/core';
+import { formatBps, formatRwf, kigaliDate, type MessageKey } from '@kora/core';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { api, clearTokens, errorMessage } from '../lib/api';
+import { api, clearTokens } from '../lib/api';
+import { LanguageSwitch, useI18n } from '../lib/i18n';
 import type { Profile, Schedule as ScheduleData } from '../lib/types';
 import { Button, Card, Heading, Money, Muted, Pill, Row } from '../ui';
 import { c, font, r } from '../ui/theme';
 
 function Top({ title, onBack }: { title: string; onBack: () => void }) {
+  const { t } = useI18n();
   return (
     <View style={styles.top}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t('common.back')}
         onPress={onBack}
         style={styles.back}
       >
@@ -29,32 +31,28 @@ const STATE_TONE = {
   DUE_NEXT: 'lime',
   UPCOMING: 'neutral',
 } as const;
-const STATE_LABEL = {
-  PAID: 'Paid',
-  PARTIAL: 'Part paid',
-  OVERDUE: 'Overdue',
-  DUE_NEXT: 'Due next',
-  UPCOMING: 'Upcoming',
-} as const;
-
 export function Schedule({ loanCode, onBack }: { loanCode: string; onBack: () => void }) {
+  const { t, date, error: errorMessage } = useI18n();
   const [data, setData] = useState<ScheduleData | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<ScheduleData>(`/app/loans/${loanCode}/schedule`)
       .then(setData)
       .catch((e) => setError(errorMessage(e)));
-  }, [loanCode]);
+  }, [loanCode, errorMessage]);
   return (
     <View style={styles.screen}>
-      <Top title="Repayment schedule" onBack={onBack} />
+      <Top title={t('schedule.title')} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.body}>
         {error ? <Muted>{error}</Muted> : null}
         {data ? (
           <Card style={{ gap: 0 }}>
             <Muted style={{ marginBottom: 8 }}>
-              {loanCode} · {formatRwf(BigInt(data.principal))} at{' '}
-              {(data.annualRateBps / 100).toFixed(0)}% p.a.
+              {t('schedule.rateLine', {
+                code: loanCode,
+                amount: formatRwf(BigInt(data.principal)),
+                rate: formatBps(data.annualRateBps, 0),
+              })}
             </Muted>
             {data.rows.map((row) => (
               <View key={row.number} style={styles.scheduleRow}>
@@ -62,19 +60,17 @@ export function Schedule({ loanCode, onBack }: { loanCode: string; onBack: () =>
                   {row.number}
                 </Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.ink, fontFamily: font.medium }}>
-                    {formatDate(row.dueDate)}
-                  </Text>
+                  <Text style={{ color: c.ink, fontFamily: font.medium }}>{date(row.dueDate)}</Text>
                   {row.state === 'PARTIAL' ||
                   (row.state === 'OVERDUE' && row.remaining !== row.amount) ? (
-                    <Muted>{formatRwf(BigInt(row.remaining))} left</Muted>
+                    <Muted>{t('common.left', { amount: formatRwf(BigInt(row.remaining)) })}</Muted>
                   ) : null}
                 </View>
                 <Money
                   amount={row.amount}
                   style={{ fontFamily: font.semibold, color: c.ink, marginRight: 10 }}
                 />
-                <Pill label={STATE_LABEL[row.state]} tone={STATE_TONE[row.state]} />
+                <Pill label={t(`state.${row.state}` as MessageKey)} tone={STATE_TONE[row.state]} />
               </View>
             ))}
           </Card>
@@ -91,13 +87,18 @@ export function ProfileScreen({
   onBack: () => void;
   onSignedOut: () => void;
 }) {
+  const { t, lender, error: errorMessage, adopt } = useI18n();
+  const [notice, setNotice] = useState<string | null>(null);
   const [data, setData] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<Profile>('/app/profile')
-      .then(setData)
+      .then((p) => {
+        adopt(p.language);
+        setData(p);
+      })
       .catch((e) => setError(errorMessage(e)));
-  }, []);
+  }, [adopt, errorMessage]);
 
   async function signOut() {
     try {
@@ -116,7 +117,7 @@ export function ProfileScreen({
 
   return (
     <View style={styles.screen}>
-      <Top title="Profile" onBack={onBack} />
+      <Top title={t('profile.title')} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.body}>
         {error ? <Muted>{error}</Muted> : null}
         {data ? (
@@ -125,48 +126,60 @@ export function ProfileScreen({
               <Text style={{ fontFamily: font.display, fontSize: 20, color: c.ink }}>
                 {data.name}
               </Text>
-              <Row label="Customer number" value={data.code} />
-              <Row label="Phone" value={data.phone} />
-              {data.nationalId ? <Row label="National ID" value={data.nationalId} /> : null}
+              <Row label={t('profile.customerNumber')} value={data.code} />
+              <Row label={t('profile.phone')} value={data.phone} />
+              {data.nationalId ? (
+                <Row label={t('profile.nationalId')} value={data.nationalId} />
+              ) : null}
               <Row
-                label="Identity"
+                label={t('profile.identity')}
                 value={
                   <Pill
-                    label={data.kycStatus === 'VERIFIED' ? 'Verified' : 'Pending'}
+                    label={
+                      data.kycStatus === 'VERIFIED' ? t('profile.verified') : t('profile.pending')
+                    }
                     tone={data.kycStatus === 'VERIFIED' ? 'success' : 'warning'}
                   />
                 }
               />
-              {data.business ? <Row label="Business" value={data.business.name} /> : null}
+              {data.business ? (
+                <Row label={t('profile.business')} value={data.business.name} />
+              ) : null}
             </Card>
             <Card>
-              <Text style={{ fontFamily: font.semibold, color: c.ink }}>Your loans</Text>
-              {data.loans.length === 0 ? <Muted>None yet.</Muted> : null}
+              <Text style={{ fontFamily: font.semibold, color: c.ink }}>
+                {t('common.language')}
+              </Text>
+              <LanguageSwitch onSaved={setNotice} />
+              <Muted>{notice ?? t('common.languageHint')}</Muted>
+            </Card>
+            <Card>
+              <Text style={{ fontFamily: font.semibold, color: c.ink }}>{t('profile.loans')}</Text>
+              {data.loans.length === 0 ? <Muted>{t('profile.noLoans')}</Muted> : null}
               {data.loans.map((l) => (
                 <Row
                   key={l.code}
                   label={`${l.code} · ${l.productName}`}
-                  value={`${formatRwf(BigInt(l.principal))} · ${l.status === 'ACTIVE' ? 'Active' : l.status === 'REPAID' ? 'Repaid' : l.status === 'PENDING_DISBURSEMENT' ? 'Sending' : 'Closed'}`}
+                  value={`${formatRwf(BigInt(l.principal))} · ${t(`loanStatus.${l.status}` as MessageKey)}`}
                 />
               ))}
             </Card>
             <Card>
-              <Text style={{ fontFamily: font.semibold, color: c.ink }}>Your data</Text>
-              <Muted>
-                Kora Lend keeps your data in Rwanda and uses it only to manage your loans. You can
-                withdraw permissions here at any time.
-              </Muted>
+              <Text style={{ fontFamily: font.semibold, color: c.ink }}>
+                {t('profile.yourData')}
+              </Text>
+              <Muted>{t('profile.dataNote', { lender })}</Muted>
               {data.consents.some((x) => x.type === 'MOMO_HISTORY') ? (
                 <Button
-                  label="Stop sharing MoMo history"
+                  label={t('profile.stopMomo')}
                   variant="secondary"
                   onPress={() => withdraw('MOMO_HISTORY')}
                 />
               ) : (
-                <Muted>MoMo history: not shared.</Muted>
+                <Muted>{t('profile.momoNotShared')}</Muted>
               )}
             </Card>
-            <Button label="Sign out" variant="secondary" onPress={signOut} />
+            <Button label={t('profile.signOut')} variant="secondary" onPress={signOut} />
           </>
         ) : null}
       </ScrollView>
@@ -175,6 +188,7 @@ export function ProfileScreen({
 }
 
 export function Notifications({ onBack }: { onBack: () => void }) {
+  const { t, date } = useI18n();
   const [items, setItems] = useState<Array<{
     id: string;
     title: string;
@@ -188,13 +202,13 @@ export function Notifications({ onBack }: { onBack: () => void }) {
   }, []);
   return (
     <View style={styles.screen}>
-      <Top title="Notifications" onBack={onBack} />
+      <Top title={t('alerts.title')} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.body}>
-        {items?.length === 0 ? <Muted>Nothing yet.</Muted> : null}
+        {items?.length === 0 ? <Muted>{t('alerts.empty')}</Muted> : null}
         {items?.map((n) => (
           <View key={n.id} style={[styles.note, !n.read && { borderColor: c['lime-deep'] }]}>
             <Text style={{ color: c.ink, fontFamily: font.medium }}>{n.title}</Text>
-            <Muted>{formatDate(n.at.slice(0, 10))}</Muted>
+            <Muted>{date(kigaliDate(new Date(n.at)))}</Muted>
           </View>
         ))}
       </ScrollView>

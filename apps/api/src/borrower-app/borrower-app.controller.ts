@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { BORROWER_LANGUAGES } from '@kora/core';
 import { z } from 'zod';
 import { Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
@@ -54,6 +55,7 @@ const applySchema = z.object({
   selfieKey: z.string().max(200).optional(),
 });
 const consentSchema = z.object({ type: z.enum(['MOMO_HISTORY', 'MARKETING_SMS']) });
+const languageSchema = z.object({ language: z.enum(BORROWER_LANGUAGES) });
 
 /** Everything the borrower app calls lives under /app. */
 @Public()
@@ -191,5 +193,15 @@ export class BorrowerAppController {
     @Body(new ZodPipe(consentSchema)) body: z.infer<typeof consentSchema>,
   ): Promise<void> {
     await this.app.withdrawConsent(req.borrower.borrowerId, body.type, requestMeta(req));
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Post('profile/language')
+  @HttpCode(200)
+  setLanguage(
+    @Req() req: BorrowerRequest,
+    @Body(new ZodPipe(languageSchema)) body: z.infer<typeof languageSchema>,
+  ) {
+    return this.app.setLanguage(req.borrower.borrowerId, body.language, requestMeta(req));
   }
 }

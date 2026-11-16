@@ -1,4 +1,5 @@
 export interface Home {
+  language: 'EN' | 'RW';
   firstName: string;
   initials: string;
   unread: number;
@@ -81,6 +82,7 @@ export interface Schedule {
 }
 
 export interface Profile {
+  language: 'EN' | 'RW';
   code: string;
   name: string;
   phone: string;

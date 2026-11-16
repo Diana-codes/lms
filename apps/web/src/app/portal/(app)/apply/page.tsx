@@ -1,11 +1,12 @@
 'use client';
 
-import { formatBps } from '@kora/core';
+import { formatBps, formatRwf } from '@kora/core';
 import { Button, FormError, Money, SelectField, TextField } from '@kora/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { portalApi, portalErrorMessage } from '@/lib/portal/api';
+import { portalApi } from '@/lib/portal/api';
+import { usePortalI18n } from '@/lib/portal/i18n';
 import type { PortalApplyOptions, PortalQuote } from '@/lib/portal/types';
 import { PortalNav } from '../../portal-nav';
 
@@ -17,6 +18,7 @@ const groupDigits = (s: string) => s.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?
 
 export default function PortalApplyPage() {
   const router = useRouter();
+  const { t, option, lender: lenderName, error: errorText } = usePortalI18n();
   const [options, setOptions] = useState<PortalApplyOptions | null>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 'sent'>(1);
   const [productCode, setProductCode] = useState('');
@@ -52,11 +54,10 @@ export default function PortalApplyPage() {
         setPurpose(o.purposes[0] ?? 'Equipment');
         setBusinessName(o.prefill.businessName ?? '');
         setBusinessSector(o.prefill.sector ?? SECTORS[0]!);
-        setMonthlyRevenue(
-          o.prefill.monthlyRevenue ? groupDigits(o.prefill.monthlyRevenue) : '',
-        );
+        setMonthlyRevenue(o.prefill.monthlyRevenue ? groupDigits(o.prefill.monthlyRevenue) : '');
       })
-      .catch((e) => setError(portalErrorMessage(e)));
+      .catch((e) => setError(errorText(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const product = useMemo(
@@ -110,7 +111,7 @@ export default function PortalApplyPage() {
       setResult({ code: r.code, status: r.status, expected: r.expected });
       setStep('sent');
     } catch (err) {
-      setError(portalErrorMessage(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -120,7 +121,7 @@ export default function PortalApplyPage() {
     return (
       <>
         <main className="flex flex-1 items-center justify-center p-6 text-sm text-ink-muted">
-          Loading products…
+          {t('apply.loadingProducts')}
         </main>
         <PortalNav />
       </>
@@ -131,13 +132,11 @@ export default function PortalApplyPage() {
     return (
       <>
         <main className="flex flex-1 flex-col gap-3 p-5">
-          <h1 className="m-0 font-display text-xl font-semibold">Apply</h1>
-          <p className="m-0 text-sm text-ink-muted">
-            No products are open for applications right now. Check back later.
-          </p>
+          <h1 className="m-0 font-display text-xl font-semibold">{t('apply.title')}</h1>
+          <p className="m-0 text-sm text-ink-muted">{t('apply.noProducts')}</p>
           <Link href="/portal/home">
             <Button type="button" variant="secondary">
-              Back to home
+              {t('common.backHome')}
             </Button>
           </Link>
         </main>
@@ -149,13 +148,21 @@ export default function PortalApplyPage() {
   return (
     <>
       <main className="flex flex-1 flex-col gap-5 p-5 pb-8">
-        <h1 className="m-0 font-display text-xl font-semibold">Apply for a loan</h1>
+        <h1 className="m-0 font-display text-xl font-semibold">{t('apply.title')}</h1>
 
         {step !== 'sent' ? (
           <div className="flex flex-col gap-2">
             <p className="m-0 text-xs text-ink-muted">
-              Step {step} of 3 ·{' '}
-              {step === 1 ? 'Amount' : step === 2 ? 'About you' : 'Confirm'}
+              {t('apply.stepOf', {
+                n: step,
+                title: t(
+                  step === 1
+                    ? 'apply.stepLoan'
+                    : step === 2
+                      ? 'apply.stepDetails'
+                      : 'apply.stepReview',
+                ),
+              })}
             </p>
             <div className="flex gap-1.5">
               {[1, 2, 3].map((i) => (
@@ -170,12 +177,20 @@ export default function PortalApplyPage() {
 
         {step === 'sent' && result ? (
           <section className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
-            <h2 className="m-0 font-display text-lg font-semibold">Application sent</h2>
+            <h2 className="m-0 font-display text-lg font-semibold">{t('apply.sent')}</h2>
             <p className="m-0 text-sm text-ink-muted">
-              {result.code} · {result.status}. Decision: {result.expected}.
+              {t('apply.sentBody', { amount: formatRwf(amountBig) })}
             </p>
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dt className="text-ink-muted">{t('apply.reference')}</dt>
+              <dd className="m-0 font-semibold">{result.code}</dd>
+              <dt className="text-ink-muted">{t('apply.status')}</dt>
+              <dd className="m-0">{result.status}</dd>
+              <dt className="text-ink-muted">{t('apply.expectedDecision')}</dt>
+              <dd className="m-0">{result.expected}</dd>
+            </dl>
             <Button type="button" onClick={() => router.push('/portal/home')}>
-              Back to home
+              {t('common.backHome')}
             </Button>
           </section>
         ) : null}
@@ -190,7 +205,7 @@ export default function PortalApplyPage() {
           >
             {options!.products.length > 1 ? (
               <SelectField
-                label="Product"
+                label={t('apply.product')}
                 value={productCode}
                 onChange={(e) => setProductCode(e.target.value)}
               >
@@ -204,65 +219,69 @@ export default function PortalApplyPage() {
               <p className="m-0 text-sm text-ink-muted">{product.name}</p>
             )}
             <TextField
-              label="Amount (RWF)"
+              label={t('apply.amountRwf')}
               inputMode="numeric"
               value={amount}
               onChange={(e) => setAmount(groupDigits(e.target.value))}
               required
             />
             <SelectField
-              label="Term (months)"
+              label={t('apply.termMonths')}
               value={String(termMonths)}
               onChange={(e) => setTermMonths(Number(e.target.value))}
             >
-              {product.terms.map((t) => (
-                <option key={t} value={t}>
-                  {t} months
+              {product.terms.map((months) => (
+                <option key={months} value={months}>
+                  {t('common.months', { n: months })}
                 </option>
               ))}
             </SelectField>
             <SelectField
-              label="Purpose"
+              label={t('apply.purpose')}
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
             >
-              {(options?.purposes?.length ? options.purposes : ['Equipment', 'Stock', 'Working capital']).map(
-                (p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ),
-              )}
+              {(options?.purposes?.length
+                ? options.purposes
+                : ['Equipment', 'Stock', 'Working capital']
+              ).map((p) => (
+                <option key={p} value={p}>
+                  {option(p)}
+                </option>
+              ))}
             </SelectField>
             {quote ? (
               <div className="rounded-xl border border-line bg-surface p-4 text-sm">
                 <div className="flex justify-between gap-3">
-                  <span className="text-ink-muted">Instalment</span>
+                  <span className="text-ink-muted">{t('apply.monthlyInstalment')}</span>
                   <span className="font-semibold">
                     <Money amount={quote.monthly} />
                   </span>
                 </div>
                 <div className="mt-1 flex justify-between gap-3">
-                  <span className="text-ink-muted">Total to repay</span>
+                  <span className="text-ink-muted">{t('apply.totalToRepay')}</span>
                   <span className="font-semibold">
                     <Money amount={quote.totalToRepay} />
                   </span>
                 </div>
                 <div className="mt-1 flex justify-between gap-3">
-                  <span className="text-ink-muted">Rate</span>
-                  <span>{formatBps(quote.annualRateBps, 0)} a year</span>
+                  <span className="text-ink-muted">{t('apply.rate')}</span>
+                  <span>{t('common.perYear', { rate: formatBps(quote.annualRateBps, 0) })}</span>
                 </div>
                 {quote.affordability && !quote.affordability.affordable ? (
                   <p className="m-0 mt-2 text-xs text-amber">
-                    This instalment is above the usual share of your income. You can still apply;
-                    a loan officer will review it.
+                    {t('apply.affordability', {
+                      ratio: quote.affordability.ratio,
+                      limit: quote.affordability.limit,
+                    })}
                   </p>
                 ) : null}
               </div>
             ) : null}
             <Button type="submit" disabled={amountBig <= 0n}>
-              Continue
+              {t('common.continue')}
             </Button>
+            <p className="m-0 text-center text-xs text-ink-muted">{t('apply.noFees')}</p>
           </form>
         ) : null}
 
@@ -275,31 +294,31 @@ export default function PortalApplyPage() {
             }}
           >
             <TextField
-              label="Business name"
+              label={t('apply.businessName')}
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
               maxLength={120}
             />
             <SelectField
-              label="Sector"
+              label={t('apply.sector')}
               value={businessSector}
               onChange={(e) => setBusinessSector(e.target.value)}
             >
               {SECTORS.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {option(s)}
                 </option>
               ))}
             </SelectField>
             <TextField
-              label="Typical monthly revenue (RWF)"
+              label={t('apply.monthlyRevenue')}
               inputMode="numeric"
               value={monthlyRevenue}
               onChange={(e) => setMonthlyRevenue(groupDigits(e.target.value))}
             />
             {!options?.prefill.kycVerified ? (
               <TextField
-                label="National ID (16 digits)"
+                label={t('apply.nationalIdNumber')}
                 inputMode="numeric"
                 value={nationalId}
                 onChange={(e) => setNationalId(e.target.value.replace(/\D/g, '').slice(0, 16))}
@@ -307,7 +326,7 @@ export default function PortalApplyPage() {
               />
             ) : (
               <p className="m-0 text-sm text-ink-muted">
-                ID on file: {options.prefill.nationalIdMasked}
+                {t('apply.idOnFile', { id: options.prefill.nationalIdMasked ?? '' })}
               </p>
             )}
             <label className="flex items-start gap-2 text-sm">
@@ -317,13 +336,16 @@ export default function PortalApplyPage() {
                 checked={shareMomo}
                 onChange={(e) => setShareMomo(e.target.checked)}
               />
-              Share my MoMo history to help with the decision
+              <span>
+                {t('apply.shareMomo')}
+                <span className="block text-xs text-ink-muted">{t('apply.shareMomoHint')}</span>
+              </span>
             </label>
             <div className="flex gap-2">
               <Button type="button" variant="secondary" onClick={() => setStep(1)}>
-                Back
+                {t('common.back')}
               </Button>
-              <Button type="submit">Continue</Button>
+              <Button type="submit">{t('common.continue')}</Button>
             </div>
           </form>
         ) : null}
@@ -333,11 +355,12 @@ export default function PortalApplyPage() {
             <div className="rounded-xl border border-line bg-surface p-4 text-sm">
               <p className="m-0 font-semibold">{product?.name}</p>
               <p className="m-0 mt-1 text-ink-muted">
-                <Money amount={amountBig.toString()} /> · {termMonths} months · {purpose}
+                <Money amount={amountBig.toString()} /> · {t('common.months', { n: termMonths })} ·{' '}
+                {option(purpose)}
               </p>
               {quote ? (
                 <p className="m-0 mt-2">
-                  About <Money amount={quote.monthly} /> per instalment
+                  {t('apply.monthlyInstalment')}: <Money amount={quote.monthly} />
                 </p>
               ) : null}
             </div>
@@ -349,7 +372,7 @@ export default function PortalApplyPage() {
                 onChange={(e) => setAgreed(e.target.checked)}
                 required
               />
-              I agree to the loan terms and that my details may be used to assess this application
+              {t('apply.agreeTerms', { lender: lenderName })}
             </label>
             <label className="flex items-start gap-2 text-sm">
               <input
@@ -358,15 +381,15 @@ export default function PortalApplyPage() {
                 checked={bureau}
                 onChange={(e) => setBureau(e.target.checked)}
               />
-              I agree to a credit bureau check if needed
+              {t('apply.agreeBureau', { lender: lenderName })}
             </label>
             <FormError>{error}</FormError>
             <div className="flex gap-2">
               <Button type="button" variant="secondary" onClick={() => setStep(2)}>
-                Back
+                {t('common.back')}
               </Button>
               <Button type="submit" disabled={busy || !agreed}>
-                {busy ? 'Sending…' : 'Submit application'}
+                {busy ? t('apply.sending') : t('apply.submit')}
               </Button>
             </div>
           </form>

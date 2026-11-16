@@ -1,14 +1,16 @@
 'use client';
 
-import { formatDate } from '@kora/core';
+import { formatRwf, translateApiMessage } from '@kora/core';
 import { Button, Money, Pill } from '@kora/ui';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { portalApi, portalErrorMessage } from '@/lib/portal/api';
+import { portalApi } from '@/lib/portal/api';
+import { usePortalI18n } from '@/lib/portal/i18n';
 import type { PortalHome } from '@/lib/portal/types';
 import { PortalNav } from '../../portal-nav';
 
 export default function PortalHomePage() {
+  const { lang, t, date, error: errorText, adopt } = usePortalI18n();
   const [data, setData] = useState<PortalHome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
@@ -16,12 +18,14 @@ export default function PortalHomePage() {
 
   const load = useCallback(async () => {
     try {
-      setData(await portalApi<PortalHome>('/app/home'));
+      const home = await portalApi<PortalHome>('/app/home');
+      adopt(home.language);
+      setData(home);
       setError(null);
     } catch (err) {
-      setError(portalErrorMessage(err));
+      setError(errorText(err));
     }
-  }, []);
+  }, [adopt, errorText]);
 
   useEffect(() => {
     void load();
@@ -36,24 +40,26 @@ export default function PortalHomePage() {
         method: 'POST',
         body: {},
       });
-      setToast('Check your phone for the MoMo prompt and enter your PIN.');
+      setToast(t('home.checkPhone'));
       for (let i = 0; i < 10; i++) {
         await new Promise((res) => setTimeout(res, 2000));
         const s = await portalApi<{ status: string; failureReason: string | null }>(
           `/app/payments/${r.paymentId}`,
         );
         if (s.status === 'SUCCESSFUL') {
-          setToast('Payment received. Thank you!');
+          setToast(t('home.paymentReceived'));
           break;
         }
         if (s.status === 'FAILED') {
-          setToast(s.failureReason ?? 'The payment did not go through.');
+          setToast(
+            s.failureReason ? translateApiMessage(lang, s.failureReason) : t('home.paymentFailed'),
+          );
           break;
         }
       }
       await load();
     } catch (err) {
-      setToast(portalErrorMessage(err));
+      setToast(errorText(err));
     } finally {
       setPaying(false);
     }
@@ -63,10 +69,10 @@ export default function PortalHomePage() {
     return (
       <>
         <main className="flex flex-1 flex-col items-center justify-center gap-3 p-6">
-          <p className="m-0 text-sm text-ink-muted">{error ?? 'Loading…'}</p>
+          <p className="m-0 text-sm text-ink-muted">{error ?? t('common.loading')}</p>
           {error ? (
             <Button type="button" variant="secondary" onClick={load}>
-              Try again
+              {t('common.tryAgain')}
             </Button>
           ) : null}
         </main>
@@ -87,7 +93,7 @@ export default function PortalHomePage() {
             {data.initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-xs text-ink-muted">Muraho,</p>
+            <p className="m-0 text-xs text-ink-muted">{t('home.greeting')}</p>
             <h1 className="m-0 truncate font-display text-2xl font-semibold tracking-[-0.02em]">
               {data.firstName}
             </h1>
@@ -96,7 +102,7 @@ export default function PortalHomePage() {
             href="/portal/notifications"
             className="relative rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink no-underline"
           >
-            Alerts
+            {t('nav.alerts')}
             {data.unread > 0 ? (
               <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-amber" />
             ) : null}
@@ -112,17 +118,20 @@ export default function PortalHomePage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="m-0 text-xs text-forest-muted">
-                  Instalment {next.number} of {loan.instalmentCount} ·{' '}
-                  {late ? 'was due' : 'due'} {formatDate(next.dueDate)}
+                  {t('home.instalmentOf', { n: next.number, total: loan.instalmentCount })} ·{' '}
+                  {t(late ? 'home.wasDueOn' : 'home.dueOn', { date: date(next.dueDate) })}
                 </p>
                 <p className="m-0 mt-2 font-display text-[36px] leading-none font-semibold tabular-nums tracking-[-0.03em]">
                   <Money amount={next.amount} />
                 </p>
               </div>
-              <Pill tone={late ? 'danger' : 'lime'}>{late ? 'Overdue' : 'Due next'}</Pill>
+              <Pill tone={late ? 'danger' : 'lime'}>
+                {late ? t('state.OVERDUE') : t('state.DUE_NEXT')}
+              </Pill>
             </div>
             <p className="m-0 text-sm text-forest-muted">
-              {loan.repaidPercent}% repaid · <Money amount={loan.totalLeft} /> left
+              {t('home.repaid', { pct: loan.repaidPercent })} ·{' '}
+              {t('common.left', { amount: formatRwf(BigInt(loan.totalLeft)) })}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -132,42 +141,42 @@ export default function PortalHomePage() {
                 onClick={pay}
               >
                 {paying
-                  ? 'Waiting for MoMo…'
+                  ? t('home.waitingMomo')
                   : loan.pendingPayment
-                    ? 'Payment pending'
-                    : 'Pay with MoMo'}
+                    ? t('home.paymentPending')
+                    : t('home.payWithMomo')}
               </Button>
               <Link
                 href={`/portal/schedule?loan=${loan.code}`}
                 className="inline-flex items-center rounded-lg border border-white/25 px-4 py-2 text-sm font-semibold text-white no-underline"
               >
-                Schedule
+                {t('home.schedule')}
               </Link>
             </div>
           </section>
         ) : loan ? (
           <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="m-0 font-display text-lg font-semibold">Nothing due right now</h2>
+            <h2 className="m-0 font-display text-lg font-semibold">{t('home.nothingDueNow')}</h2>
             <p className="mt-1 mb-3 text-sm text-ink-muted">
-              Loan {loan.code} · {loan.repaidPercent}% repaid
+              {t('home.loanRepaid', { code: loan.code, pct: loan.repaidPercent })}
             </p>
             <Link
               href={`/portal/schedule?loan=${loan.code}`}
               className="text-sm font-semibold text-forest no-underline"
             >
-              View schedule
+              {t('home.viewSchedule')}
             </Link>
           </section>
         ) : data.pendingLoan ? (
           <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="m-0 font-display text-lg font-semibold">Loan being prepared</h2>
+            <h2 className="m-0 font-display text-lg font-semibold">{t('home.loanPrepared')}</h2>
             <p className="m-0 mt-1 text-sm text-ink-muted">
-              {data.pendingLoan.code} will appear here once it is disbursed.
+              {t('home.loanPreparedBody', { code: data.pendingLoan.code })}
             </p>
           </section>
         ) : data.application ? (
           <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="m-0 font-display text-lg font-semibold">Application in review</h2>
+            <h2 className="m-0 font-display text-lg font-semibold">{t('home.inReview')}</h2>
             <p className="m-0 mt-1 text-sm text-ink-muted">
               {data.application.code} · {data.application.productName} ·{' '}
               <Money amount={data.application.amount} />
@@ -175,32 +184,34 @@ export default function PortalHomePage() {
           </section>
         ) : (
           <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="m-0 font-display text-lg font-semibold">No active loan</h2>
-            <p className="mt-1 mb-3 text-sm text-ink-muted">
-              Apply for a loan when you are ready. We will text you when it is decided.
-            </p>
+            <h2 className="m-0 font-display text-lg font-semibold">{t('home.noLoan')}</h2>
+            <p className="mt-1 mb-3 text-sm text-ink-muted">{t('home.noLoanBodyWeb')}</p>
             <Link href="/portal/apply">
-              <Button type="button">Apply for a loan</Button>
+              <Button type="button">{t('home.applyForLoan')}</Button>
             </Link>
           </section>
         )}
 
         {data.offer ? (
           <section className="rounded-xl border border-lime-deep/30 bg-lime/20 p-4">
-            <p className="m-0 text-xs font-semibold text-forest">Pre-approved offer</p>
+            <p className="m-0 text-xs font-semibold text-forest">{t('home.preApprovedOffer')}</p>
             <p className="m-0 mt-1 font-display text-lg font-semibold">
-              Up to <Money amount={data.offer.maxAmount} /> · {data.offer.termMonths} months
+              {t('common.upTo', { amount: formatRwf(BigInt(data.offer.maxAmount)) })} ·{' '}
+              {t('common.months', { n: data.offer.termMonths })}
             </p>
             <p className="m-0 text-sm text-ink-muted">{data.offer.productName}</p>
-            <Link href="/portal/apply" className="mt-2 inline-block text-sm font-semibold text-forest">
-              Use this offer
+            <Link
+              href="/portal/apply"
+              className="mt-2 inline-block text-sm font-semibold text-forest"
+            >
+              {t('home.useOffer')}
             </Link>
           </section>
         ) : null}
 
         {loan?.activity?.length ? (
           <section className="flex flex-col gap-2">
-            <h2 className="m-0 text-sm font-semibold">Recent activity</h2>
+            <h2 className="m-0 text-sm font-semibold">{t('home.recentActivity')}</h2>
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {loan.activity.map((a) => (
                 <li

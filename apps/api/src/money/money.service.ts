@@ -8,13 +8,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  formatDate,
   formatRwf,
   instalmentRemaining,
   isoToUtcDate,
   kigaliDate,
   maskPhone,
   utcDateToIso,
+  borrowerLanguage,
+  translate,
 } from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
@@ -280,11 +281,12 @@ export class MoneyService {
           borrowerId: loan.borrowerId,
           loanId: loan.id,
           template: 'disbursement.sent',
-          body: this.sms.render('disbursement.sent', {
-            amount: d.amount,
-            loanCode: loan.code,
-            date: formatDate(utcDateToIso(loan.firstDueDate)),
-          }),
+          language: loan.borrower.preferredLanguage,
+          body: this.sms.render(
+            'disbursement.sent',
+            { amount: d.amount, loanCode: loan.code, date: utcDateToIso(loan.firstDueDate) },
+            loan.borrower.preferredLanguage,
+          ),
         });
         if (loan.officerId) {
           await this.prisma.notification.create({
@@ -350,13 +352,25 @@ export class MoneyService {
         borrowerId: loan.borrowerId,
         loanId: loan.id,
         template: 'payment.received',
-        body: this.sms.render('payment.received', { amount, loanCode }),
+        language: loan.borrower.preferredLanguage,
+        body: this.sms.render(
+          'payment.received',
+          { amount, loanCode },
+          loan.borrower.preferredLanguage,
+        ),
       });
       await this.prisma.notification.create({
         data: {
           borrowerId: loan.borrowerId,
           kind: 'PAYMENT',
-          title: `We received ${formatRwf(amount)} for ${loanCode}`,
+          title: translate(
+            borrowerLanguage(loan.borrower.preferredLanguage),
+            'notice.paymentReceived',
+            {
+              amount: formatRwf(amount),
+              code: loanCode,
+            },
+          ),
           href: paymentId,
         },
       });

@@ -7,7 +7,14 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
-import { addDays, formatRwf, isoToUtcDate, kigaliDate } from '@kora/core';
+import {
+  addDays,
+  borrowerLanguage,
+  formatRwf,
+  isoToUtcDate,
+  kigaliDate,
+  translate,
+} from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
@@ -77,7 +84,9 @@ export class OffersController {
       data: {
         borrowerId: b.id,
         kind: 'SYSTEM',
-        title: `You are pre-approved for up to ${formatRwf(b.preApprovedLimit)}`,
+        title: translate(borrowerLanguage(b.preferredLanguage), 'notice.preApproved', {
+          amount: formatRwf(b.preApprovedLimit),
+        }),
         href: `offer:${offer.id}`,
       },
     });
@@ -86,7 +95,13 @@ export class OffersController {
       toPhone: b.phone,
       borrowerId: b.id,
       sentById: user.id,
-      body: `Hello ${firstName}, this is Kora Lend. You are pre-approved for a top-up of up to ${formatRwf(b.preApprovedLimit)}. Open the Kora Lend app to apply in 5 minutes.`,
+      template: 'offer.preapproved',
+      language: b.preferredLanguage,
+      body: this.sms.render(
+        'offer.preapproved',
+        { firstName, amount: b.preApprovedLimit },
+        b.preferredLanguage,
+      ),
     });
     await this.audit.record({
       action: 'borrower.offer.send',

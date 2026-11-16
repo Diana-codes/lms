@@ -1,6 +1,7 @@
 /** Shapes returned by the borrower `/app` API. */
 
 export interface PortalHome {
+  language: 'EN' | 'RW';
   firstName: string;
   initials: string;
   unread: number;
@@ -77,6 +78,7 @@ export interface PortalSchedule {
 }
 
 export interface PortalProfile {
+  language: 'EN' | 'RW';
   code: string;
   name: string;
   phone: string;

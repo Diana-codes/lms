@@ -81,13 +81,11 @@ export function AccountPanel({ loanCode }: { loanCode: string }) {
   }
 
   async function openDraft(lang: 'English' | 'Kinyarwanda') {
-    if (lang === 'Kinyarwanda') {
-      const text = typeof approach === 'object' && approach ? approach.smsKinyarwanda : '';
-      if (!text) return toast('No Kinyarwanda draft is available for this account.');
-      return setDraft({ text, lang: 'Kinyarwanda · AI draft, check before sending' });
-    }
     try {
-      const d = await api<{ english: string }>(`/collections/accounts/${loanCode}/drafts`);
+      const d = await api<{ english: string; kinyarwanda: string }>(
+        `/collections/accounts/${loanCode}/drafts`,
+      );
+      if (lang === 'Kinyarwanda') return setDraft({ text: d.kinyarwanda, lang: 'Kinyarwanda' });
       setDraft({ text: d.english, lang: 'English' });
     } catch (err) {
       toast(message(err));

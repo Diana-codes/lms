@@ -3,12 +3,8 @@
 import { Button, FormError, TextField } from '@kora/ui';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
-import {
-  portalApi,
-  portalErrorMessage,
-  savePortalTokens,
-  type PortalTokens,
-} from '@/lib/portal/api';
+import { portalApi, savePortalTokens, type PortalTokens } from '@/lib/portal/api';
+import { LanguageSwitch, usePortalI18n } from '@/lib/portal/i18n';
 
 type RequestCodeResult =
   | ({ otpRequired: false; phone: string } & PortalTokens)
@@ -16,6 +12,7 @@ type RequestCodeResult =
 
 export function PortalLoginForm({ lenderName }: { lenderName: string }) {
   const router = useRouter();
+  const { t, error: errorText } = usePortalI18n();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [masked, setMasked] = useState<string | null>(null);
@@ -40,7 +37,7 @@ export function PortalLoginForm({ lenderName }: { lenderName: string }) {
       setMasked(r.phone);
       setBusy(false);
     } catch (err) {
-      setError(portalErrorMessage(err));
+      setError(errorText(err));
       setBusy(false);
     }
   }
@@ -59,31 +56,30 @@ export function PortalLoginForm({ lenderName }: { lenderName: string }) {
       );
       router.replace('/portal/home');
     } catch (err) {
-      setError(portalErrorMessage(err));
+      setError(errorText(err));
       setBusy(false);
     }
   }
 
   return (
-    <form
-      onSubmit={masked ? verify : requestCode}
-      className="flex flex-col gap-4"
-      noValidate
-    >
+    <form onSubmit={masked ? verify : requestCode} className="flex flex-col gap-4" noValidate>
+      <div className="self-end">
+        <LanguageSwitch />
+      </div>
       <div className="flex flex-col gap-1">
         <h1 className="m-0 font-display text-2xl font-semibold tracking-[-0.02em]">
-          {masked ? 'Enter your code' : 'Sign in with your phone'}
+          {masked ? t('signin.titleCode') : t('signin.titlePhone')}
         </h1>
         <p className="m-0 text-sm text-ink-muted">
           {masked
-            ? `We sent a 6-digit code by SMS to ${masked}.`
-            : `Enter the phone number on your ${lenderName} account. You may get a texted code if your lender requires one.`}
+            ? t('signin.codeSent', { phone: masked })
+            : t('signin.enterPhone', { lender: lenderName })}
         </p>
       </div>
 
       {masked ? (
         <TextField
-          label="6-digit code"
+          label={t('signin.codeLabel')}
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={6}
@@ -94,7 +90,7 @@ export function PortalLoginForm({ lenderName }: { lenderName: string }) {
         />
       ) : (
         <TextField
-          label="Phone number"
+          label={t('signin.phoneLabel')}
           inputMode="tel"
           autoComplete="tel"
           placeholder="078 812 3412"
@@ -110,7 +106,7 @@ export function PortalLoginForm({ lenderName }: { lenderName: string }) {
         type="submit"
         disabled={busy || (masked ? code.length !== 6 : phone.replace(/\D/g, '').length < 9)}
       >
-        {busy ? 'One moment…' : masked ? 'Sign in' : 'Continue'}
+        {busy ? t('common.oneMoment') : masked ? t('signin.submit') : t('common.continue')}
       </Button>
 
       {masked ? (
@@ -123,7 +119,7 @@ export function PortalLoginForm({ lenderName }: { lenderName: string }) {
             setError(null);
           }}
         >
-          Use a different number
+          {t('signin.differentNumber')}
         </button>
       ) : null}
     </form>

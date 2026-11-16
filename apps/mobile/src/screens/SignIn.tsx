@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { api, errorMessage, saveTokens, type Tokens } from '../lib/api';
+import { api, saveTokens, type Tokens } from '../lib/api';
+import { LanguageSwitch, useI18n } from '../lib/i18n';
 import { Button, ErrorText, Heading, Muted } from '../ui';
 import { c, font, r } from '../ui/theme';
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const { t, lender, error: errorMessage } = useI18n();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [masked, setMasked] = useState<string | null>(null);
@@ -61,23 +63,26 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     >
       <View style={styles.hero}>
         <View style={styles.logo}>
-          <Text style={{ color: c.forest, fontFamily: font.display, fontSize: 22 }}>K</Text>
+          <Text style={{ color: c.forest, fontFamily: font.display, fontSize: 22 }}>
+            {lender.charAt(0)}
+          </Text>
         </View>
-        <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 28 }}>Kora Lend</Text>
+        <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 28 }}>{lender}</Text>
         <Text style={{ color: c['forest-muted'], fontSize: 14, marginTop: 4 }}>
-          Loans for your business, paid with MoMo.
+          {t('signin.taglineApp')}
         </Text>
+        <View style={{ marginTop: 14 }}>
+          <LanguageSwitch dark />
+        </View>
       </View>
       <View style={styles.form}>
-        <Heading size={22}>{masked ? 'Enter your code' : 'Sign in with your phone'}</Heading>
+        <Heading size={22}>{masked ? t('signin.titleCode') : t('signin.titlePhone')}</Heading>
         <Muted>
-          {masked
-            ? `We sent a 6-digit code by SMS to ${masked}.`
-            : 'Enter the phone number on your account. You may get a texted code if your lender requires one.'}
+          {masked ? t('signin.codeSent', { phone: masked }) : t('signin.enterPhone', { lender })}
         </Muted>
         {masked ? (
           <TextInput
-            accessibilityLabel="6-digit code"
+            accessibilityLabel={t('signin.codeLabel')}
             style={[styles.input, { fontSize: 24, letterSpacing: 6, textAlign: 'center' }]}
             keyboardType="number-pad"
             textContentType="oneTimeCode"
@@ -89,7 +94,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           />
         ) : (
           <TextInput
-            accessibilityLabel="Phone number"
+            accessibilityLabel={t('signin.phoneLabel')}
             style={styles.input}
             keyboardType="phone-pad"
             textContentType="telephoneNumber"
@@ -103,14 +108,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         )}
         <ErrorText>{error}</ErrorText>
         <Button
-          label={busy ? 'One moment…' : masked ? 'Sign in' : 'Continue'}
+          label={busy ? t('common.oneMoment') : masked ? t('signin.submit') : t('common.continue')}
           loading={busy}
           disabled={masked ? code.length !== 6 : phone.replace(/\D/g, '').length < 9}
           onPress={masked ? verify : requestCode}
         />
         {masked ? (
           <Button
-            label="Use a different number"
+            label={t('signin.differentNumber')}
             variant="ghost"
             onPress={() => {
               setMasked(null);
@@ -119,9 +124,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
             }}
           />
         ) : null}
-        <Muted style={{ textAlign: 'center' }}>
-          Only customers of Kora Lend can sign in. Not a customer yet? Visit a branch.
-        </Muted>
+        <Muted style={{ textAlign: 'center' }}>{t('signin.onlyCustomers', { lender })}</Muted>
       </View>
     </KeyboardAvoidingView>
   );

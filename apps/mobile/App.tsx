@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { hasSession } from './src/lib/api';
+import { LanguageProvider } from './src/lib/i18n';
 import { Apply } from './src/screens/Apply';
 import { Home } from './src/screens/Home';
 import { Notifications, ProfileScreen, Schedule } from './src/screens/More';
@@ -44,49 +45,54 @@ export default function App() {
     return <View style={{ flex: 1, backgroundColor: c.forest }} />;
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: screen === 'signin' ? c.forest : c.ground }}
-        edges={['top', 'bottom']}
-      >
-        <StatusBar style={screen === 'signin' ? 'light' : 'dark'} />
-        {screen === 'signin' ? <SignIn onSignedIn={() => setScreen('home')} /> : null}
-        {screen === 'home' ? (
-          <Home
-            toast={flash}
-            go={(s) => {
-              if (s === 'schedule') {
-                // The home screen only offers this when there is an active loan.
-              }
-              setScreen(s);
-            }}
-          />
-        ) : null}
-        {screen === 'apply' ? (
-          <Apply
-            onDone={() => setScreen('home')}
-            onCancel={() => setScreen('home')}
-            toast={flash}
-          />
-        ) : null}
-        {screen === 'schedule' ? (
-          <ScheduleGate
-            loanCode={loanCode}
-            setLoanCode={setLoanCode}
-            onBack={() => setScreen('home')}
-          />
-        ) : null}
-        {screen === 'profile' ? (
-          <ProfileScreen onBack={() => setScreen('home')} onSignedOut={() => setScreen('signin')} />
-        ) : null}
-        {screen === 'notifications' ? <Notifications onBack={() => setScreen('home')} /> : null}
-        {toast ? (
-          <View style={styles.toast} accessibilityLiveRegion="polite" accessibilityRole="alert">
-            <Text style={{ color: c.surface, fontSize: 14 }}>{toast}</Text>
-          </View>
-        ) : null}
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <LanguageProvider>
+      <SafeAreaProvider>
+        <SafeAreaView
+          style={{ flex: 1, backgroundColor: screen === 'signin' ? c.forest : c.ground }}
+          edges={['top', 'bottom']}
+        >
+          <StatusBar style={screen === 'signin' ? 'light' : 'dark'} />
+          {screen === 'signin' ? <SignIn onSignedIn={() => setScreen('home')} /> : null}
+          {screen === 'home' ? (
+            <Home
+              toast={flash}
+              go={(s) => {
+                if (s === 'schedule') {
+                  // The home screen only offers this when there is an active loan.
+                }
+                setScreen(s);
+              }}
+            />
+          ) : null}
+          {screen === 'apply' ? (
+            <Apply
+              onDone={() => setScreen('home')}
+              onCancel={() => setScreen('home')}
+              toast={flash}
+            />
+          ) : null}
+          {screen === 'schedule' ? (
+            <ScheduleGate
+              loanCode={loanCode}
+              setLoanCode={setLoanCode}
+              onBack={() => setScreen('home')}
+            />
+          ) : null}
+          {screen === 'profile' ? (
+            <ProfileScreen
+              onBack={() => setScreen('home')}
+              onSignedOut={() => setScreen('signin')}
+            />
+          ) : null}
+          {screen === 'notifications' ? <Notifications onBack={() => setScreen('home')} /> : null}
+          {toast ? (
+            <View style={styles.toast} accessibilityLiveRegion="polite" accessibilityRole="alert">
+              <Text style={{ color: c.surface, fontSize: 14 }}>{toast}</Text>
+            </View>
+          ) : null}
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </LanguageProvider>
   );
 }
 

@@ -1,8 +1,9 @@
-import { formatDate, formatRwf, formatRwfCompact, maskNationalId } from '@kora/core';
+import { formatBps, formatRwf, formatRwfCompact, maskNationalId } from '@kora/core';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { api, errorMessage } from '../lib/api';
+import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import type { ApplyOptions, Draft, Quote } from '../lib/types';
 import { Button, Choice, ErrorText, Heading, Muted, Row } from '../ui';
 import { c, font, r } from '../ui/theme';
@@ -12,11 +13,10 @@ const STEP_ROUND = 100_000n;
 const CONSENT_VERSION = '2026-01';
 
 function Progress({ step, title }: { step: 1 | 2 | 3; title: string }) {
+  const { t } = useI18n();
   return (
     <View style={{ gap: 6 }}>
-      <Muted>
-        Step {step} of 3 · {title}
-      </Muted>
+      <Muted>{t('apply.stepOf', { n: step, title })}</Muted>
       <View style={{ flexDirection: 'row', gap: 6 }}>
         {[1, 2, 3].map((i) => (
           <View
@@ -35,11 +35,12 @@ function Progress({ step, title }: { step: 1 | 2 | 3; title: string }) {
 }
 
 function Header({ step, title, onBack }: { step: 1 | 2 | 3; title: string; onBack: () => void }) {
+  const { t } = useI18n();
   return (
     <View style={styles.header}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back"
+        accessibilityLabel={t('common.back')}
         onPress={onBack}
         style={styles.back}
       >
@@ -72,6 +73,7 @@ export function Apply({
   onCancel: () => void;
   toast: (m: string) => void;
 }) {
+  const { t, date, option, lender, error: errorMessage } = useI18n();
   const [options, setOptions] = useState<ApplyOptions | null>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 'sent'>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -105,7 +107,7 @@ export function Apply({
         });
       })
       .catch((err) => setError(errorMessage(err)));
-  }, []);
+  }, [errorMessage]);
 
   const product = useMemo(
     () => options?.products.find((p) => p.code === draft?.productCode) ?? null,
@@ -201,7 +203,7 @@ export function Apply({
       <View
         style={[styles.screen, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}
       >
-        <Text style={{ color: c['ink-muted'] }}>{error ?? 'Loading…'}</Text>
+        <Text style={{ color: c['ink-muted'] }}>{error ?? t('common.loading')}</Text>
       </View>
     );
   }
@@ -222,18 +224,17 @@ export function Apply({
           >
             <Text style={{ fontSize: 28, color: c.forest }}>✓</Text>
           </View>
-          <Heading>Application sent</Heading>
+          <Heading>{t('apply.sent')}</Heading>
           <Text style={{ textAlign: 'center', color: c['ink-soft'], fontSize: 14, lineHeight: 20 }}>
-            We’re reviewing your request for {formatRwf(draft.amount)}. We’ll send you an SMS as
-            soon as there’s a decision.
+            {t('apply.sentBody', { amount: formatRwf(draft.amount) })}
           </Text>
         </View>
         <View style={styles.box}>
-          <Row label="Reference" value={result.code} />
-          <Row label="Status" value={result.status} />
-          <Row label="Expected decision" value={result.expected} />
+          <Row label={t('apply.reference')} value={result.code} />
+          <Row label={t('apply.status')} value={result.status} />
+          <Row label={t('apply.expectedDecision')} value={result.expected} />
         </View>
-        <Button label="Back to home" variant="accent" onPress={onDone} />
+        <Button label={t('common.backHome')} variant="accent" onPress={onDone} />
       </View>
     );
   }
@@ -249,9 +250,9 @@ export function Apply({
     <View style={styles.screen}>
       {step === 1 ? (
         <>
-          <Header step={1} title="Loan details" onBack={onCancel} />
+          <Header step={1} title={t('apply.stepLoan')} onBack={onCancel} />
           <ScrollView contentContainerStyle={styles.body}>
-            <Heading>How much do you need?</Heading>
+            <Heading>{t('apply.howMuch')}</Heading>
             {options.products.length > 1 ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {options.products.map((p) => (
@@ -274,7 +275,7 @@ export function Apply({
               </View>
             ) : null}
             <View style={styles.box}>
-              <Muted>Loan amount</Muted>
+              <Muted>{t('apply.loanAmount')}</Muted>
               <Text
                 accessibilityLiveRegion="polite"
                 style={{ fontFamily: font.display, fontSize: 34, color: c.ink }}
@@ -301,20 +302,20 @@ export function Apply({
                 <Muted>{formatRwfCompact(min)}</Muted>
                 <Muted>
                   {options.preApprovedLimit
-                    ? `Pre-approved up to ${formatRwfCompact(max)}`
-                    : `Up to ${formatRwfCompact(max)}`}
+                    ? t('apply.preApprovedUpTo', { amount: formatRwfCompact(max) })
+                    : t('common.upTo', { amount: formatRwfCompact(max) })}
                 </Muted>
               </View>
             </View>
             <View style={{ gap: 8 }}>
-              <Muted>Repay over</Muted>
+              <Muted>{t('apply.repayOver')}</Muted>
               <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
-                {product.terms.map((t) => (
+                {product.terms.map((months) => (
                   <Choice
-                    key={t}
-                    label={`${t} mo`}
-                    selected={t === draft.termMonths}
-                    onPress={() => setDraft({ ...draft, termMonths: t })}
+                    key={months}
+                    label={t('common.monthsShort', { n: months })}
+                    selected={months === draft.termMonths}
+                    onPress={() => setDraft({ ...draft, termMonths: months })}
                     style={{ flex: 1 }}
                   />
                 ))}
@@ -329,47 +330,47 @@ export function Apply({
                 }}
               >
                 <View>
-                  <Muted>Monthly instalment</Muted>
+                  <Muted>{t('apply.monthlyInstalment')}</Muted>
                   <Text style={{ fontFamily: font.display, fontSize: 24, color: c.ink }}>
                     {quote ? formatRwf(BigInt(quote.monthly)) : '…'}
                   </Text>
                 </View>
-                <Muted>{(product.annualRateBps / 100).toFixed(0)}% p.a.</Muted>
+                <Muted>{t('common.perYear', { rate: formatBps(product.annualRateBps, 0) })}</Muted>
               </View>
               <View style={{ height: 1, backgroundColor: c['line-soft'] }} />
               <Row
-                label="Total interest"
+                label={t('apply.totalInterest')}
                 value={quote ? formatRwf(BigInt(quote.totalInterest)) : '…'}
               />
               <Row
-                label="Total to repay"
+                label={t('apply.totalToRepay')}
                 value={quote ? formatRwf(BigInt(quote.totalToRepay)) : '…'}
               />
-              <Row label="First payment" value={quote ? formatDate(quote.firstPayment) : '…'} />
+              <Row label={t('apply.firstPayment')} value={quote ? date(quote.firstPayment) : '…'} />
               {quote?.affordability && !quote.affordability.affordable ? (
                 <Text style={{ color: c['warning-fg'], fontSize: 13 }}>
-                  This would be {quote.affordability.ratio} of your income; we lend up to{' '}
-                  {quote.affordability.limit}. Try a smaller amount or a longer term.
+                  {t('apply.affordability', {
+                    ratio: quote.affordability.ratio,
+                    limit: quote.affordability.limit,
+                  })}
                 </Text>
               ) : null}
             </View>
           </ScrollView>
           <View style={styles.footer}>
-            <Button label="Continue" variant="accent" onPress={() => setStep(2)} />
-            <Muted style={{ textAlign: 'center' }}>
-              No fees to apply · Decision within 1 working day
-            </Muted>
+            <Button label={t('common.continue')} variant="accent" onPress={() => setStep(2)} />
+            <Muted style={{ textAlign: 'center' }}>{t('apply.noFees')}</Muted>
           </View>
         </>
       ) : null}
 
       {step === 2 ? (
         <>
-          <Header step={2} title="Your details" onBack={() => setStep(1)} />
+          <Header step={2} title={t('apply.stepDetails')} onBack={() => setStep(1)} />
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-            <Heading>Tell us about your business</Heading>
+            <Heading>{t('apply.aboutBusiness')}</Heading>
             <View style={{ gap: 8 }}>
-              <Muted>What is the loan for?</Muted>
+              <Muted>{t('apply.purpose')}</Muted>
               <View
                 style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
                 accessibilityRole="radiogroup"
@@ -377,7 +378,7 @@ export function Apply({
                 {options.purposes.map((p) => (
                   <Choice
                     key={p}
-                    label={p}
+                    label={option(p)}
                     selected={p === draft.purpose}
                     onPress={() => setDraft({ ...draft, purpose: p })}
                     style={{ borderRadius: r.pill }}
@@ -386,21 +387,21 @@ export function Apply({
               </View>
             </View>
             <View style={styles.box}>
-              <Field label="Business name">
+              <Field label={t('apply.businessName')}>
                 <TextInput
                   style={styles.input}
                   value={draft.businessName}
                   onChangeText={(v) => setDraft({ ...draft, businessName: v })}
-                  placeholder="e.g. Uwase Tailoring"
+                  placeholder={t('apply.businessNamePlaceholder')}
                   placeholderTextColor={c['ink-muted']}
                 />
               </Field>
-              <Field label="Sector">
+              <Field label={t('apply.sector')}>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                   {SECTORS.map((s) => (
                     <Choice
                       key={s}
-                      label={s}
+                      label={option(s)}
                       selected={s === draft.businessSector}
                       onPress={() => setDraft({ ...draft, businessSector: s })}
                       style={{ borderRadius: r.pill, minHeight: 40 }}
@@ -408,7 +409,7 @@ export function Apply({
                   ))}
                 </View>
               </Field>
-              <Field label="Average monthly revenue (RWF)">
+              <Field label={t('apply.monthlyRevenue')}>
                 <TextInput
                   style={styles.input}
                   keyboardType="number-pad"
@@ -427,16 +428,18 @@ export function Apply({
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ fontFamily: font.semibold, color: c.ink }}>Identity</Text>
+                <Text style={{ fontFamily: font.semibold, color: c.ink }}>
+                  {t('apply.identity')}
+                </Text>
                 {options.prefill.kycVerified ? (
                   <Text
                     style={{ color: c['positive-fg'], fontSize: 12, fontFamily: font.semibold }}
                   >
-                    ✓ Verified with NIDA
+                    {t('apply.verifiedNida')}
                   </Text>
                 ) : null}
               </View>
-              <Field label="National ID number">
+              <Field label={t('apply.nationalIdNumber')}>
                 {options.prefill.nationalIdMasked ? (
                   <Text style={[styles.input, { paddingTop: 14, color: c['ink-muted'] }]}>
                     {options.prefill.nationalIdMasked}
@@ -448,7 +451,7 @@ export function Apply({
                     maxLength={16}
                     value={draft.nationalId}
                     onChangeText={(v) => setDraft({ ...draft, nationalId: v.replace(/\D/g, '') })}
-                    placeholder="16 digits"
+                    placeholder={t('apply.digits16')}
                     placeholderTextColor={c['ink-muted']}
                   />
                 )}
@@ -463,10 +466,10 @@ export function Apply({
                   <Text style={{ fontSize: 20 }}>🪪</Text>
                   <Text style={{ fontSize: 12, color: c.ink, textAlign: 'center' }}>
                     {busy === 'id'
-                      ? 'Uploading…'
+                      ? t('apply.uploading')
                       : draft.idPhotoKey
-                        ? 'ID front · added'
-                        : 'Add ID photo'}
+                        ? t('apply.idAdded')
+                        : t('apply.addId')}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -478,19 +481,21 @@ export function Apply({
                   <Text style={{ fontSize: 20 }}>🤳</Text>
                   <Text style={{ fontSize: 12, color: c.ink, textAlign: 'center' }}>
                     {busy === 'selfie'
-                      ? 'Uploading…'
+                      ? t('apply.uploading')
                       : draft.selfieKey
-                        ? 'Selfie · added'
-                        : 'Take a selfie'}
+                        ? t('apply.selfieAdded')
+                        : t('apply.takeSelfie')}
                   </Text>
                 </Pressable>
               </View>
               {!options.prefill.kycVerified && !draft.idPhotoKey ? (
-                <Muted>An ID photo and a selfie let us verify you faster.</Muted>
+                <Muted>{t('apply.photosHint')}</Muted>
               ) : null}
             </View>
             <View style={styles.box}>
-              <Text style={{ fontFamily: font.semibold, color: c.ink }}>Statements</Text>
+              <Text style={{ fontFamily: font.semibold, color: c.ink }}>
+                {t('apply.statements')}
+              </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View
                   style={{
@@ -506,12 +511,12 @@ export function Apply({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 14, color: c.ink, fontFamily: font.medium }}>
-                    Share 6 months of MoMo history
+                    {t('apply.shareMomo')}
                   </Text>
-                  <Muted>Faster decision, no upload needed</Muted>
+                  <Muted>{t('apply.shareMomoHint')}</Muted>
                 </View>
                 <Switch
-                  accessibilityLabel="Share MoMo history"
+                  accessibilityLabel={t('apply.shareMomo')}
                   value={draft.shareMomoHistory}
                   onValueChange={(v) => setDraft({ ...draft, shareMomoHistory: v })}
                   trackColor={{ true: c.forest, false: c.line }}
@@ -521,25 +526,27 @@ export function Apply({
             </View>
           </ScrollView>
           <View style={styles.footer}>
-            <Button label="Review application" variant="accent" onPress={() => setStep(3)} />
-            <Muted style={{ textAlign: 'center' }}>
-              🔒 Your data is encrypted and only used for this application
-            </Muted>
+            <Button
+              label={t('apply.reviewApplication')}
+              variant="accent"
+              onPress={() => setStep(3)}
+            />
+            <Muted style={{ textAlign: 'center' }}>{t('apply.encrypted')}</Muted>
           </View>
         </>
       ) : null}
 
       {step === 3 ? (
         <>
-          <Header step={3} title="Review & submit" onBack={() => setStep(2)} />
+          <Header step={3} title={t('apply.stepReview')} onBack={() => setStep(2)} />
           <ScrollView contentContainerStyle={styles.body}>
-            <Heading>Check everything looks right</Heading>
+            <Heading>{t('apply.checkEverything')}</Heading>
             <View style={styles.box}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Muted>You’re borrowing</Muted>
+                <Muted>{t('apply.borrowing')}</Muted>
                 <Pressable onPress={() => setStep(1)} hitSlop={10}>
                   <Text style={{ color: c.forest, fontFamily: font.semibold, fontSize: 13 }}>
-                    Edit
+                    {t('common.edit')}
                   </Text>
                 </Pressable>
               </View>
@@ -547,56 +554,60 @@ export function Apply({
                 {formatRwf(draft.amount)}
               </Text>
               <View style={{ height: 1, backgroundColor: c['line-soft'] }} />
-              <Row label="Monthly" value={quote ? formatRwf(BigInt(quote.monthly)) : '…'} />
               <Row
-                label="Term"
-                value={`${draft.termMonths} months · ${(product.annualRateBps / 100).toFixed(0)}% p.a.`}
+                label={t('apply.monthly')}
+                value={quote ? formatRwf(BigInt(quote.monthly)) : '…'}
               />
               <Row
-                label="Total interest"
+                label={t('apply.term')}
+                value={`${t('common.months', { n: draft.termMonths })} · ${t('common.perYear', {
+                  rate: formatBps(product.annualRateBps, 0),
+                })}`}
+              />
+              <Row
+                label={t('apply.totalInterest')}
                 value={quote ? formatRwf(BigInt(quote.totalInterest)) : '…'}
               />
               <Row
-                label="Total to repay"
+                label={t('apply.totalToRepay')}
                 value={quote ? formatRwf(BigInt(quote.totalToRepay)) : '…'}
               />
             </View>
             <View style={styles.box}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Muted>Your details</Muted>
+                <Muted>{t('apply.yourDetails')}</Muted>
                 <Pressable onPress={() => setStep(2)} hitSlop={10}>
                   <Text style={{ color: c.forest, fontFamily: font.semibold, fontSize: 13 }}>
-                    Edit
+                    {t('common.edit')}
                   </Text>
                 </Pressable>
               </View>
-              <Row label="Purpose" value={draft.purpose} />
-              <Row label="Business" value={draft.businessName || '—'} />
+              <Row label={t('apply.purposeShort')} value={option(draft.purpose)} />
+              <Row label={t('profile.business')} value={draft.businessName || '—'} />
               <Row
-                label="Monthly revenue"
+                label={t('apply.monthlyRevenueShort')}
                 value={draft.monthlyRevenue ? `RWF ${draft.monthlyRevenue}` : '—'}
               />
               <Row
-                label="National ID"
+                label={t('profile.nationalId')}
                 value={
                   options.prefill.kycVerified
-                    ? 'Verified'
+                    ? t('profile.verified')
                     : draft.nationalId
                       ? maskNationalId(draft.nationalId)
-                      : 'Not given'
+                      : t('common.notGiven')
                 }
               />
               <Row
-                label="MoMo history"
-                value={draft.shareMomoHistory ? 'Shared (6 months)' : 'Not shared'}
+                label={t('apply.momoHistory')}
+                value={draft.shareMomoHistory ? t('apply.sharedSix') : t('apply.notShared')}
               />
             </View>
             <View style={styles.box}>
-              <Text style={{ fontFamily: font.semibold, color: c.ink }}>Money goes to</Text>
-              <Row
-                label="Wallet"
-                value={options.wallet ?? 'No MoMo wallet linked · ask your officer'}
-              />
+              <Text style={{ fontFamily: font.semibold, color: c.ink }}>
+                {t('apply.moneyGoesTo')}
+              </Text>
+              <Row label={t('apply.wallet')} value={options.wallet ?? t('apply.noWallet')} />
             </View>
             <Pressable
               accessibilityRole="checkbox"
@@ -613,7 +624,7 @@ export function Apply({
                 {agreed ? <Text style={{ color: c.lime, fontSize: 14 }}>✓</Text> : null}
               </View>
               <Text style={{ flex: 1, fontSize: 14, color: c.ink, lineHeight: 20 }}>
-                I agree to the loan terms and to Kora Lend processing my data for this application.
+                {t('apply.agreeTerms', { lender })}
               </Text>
             </Pressable>
             <Pressable
@@ -631,22 +642,20 @@ export function Apply({
                 {bureau ? <Text style={{ color: c.lime, fontSize: 14 }}>✓</Text> : null}
               </View>
               <Text style={{ flex: 1, fontSize: 14, color: c.ink, lineHeight: 20 }}>
-                Kora Lend may check my credit record with the credit bureau.
+                {t('apply.agreeBureau', { lender })}
               </Text>
             </Pressable>
             <ErrorText>{error}</ErrorText>
           </ScrollView>
           <View style={styles.footer}>
             <Button
-              label="Submit application"
+              label={t('apply.submit')}
               variant="accent"
               disabled={!agreed}
               loading={busy === 'submit'}
               onPress={submit}
             />
-            <Muted style={{ textAlign: 'center' }}>
-              You’ll get a decision within 1 working day
-            </Muted>
+            <Muted style={{ textAlign: 'center' }}>{t('apply.decisionWithin')}</Muted>
           </View>
         </>
       ) : null}

@@ -35,6 +35,24 @@ test.describe('borrower portal', () => {
     await expect(portal).toHaveURL(/\/portal\/home/, { timeout: 15_000 });
     await expect(portal.getByText(/Muraho/i)).toBeVisible();
 
+    // Switching to Kinyarwanda saves it on the account and changes the screens.
+    await portal.getByRole('link', { name: 'Profile' }).click();
+    await portal.getByRole('button', { name: 'Ikinyarwanda' }).click();
+    await expect(portal.getByText('Ururimi rwabitswe.')).toBeVisible();
+    await expect(portal.getByRole('heading', { name: 'Konti yanjye' })).toBeVisible();
+    await portal.getByRole('link', { name: 'Ahabanza' }).click();
+    await expect(portal.getByRole('link', { name: 'Ubutumwa' }).first()).toBeVisible();
+
+    // The sign-in page offers the switch before anyone signs in.
+    const again = await browser.newContext();
+    const second = await again.newPage();
+    await second.goto('/portal/login');
+    await second.getByRole('button', { name: 'Ikinyarwanda' }).click();
+    await expect(
+      second.getByRole('heading', { name: 'Injira ukoresheje telefone yawe' }),
+    ).toBeVisible();
+    await again.close();
+
     await borrowerCtx.close();
   });
 });

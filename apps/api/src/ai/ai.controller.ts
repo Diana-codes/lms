@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
-import { addDays, kigaliDate, kigaliDayStart, formatDate, utcDateToIso } from '@kora/core';
+import { addDays, kigaliDate, kigaliDayStart, utcDateToIso } from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
@@ -127,13 +127,18 @@ export class AiController {
         borrowerId: loan.borrowerId,
         loanId: loan.id,
         template: 'checkin',
+        language: loan.borrower.preferredLanguage,
         sentById: user.id,
-        body: this.sms.render('checkin', {
-          firstName:
-            loan.borrower.type === 'BUSINESS' ? undefined : loan.borrower.fullName.split(' ')[0],
-          loanCode: loan.code,
-          date: next ? formatDate(utcDateToIso(next.dueDate), { year: false }) : '',
-        }),
+        body: this.sms.render(
+          'checkin',
+          {
+            firstName:
+              loan.borrower.type === 'BUSINESS' ? undefined : loan.borrower.fullName.split(' ')[0],
+            loanCode: loan.code,
+            date: next ? utcDateToIso(next.dueDate) : undefined,
+          },
+          loan.borrower.preferredLanguage,
+        ),
       });
       if (msg.status !== 'FAILED') sent += 1;
     }

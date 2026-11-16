@@ -68,7 +68,7 @@ export class BorrowerAuthService {
 
     const borrower = await this.prisma.borrower.findFirst({
       where: { phone },
-      select: { id: true, code: true },
+      select: { id: true, code: true, preferredLanguage: true },
     });
 
     // Company has borrower OTP off: known phones sign in with the number alone.
@@ -117,7 +117,8 @@ export class BorrowerAuthService {
         toPhone: phone,
         borrowerId: borrower.id,
         template: 'otp',
-        body: this.sms.render('otp', { code }),
+        language: borrower.preferredLanguage,
+        body: this.sms.render('otp', { code }, borrower.preferredLanguage),
       });
       // Local development only: with the SMS simulator nothing is texted, so show the code
       // in the API log. Production never uses the simulator.

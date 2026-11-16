@@ -1,7 +1,8 @@
-import { formatDate, formatRwf } from '@kora/core';
+import { formatRwf, translateApiMessage } from '@kora/core';
 import { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { api, errorMessage } from '../lib/api';
+import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import type { Home as HomeData } from '../lib/types';
 import { Button, Card, Money, Muted, Pill, Row } from '../ui';
 import { c, font, r } from '../ui/theme';
@@ -13,6 +14,7 @@ export function Home({
   go: (screen: 'apply' | 'schedule' | 'profile' | 'notifications') => void;
   toast: (m: string) => void;
 }) {
+  const { lang, t, date, error: errorMessage, adopt } = useI18n();
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,12 +23,14 @@ export function Home({
 
   const load = useCallback(async () => {
     try {
-      setData(await api<HomeData>('/app/home'));
+      const home = await api<HomeData>('/app/home');
+      adopt(home.language);
+      setData(home);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));
     }
-  }, []);
+  }, [adopt, errorMessage]);
 
   useEffect(() => {
     void load();
@@ -41,7 +45,7 @@ export function Home({
         body: {},
       });
       setSheet(false);
-      toast('Check your phone for the MoMo prompt and enter your PIN to approve.');
+      toast(t('home.checkPhone'));
       // Follow up for a short while; the payment also settles on its own.
       for (let i = 0; i < 10; i++) {
         await new Promise((res) => setTimeout(res, 2000));
@@ -49,11 +53,13 @@ export function Home({
           `/app/payments/${r.paymentId}`,
         );
         if (s.status === 'SUCCESSFUL') {
-          toast('Payment received. Thank you!');
+          toast(t('home.paymentReceived'));
           break;
         }
         if (s.status === 'FAILED') {
-          toast(s.failureReason ?? 'The payment did not go through.');
+          toast(
+            s.failureReason ? translateApiMessage(lang, s.failureReason) : t('home.paymentFailed'),
+          );
           break;
         }
       }
@@ -70,9 +76,14 @@ export function Home({
       <View
         style={[styles.screen, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}
       >
-        <Text style={{ color: c['ink-muted'] }}>{error ?? 'Loading…'}</Text>
+        <Text style={{ color: c['ink-muted'] }}>{error ?? t('common.loading')}</Text>
         {error ? (
-          <Button label="Try again" variant="secondary" onPress={load} style={{ marginTop: 12 }} />
+          <Button
+            label={t('common.tryAgain')}
+            variant="secondary"
+            onPress={load}
+            style={{ marginTop: 12 }}
+          />
         ) : null}
       </View>
     );
@@ -82,8 +93,11 @@ export function Home({
   const next = loan?.next;
   const late = next?.state === 'OVERDUE';
   const dueLine = next
-    ? `Instalment ${next.number} of ${loan!.instalmentCount} · ${late ? 'was due' : 'due'} ${formatDate(next.dueDate)}`
-    : 'Nothing due';
+    ? `${t('home.instalmentOf', { n: next.number, total: loan!.instalmentCount })} · ${t(
+        late ? 'home.wasDueOn' : 'home.dueOn',
+        { date: date(next.dueDate) },
+      )}`
+    : t('home.nothingDue');
 
   return (
     <ScrollView
@@ -105,7 +119,7 @@ export function Home({
           <Text style={{ color: c.forest, fontFamily: font.semibold }}>{data.initials}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Muted>Muraho,</Muted>
+          <Muted>{t('home.greeting')}</Muted>
           <Text style={{ fontFamily: font.display, fontSize: 22, color: c.ink }}>
             {data.firstName}
           </Text>
@@ -113,7 +127,9 @@ export function Home({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            data.unread ? `Notifications, ${data.unread} unread` : 'Notifications'
+            data.unread
+              ? t('home.notificationsUnread', { n: data.unread })
+              : t('home.notifications')
           }
           onPress={() => go('notifications')}
           style={styles.bell}
@@ -129,9 +145,12 @@ export function Home({
             style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
           >
             <Text style={{ color: c['forest-muted'], fontSize: 13 }}>
-              {next ? (late ? 'Payment overdue' : 'Next payment') : 'All paid'}
+              {next ? (late ? t('home.paymentOverdue') : t('home.nextPayment')) : t('home.allPaid')}
             </Text>
-            <Pill label={late ? 'Overdue' : 'On track'} tone={late ? 'danger' : 'lime'} />
+            <Pill
+              label={late ? t('state.OVERDUE') : t('home.onTrack')}
+              tone={late ? 'danger' : 'lime'}
+            />
           </View>
           <Money
             amount={next?.amount ?? '0'}
@@ -144,69 +163,67 @@ export function Home({
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
               <Text style={{ color: c.lime, fontSize: 12, fontFamily: font.semibold }}>
-                {loan.repaidPercent}% repaid
+                {t('home.repaid', { pct: loan.repaidPercent })}
               </Text>
               <Text style={{ color: c['forest-muted'], fontSize: 12 }}>
-                {formatRwf(BigInt(loan.totalLeft))} left
+                {t('common.left', { amount: formatRwf(BigInt(loan.totalLeft)) })}
               </Text>
             </View>
           </View>
           <Button
             label={
               loan.pendingPayment
-                ? 'Waiting for MoMo approval…'
+                ? t('home.waitingMomoApproval')
                 : next
-                  ? `Pay ${formatRwf(BigInt(next.amount))} with MoMo`
-                  : 'Fully paid'
+                  ? t('home.payAmountWithMomo', { amount: formatRwf(BigInt(next.amount)) })
+                  : t('home.fullyPaid')
             }
             variant="accent"
             disabled={!next || !!loan.pendingPayment || !data.wallet}
             onPress={() => setSheet(true)}
           />
           {!data.wallet ? (
-            <Text style={{ color: c['forest-muted'], fontSize: 12 }}>
-              No MoMo wallet linked. Pay at a branch, or ask your officer to link one.
-            </Text>
+            <Text style={{ color: c['forest-muted'], fontSize: 12 }}>{t('home.noWallet')}</Text>
           ) : null}
         </Card>
       ) : data.pendingLoan ? (
         <Card dark>
           <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 20 }}>
-            Your loan is on its way
+            {t('home.loanOnWay')}
           </Text>
           <Text style={{ color: c['forest-muted'], fontSize: 13 }}>
-            {data.pendingLoan.code} is being sent to your MoMo wallet. We will text you when it
-            arrives.
+            {t('home.loanOnWayBody', { code: data.pendingLoan.code })}
           </Text>
         </Card>
       ) : data.application ? (
         <Card dark>
           <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 20 }}>
-            Application in review
+            {t('home.inReview')}
           </Text>
           <Text style={{ color: c['forest-muted'], fontSize: 13 }}>
-            {data.application.code} · {formatRwf(BigInt(data.application.amount))} ·{' '}
-            {data.application.productName}. We will text you with the decision.
+            {t('home.inReviewBody', {
+              code: data.application.code,
+              amount: formatRwf(BigInt(data.application.amount)),
+              product: data.application.productName,
+            })}
           </Text>
         </Card>
       ) : (
         <Card dark>
           <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 20 }}>
-            No active loan
+            {t('home.noLoan')}
           </Text>
-          <Text style={{ color: c['forest-muted'], fontSize: 13 }}>
-            Apply in 5 minutes, right here.
-          </Text>
-          <Button label="New loan" variant="accent" onPress={() => go('apply')} />
+          <Text style={{ color: c['forest-muted'], fontSize: 13 }}>{t('home.noLoanBodyApp')}</Text>
+          <Button label={t('home.newLoan')} variant="accent" onPress={() => go('apply')} />
         </Card>
       )}
 
-      <View style={styles.actions} accessibilityLabel="Quick actions">
+      <View style={styles.actions} accessibilityLabel={t('home.quickActions')}>
         {(
           [
-            ['New loan', 'apply', '➕'],
-            ['Schedule', 'schedule', '📅'],
-            ['Profile', 'profile', '👤'],
+            [t('home.newLoan'), 'apply', '➕'],
+            [t('home.schedule'), 'schedule', '📅'],
+            [t('nav.profile'), 'profile', '👤'],
           ] as const
         ).map(([label, screen, icon]) => (
           <Pressable
@@ -236,12 +253,12 @@ export function Home({
         <Pressable accessibilityRole="button" onPress={() => go('apply')} style={styles.offer}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ color: c['success-fg'], fontSize: 12, fontFamily: font.semibold }}>
-              Pre-approved for you
+              {t('home.preApprovedForYou')}
             </Text>
             <Text style={{ fontFamily: font.display, fontSize: 20, color: c.ink }}>
-              Up to {formatRwf(BigInt(data.offer.maxAmount))}
+              {t('common.upTo', { amount: formatRwf(BigInt(data.offer.maxAmount)) })}
             </Text>
-            <Muted>Top up your {data.offer.productName.toLowerCase()} in 5 minutes</Muted>
+            <Muted>{t('home.topUp', { product: data.offer.productName })}</Muted>
           </View>
           <Text style={{ fontSize: 20, color: c.forest }}>›</Text>
         </Pressable>
@@ -253,15 +270,15 @@ export function Home({
             style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
           >
             <Text style={{ fontFamily: font.display, fontSize: 17, color: c.ink }}>
-              Recent activity
+              {t('home.recentActivity')}
             </Text>
             <Pressable accessibilityRole="button" onPress={() => go('schedule')} hitSlop={10}>
               <Text style={{ color: c.forest, fontFamily: font.semibold, fontSize: 13 }}>
-                See all
+                {t('home.seeAll')}
               </Text>
             </Pressable>
           </View>
-          {loan.activity.length === 0 ? <Muted>No payments yet.</Muted> : null}
+          {loan.activity.length === 0 ? <Muted>{t('home.noPayments')}</Muted> : null}
           {loan.activity.map((a) => (
             <View key={a.id} style={styles.activity}>
               <View style={styles.activityIcon}>
@@ -292,7 +309,7 @@ export function Home({
         <Pressable
           style={styles.backdrop}
           onPress={() => setSheet(false)}
-          accessibilityLabel="Close"
+          accessibilityLabel={t('common.close')}
         />
         <View style={styles.sheet} accessibilityViewIsModal>
           <View style={styles.handle} />
@@ -300,24 +317,29 @@ export function Home({
             accessibilityRole="header"
             style={{ fontFamily: font.display, fontSize: 22, color: c.ink }}
           >
-            Confirm payment
+            {t('home.confirmPayment')}
           </Text>
           {next && loan ? (
             <View style={{ gap: 10 }}>
-              <Row label="Amount" value={formatRwf(BigInt(next.amount))} />
-              <Row label="From" value={data.wallet ?? '—'} />
-              <Row label="For" value={`Instalment ${next.number} of ${loan.instalmentCount}`} />
-              <Row label="Fee" value="RWF 0" />
+              <Row label={t('home.amount')} value={formatRwf(BigInt(next.amount))} />
+              <Row label={t('home.from')} value={data.wallet ?? '—'} />
+              <Row
+                label={t('home.for')}
+                value={t('home.instalmentOf', { n: next.number, total: loan.instalmentCount })}
+              />
+              <Row label={t('home.fee')} value="RWF 0" />
             </View>
           ) : null}
-          <Muted>You’ll get a MoMo prompt on your phone. Enter your PIN there to approve.</Muted>
+          <Muted>{t('home.momoPromptNote')}</Muted>
           <Button
-            label={next ? `Pay ${formatRwf(BigInt(next.amount))}` : 'Pay'}
+            label={
+              next ? t('home.payAmount', { amount: formatRwf(BigInt(next.amount)) }) : t('home.pay')
+            }
             variant="accent"
             loading={paying}
             onPress={confirmPay}
           />
-          <Button label="Cancel" variant="ghost" onPress={() => setSheet(false)} />
+          <Button label={t('common.cancel')} variant="ghost" onPress={() => setSheet(false)} />
         </View>
       </Modal>
     </ScrollView>

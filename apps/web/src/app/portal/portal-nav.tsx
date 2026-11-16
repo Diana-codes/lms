@@ -3,19 +3,21 @@
 import { cx } from '@kora/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { usePortalI18n } from '@/lib/portal/i18n';
 
 const LINKS = [
-  { href: '/portal/home', label: 'Home' },
-  { href: '/portal/apply', label: 'Apply' },
-  { href: '/portal/notifications', label: 'Alerts' },
-  { href: '/portal/profile', label: 'Profile' },
+  { href: '/portal/home', label: 'nav.home' },
+  { href: '/portal/apply', label: 'nav.apply' },
+  { href: '/portal/notifications', label: 'nav.alerts' },
+  { href: '/portal/profile', label: 'nav.profile' },
 ] as const;
 
 export function PortalNav({ unread = 0 }: { unread?: number }) {
   const pathname = usePathname();
+  const { t } = usePortalI18n();
   return (
     <nav
-      aria-label="Borrower"
+      aria-label={t('nav.label')}
       className="sticky bottom-0 grid grid-cols-4 border-t border-line bg-surface"
     >
       {LINKS.map((link) => {
@@ -30,7 +32,7 @@ export function PortalNav({ unread = 0 }: { unread?: number }) {
             )}
             aria-current={active ? 'page' : undefined}
           >
-            {link.label}
+            {t(link.label)}
             {link.href === '/portal/notifications' && unread > 0 ? (
               <span className="absolute top-2 right-[28%] size-1.5 rounded-full bg-amber" />
             ) : null}
