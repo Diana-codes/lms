@@ -12,11 +12,12 @@ import Link from 'next/link';
 import { Breadcrumb } from '@/components/list-tools';
 import { dateTime } from '@/lib/format';
 import { serverApi } from '@/lib/server-api';
-import type { LoanDetail, Me } from '@/lib/types';
+import type { LoanDetail, LoanWriteOffs, Me } from '@/lib/types';
 import { LoanActions, RestructureBanner } from './loan-actions';
 import { MomoRequestButton, PendingMomoBanner } from './momo-actions';
 import { ScheduleTable } from './schedule-table';
 import { SecurityPanel } from './security-panel';
+import { WriteOffPanel } from './write-off-panel';
 
 export async function generateMetadata({
   params,
@@ -54,9 +55,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default async function LoanPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const [res, me] = await Promise.all([
+  const [res, me, writeOffs] = await Promise.all([
     serverApi<LoanDetail>(`/loans/${encodeURIComponent(code)}`),
     serverApi<Me>('/auth/me'),
+    serverApi<LoanWriteOffs>(`/loans/${encodeURIComponent(code)}/write-offs`),
   ]);
 
   if (!res.ok || !me.ok) {
@@ -86,9 +88,7 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
   const late = loan.dpd > 0;
   const closed = loan.status !== 'ACTIVE';
   const canEditSecurity =
-    me.data.role === 'LOAN_OFFICER' ||
-    me.data.role === 'MANAGER' ||
-    me.data.role === 'ADMIN';
+    me.data.role === 'LOAN_OFFICER' || me.data.role === 'MANAGER' || me.data.role === 'ADMIN';
   const ring = Math.round(figures.repaidPercent * 3.6);
   const subtitle = [
     loan.productName,
@@ -233,6 +233,8 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
           </Card>
 
           <SecurityPanel loan={loan} canEdit={canEditSecurity} />
+
+          {writeOffs.ok ? <WriteOffPanel loan={loan} me={me.data} data={writeOffs.data} /> : null}
 
           {figures.payoff ? (
             <Card className="gap-3 p-[22px]">

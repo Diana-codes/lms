@@ -697,7 +697,7 @@ describe('the books', () => {
         SELECT COALESCE(SUM(i."principalDue" - i."principalPaid"), 0) AS schedule
         FROM "ScheduleInstalment" i WHERE i."loanId" = l."id" AND i."supersededAt" IS NULL
       ) due ON TRUE
-      WHERE bal.ledger <> due.schedule`;
+      WHERE bal.ledger <> due.schedule AND l."status" <> 'WRITTEN_OFF'`;
     expect(mismatched).toEqual([]);
   });
 });

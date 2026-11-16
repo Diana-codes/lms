@@ -71,14 +71,15 @@ const fieldBox =
 
 export function SelectField({
   label,
+  hideLabel,
   className,
   children,
   ...rest
-}: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & { label: string }) {
+}: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & { label: string; hideLabel?: boolean }) {
   const id = useId();
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className={fieldLabel}>
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : fieldLabel}>
         {label}
       </label>
       <select id={id} className={cx(fieldBox, 'h-11 border-line')} {...rest}>

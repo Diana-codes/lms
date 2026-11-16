@@ -60,10 +60,64 @@ export class LedgerService {
       });
       return created.id;
     } catch (err) {
-      if ((err as { code?: string }).code === 'P2002') {
-        throw new ConflictException('This transaction has already been posted');
-      }
-      throw err;
+      throw ledgerError(err);
+    }
+  }
+
+  /**
+   * Post lines named by account code (any account in the company's chart,
+   * including ones staff added). Used for manual journals; loan events use
+   * `post` with the built-in account keys.
+   */
+  async postByCode(
+    tx: Prisma.TransactionClient,
+    posting: Omit<LedgerPosting, 'lines'> & {
+      lines: Array<{ code: string; direction: 'DEBIT' | 'CREDIT'; amount: bigint }>;
+    },
+  ): Promise<string> {
+    const codes = [...new Set(posting.lines.map((l) => l.code))];
+    const rows = await tx.ledgerAccount.findMany({
+      where: { code: { in: codes } },
+      select: { id: true, code: true },
+    });
+    const ids = new Map(rows.map((r) => [r.code, r.id]));
+    for (const code of codes) {
+      if (!ids.has(code)) throw new Error(`Ledger account ${code} does not exist`);
+    }
+    let debits = 0n;
+    let credits = 0n;
+    const kept = posting.lines.filter((l) => l.amount !== 0n);
+    for (const l of kept) {
+      if (l.amount < 0n) throw new Error(`Negative amount on ${l.code}`);
+      if (l.direction === 'DEBIT') debits += l.amount;
+      else credits += l.amount;
+    }
+    if (kept.length < 2 || debits !== credits) {
+      throw new Error('A posting needs at least two lines and equal debits and credits');
+    }
+    try {
+      const created = await tx.ledgerTransaction.create({
+        data: {
+          type: posting.type,
+          idempotencyKey: posting.idempotencyKey,
+          loanId: posting.loanId ?? null,
+          memo: posting.memo,
+          effectiveOn: isoToUtcDate(posting.effectiveOn),
+          postedById: posting.postedById ?? null,
+          entries: {
+            create: kept.map((l) => ({
+              accountId: ids.get(l.code)!,
+              loanId: null,
+              direction: l.direction,
+              amount: l.amount,
+            })),
+          },
+        },
+        select: { id: true },
+      });
+      return created.id;
+    } catch (err) {
+      throw ledgerError(err);
     }
   }
 
@@ -124,4 +178,19 @@ export class LedgerService {
     this.accountIds.set(companyId, map);
     return map;
   }
+}
+
+/** Turn database refusals into the errors a caller should see. */
+function ledgerError(err: unknown): unknown {
+  if ((err as { code?: string }).code === 'P2002') {
+    return new ConflictException('This transaction has already been posted');
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  const closed = /accounting period (\d{4}-\d{2}) is closed/.exec(message);
+  if (closed) {
+    return new ConflictException(
+      `The books for ${closed[1]} are closed. Use a date in an open month, or ask an administrator to reopen it.`,
+    );
+  }
+  return err;
 }

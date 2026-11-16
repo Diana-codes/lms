@@ -1,5 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
-import { COLLATERAL_KINDS, DPD_BUCKETS, LENDING_ROLES, PAYMENT_ROLES } from '@kora/core';
+import {
+  COLLATERAL_KINDS,
+  DPD_BUCKETS,
+  LENDING_ROLES,
+  OVERSIGHT_ROLES,
+  PAYMENT_ROLES,
+} from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
@@ -8,6 +14,7 @@ import { isoDateString, pageQuery, requestMeta, rwfString } from '../common/http
 import { ZodPipe } from '../common/zod.pipe';
 import { LoanSecurityService } from './loan-security.service';
 import { LoansService } from './loans.service';
+import { WriteOffService } from './write-off.service';
 
 const codeParam = new ZodPipe(z.string().regex(/^LN-\d{4}-\d{4}$/, 'Not a loan reference'));
 const idParam = new ZodPipe(z.uuid());
@@ -35,6 +42,16 @@ const restructureSchema = z.object({
   reason: z.string().trim().min(3, 'Give a reason').max(500),
 });
 const decideSchema = z.object({ approve: z.boolean() });
+const writeOffSchema = z.object({
+  reason: z.string().trim().min(10, 'Explain why, in a sentence').max(500),
+});
+const recoverySchema = z.object({
+  amount: rwfString,
+  channel: z.enum(['MTN_MOMO', 'AIRTEL_MONEY', 'BANK_TRANSFER', 'CASH']),
+  receivedOn: isoDateString,
+  reference: z.string().trim().max(60).optional(),
+  idempotencyKey: z.uuid(),
+});
 /** Market value may be zero for descriptive-only (OTHER) security. */
 const marketValueSchema = z
   .string()
@@ -73,6 +90,7 @@ export class LoansController {
   constructor(
     private readonly loans: LoansService,
     private readonly security: LoanSecurityService,
+    private readonly writeOffs: WriteOffService,
   ) {}
 
   @Get('loans')
@@ -189,5 +207,57 @@ export class LoansController {
     @Req() req: Request,
   ) {
     return this.security.releaseGuarantor(code, id, user, requestMeta(req));
+  }
+
+  // ── write-offs and recoveries (PRD §6.13) ──
+
+  @Get('loans/:code/write-offs')
+  async loanWriteOffs(@Param('code', codeParam) code: string) {
+    const { id } = await this.loans.idFor(code);
+    return this.writeOffs.forLoan(id);
+  }
+
+  @Roles(...OVERSIGHT_ROLES)
+  @Get('write-offs')
+  listWriteOffs(
+    @Query('status', new ZodPipe(z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional()))
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED',
+  ) {
+    return this.writeOffs.list(status);
+  }
+
+  @Roles('MANAGER', 'ADMIN', 'COLLECTIONS_AGENT')
+  @Post('loans/:code/write-off')
+  requestWriteOff(
+    @Param('code', codeParam) code: string,
+    @Body(new ZodPipe(writeOffSchema)) body: z.infer<typeof writeOffSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.writeOffs.request(code, body.reason, user, requestMeta(req));
+  }
+
+  @Roles('MANAGER', 'ADMIN')
+  @Post('write-offs/:id/decide')
+  @HttpCode(200)
+  decideWriteOff(
+    @Param('id', new ZodPipe(z.uuid())) id: string,
+    @Body(new ZodPipe(decideSchema)) body: z.infer<typeof decideSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.writeOffs.decide(id, body.approve, user, requestMeta(req));
+  }
+
+  @Roles(...PAYMENT_ROLES)
+  @Post('loans/:code/recoveries')
+  @HttpCode(200)
+  recordRecovery(
+    @Param('code', codeParam) code: string,
+    @Body(new ZodPipe(recoverySchema)) body: z.infer<typeof recoverySchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.writeOffs.recordRecovery(code, body, user, requestMeta(req));
   }
 }

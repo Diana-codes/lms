@@ -768,7 +768,9 @@ function addLoan(o: LoanOpts): SeededLoan {
         memo: isPartial
           ? `Part payment towards instalment ${row.number}`
           : `Instalment ${row.number}`,
-        lines: repaymentLines(principalPaid, interestPaid, CHANNEL_ACCOUNT[channel]),
+        // The seed posts no accruals for instalments already paid, so their
+        // interest is income on collection (it never sat in the receivable).
+        lines: repaymentLines(principalPaid, interestPaid, CHANNEL_ACCOUNT[channel], 0n),
       });
       rows.payments.push({
         id: uuid(),

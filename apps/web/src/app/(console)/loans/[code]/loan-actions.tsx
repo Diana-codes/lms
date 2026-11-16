@@ -60,7 +60,17 @@ export function LoanActions({ loan }: { loan: LoanDetail }) {
       >
         Key facts
       </Link>
-      <Button onClick={() => (active ? setModal('pay') : toast('This loan is fully repaid.'))}>
+      <Button
+        onClick={() =>
+          active
+            ? setModal('pay')
+            : toast(
+                loan.status === 'WRITTEN_OFF'
+                  ? 'This loan is written off: record money received as a recovery.'
+                  : 'This loan is fully repaid.',
+              )
+        }
+      >
         Record payment
       </Button>
       {modal === 'pay' ? <PaymentModal loan={loan} onClose={() => setModal(null)} /> : null}

@@ -108,6 +108,11 @@ describe('Money', () => {
     expect(screen.getByText('RWF 2.48B')).toBeTruthy();
   });
 
+  it('shows negative figures from the API, such as a net loss', () => {
+    render(<Money amount="-479692909" bare />);
+    expect(screen.getByText('−479,692,909')).toBeTruthy();
+  });
+
   it('refuses a decimal amount instead of rounding it', () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<Money amount="1500.50" />)).toThrow(RangeError);

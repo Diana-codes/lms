@@ -21,12 +21,25 @@ export const ACCOUNTS = {
   VAT_PAYABLE: { code: '2100', name: 'VAT payable', type: 'LIABILITY' },
   /** Insurance premiums and other charges collected on someone else's behalf. */
   THIRD_PARTY_PAYABLE: { code: '2200', name: 'Collected for third parties', type: 'LIABILITY' },
+  BORROWINGS: { code: '2300', name: 'Borrowings', type: 'LIABILITY' },
+  ACCRUED_EXPENSES: { code: '2400', name: 'Accrued expenses and payables', type: 'LIABILITY' },
   FUNDING: { code: '3000', name: 'Lending capital', type: 'EQUITY' },
+  RETAINED_EARNINGS: { code: '3100', name: 'Retained earnings', type: 'EQUITY' },
   INTEREST_INCOME: { code: '4000', name: 'Interest income', type: 'INCOME' },
   FEE_INCOME: { code: '4010', name: 'Fee income', type: 'INCOME' },
   PENALTY_INCOME: { code: '4020', name: 'Penalty income', type: 'INCOME' },
+  /** Money received after a loan was written off (reported separately, PRD §6.13). */
+  RECOVERIES: { code: '4030', name: 'Recoveries on written-off loans', type: 'INCOME' },
+  OTHER_INCOME: { code: '4090', name: 'Other income', type: 'INCOME' },
   WRITE_OFFS: { code: '5000', name: 'Loans written off', type: 'EXPENSE' },
   PROVISION_EXPENSE: { code: '5100', name: 'Loan loss provision expense', type: 'EXPENSE' },
+  STAFF_COSTS: { code: '5200', name: 'Staff costs', type: 'EXPENSE' },
+  RENT_UTILITIES: { code: '5210', name: 'Rent and utilities', type: 'EXPENSE' },
+  IT_COMMS: { code: '5220', name: 'IT and communications', type: 'EXPENSE' },
+  TRANSPORT: { code: '5230', name: 'Transport', type: 'EXPENSE' },
+  PROFESSIONAL_FEES: { code: '5240', name: 'Professional fees', type: 'EXPENSE' },
+  BANK_CHARGES: { code: '5250', name: 'Bank and MoMo charges', type: 'EXPENSE' },
+  OTHER_EXPENSES: { code: '5290', name: 'Other operating expenses', type: 'EXPENSE' },
 } as const satisfies Record<string, { code: string; name: string; type: LedgerAccountType }>;
 
 export type AccountKey = keyof typeof ACCOUNTS;
@@ -38,3 +51,25 @@ export const CHANNEL_ACCOUNT = {
   BANK_TRANSFER: 'BANK',
   CASH: 'BRANCH_CASH',
 } as const satisfies Record<string, AccountKey>;
+
+/**
+ * Accounts that only loan events may move: manual journals cannot touch them,
+ * so a loan's balance always matches its own history (PRD §10.3).
+ */
+export const CONTROL_ACCOUNT_CODES: ReadonlySet<string> = new Set([
+  ACCOUNTS.LOANS_PRINCIPAL.code,
+  ACCOUNTS.INTEREST_RECEIVABLE.code,
+  ACCOUNTS.FEES_RECEIVABLE.code,
+  ACCOUNTS.LOAN_LOSS_ALLOWANCE.code,
+  ACCOUNTS.BORROWER_CREDIT.code,
+  ACCOUNTS.WRITE_OFFS.code,
+  ACCOUNTS.PROVISION_EXPENSE.code,
+]);
+
+/** Accounts money can be paid from or into (for the expense form). */
+export const CASH_ACCOUNT_KEYS = [
+  'BANK',
+  'MOMO_FLOAT',
+  'BRANCH_CASH',
+  'AIRTEL_FLOAT',
+] as const satisfies readonly AccountKey[];

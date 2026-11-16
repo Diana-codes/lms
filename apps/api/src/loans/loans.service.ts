@@ -197,6 +197,13 @@ export class LoansService {
   }
 
   /** The Key Facts Statement under the loan's own terms, dated the day it was paid out. */
+  /** The loan's id from its code, or 404. */
+  async idFor(code: string): Promise<{ id: string }> {
+    const loan = await this.prisma.loan.findFirst({ where: { code }, select: { id: true } });
+    if (!loan) throw new NotFoundException(`No loan ${code}`);
+    return loan;
+  }
+
   async keyFacts(code: string) {
     const loan = await this.prisma.loan.findFirst({
       where: { code },

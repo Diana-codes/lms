@@ -8,15 +8,20 @@ export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   label: string;
   hint?: string;
   error?: string | null;
+  /** Keep the label for screen readers only (rows of inputs under one heading). */
+  hideLabel?: boolean;
 }
 
 /** A labelled text input. The label is a real <label>, and errors are announced. */
-export function TextField({ label, hint, error, className, ...rest }: TextFieldProps) {
+export function TextField({ label, hint, error, hideLabel, className, ...rest }: TextFieldProps) {
   const id = useId();
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
-      <label htmlFor={id} className="text-[13px] font-medium text-ink-soft">
+      <label
+        htmlFor={id}
+        className={hideLabel ? 'sr-only' : 'text-[13px] font-medium text-ink-soft'}
+      >
         {label}
       </label>
       <input

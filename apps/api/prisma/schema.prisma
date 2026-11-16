@@ -130,6 +130,9 @@ model Company {
   classificationDays LoanClassificationDaily[]
   loanCollaterals    LoanCollateral[]
   loanGuarantors     LoanGuarantor[]
+  journalEntries     JournalEntry[]
+  writeOffs          WriteOff[]
+  accountingPeriods  AccountingPeriod[]
 }
 
 /// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
@@ -794,6 +797,7 @@ model Loan {
   instalments        ScheduleInstalment[]
   collaterals        LoanCollateral[]
   guarantors         LoanGuarantor[]
+  writeOffs          WriteOff[]
   ledgerEntries      LedgerEntry[]
   ledgerTransactions LedgerTransaction[]
   payments           Payment[]
@@ -932,13 +936,18 @@ enum LedgerAccountType {
 }
 
 model LedgerAccount {
-  id        String            @id @default(uuid(7)) @db.Uuid
-  companyId String            @default(dbgenerated("current_company_id()")) @db.Uuid
-  company   Company           @relation(fields: [companyId], references: [id])
+  id          String            @id @default(uuid(7)) @db.Uuid
+  companyId   String            @default(dbgenerated("current_company_id()")) @db.Uuid
+  company     Company           @relation(fields: [companyId], references: [id])
   /// Chart-of-accounts code, e.g. "1100". Each company has its own chart.
-  code      String
-  name      String
-  type      LedgerAccountType
+  code        String
+  name        String
+  type        LedgerAccountType
+  /// Built-in accounts the loan engine posts to. Staff-added accounts are false.
+  system      Boolean           @default(true)
+  /// Inactive accounts keep their history but take no new manual journals.
+  isActive    Boolean           @default(true)
+  description String?
 
   entries LedgerEntry[]
 
@@ -956,6 +965,10 @@ enum LedgerTransactionType {
   WRITE_OFF
   REVERSAL
   ADJUSTMENT
+  /// A manual journal approved by a second person (expenses, funding, accruals).
+  JOURNAL
+  /// Money received on a loan after it was written off.
+  RECOVERY
 }
 
 /// One business event. Its entries must sum to zero (debits = credits);
@@ -1553,4 +1566,86 @@ model AiNote {
   @@index([kind, borrowerId, createdAt])
   @@index([kind, loanId, createdAt])
   @@index([companyId])
+}
+
+enum JournalKind {
+  EXPENSE
+  GENERAL
+}
+
+/**
+ * A manual journal (PRD §10): operating expenses, funding received, accruals,
+ * corrections. Drafted by one person and posted only when a different person
+ * approves it. Loan control accounts are off-limits; those move only through
+ * loan events.
+ */
+model JournalEntry {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  companyId           String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company        @relation(fields: [companyId], references: [id])
+  /// Human reference, e.g. JV-00012.
+  code                String
+  kind                JournalKind    @default(GENERAL)
+  effectiveOn         DateTime       @db.Date
+  memo                String
+  /// [{ accountCode, direction, amount (digits), note? }]
+  lines               Json
+  /// Total of the debit side, RWF.
+  total               BigInt
+  status              ApprovalStatus @default(PENDING)
+  requestedById       String         @db.Uuid
+  requestedAt         DateTime       @default(now())
+  decidedById         String?        @db.Uuid
+  decidedAt           DateTime?
+  rejectReason        String?
+  ledgerTransactionId String?        @unique @db.Uuid
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+}
+
+/**
+ * Writing a loan off the books (PRD §6.13): requested by one person and
+ * approved by a different manager. The loan stays visible for recovery.
+ */
+model WriteOff {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  companyId           String         @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company        @relation(fields: [companyId], references: [id])
+  loanId              String         @db.Uuid
+  loan                Loan           @relation(fields: [loanId], references: [id])
+  status              ApprovalStatus @default(PENDING)
+  reason              String
+  /// Balances when requested; the posting uses the balances when approved.
+  principal           BigInt
+  interest            BigInt
+  /// How much of the write-off the loan-loss allowance absorbed (on approval).
+  allowanceUsed       BigInt         @default(0)
+  requestedById       String         @db.Uuid
+  requestedAt         DateTime       @default(now())
+  decidedById         String?        @db.Uuid
+  decidedAt           DateTime?
+  ledgerTransactionId String?        @unique @db.Uuid
+
+  @@index([loanId])
+  @@index([companyId, status])
+}
+
+/**
+ * A calendar month of the books. Once closed, nothing can be posted with an
+ * effective date in it (a database trigger enforces this).
+ */
+model AccountingPeriod {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  companyId    String    @default(dbgenerated("current_company_id()")) @db.Uuid
+  company      Company   @relation(fields: [companyId], references: [id])
+  /// First day of the month.
+  month        DateTime  @db.Date
+  closedAt     DateTime?
+  closedById   String?   @db.Uuid
+  reopenedAt   DateTime?
+  reopenedById String?   @db.Uuid
+  reopenReason String?
+
+  @@unique([companyId, month])
 }

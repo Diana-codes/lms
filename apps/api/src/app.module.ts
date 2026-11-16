@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AiClient } from './ai/ai.client';
+import { AccountingController } from './accounting/accounting.controller';
+import { AccountingService } from './accounting/accounting.service';
 import { AiController } from './ai/ai.controller';
 import { AiService } from './ai/ai.service';
 import { ScoringService } from './ai/scoring.service';
@@ -28,6 +30,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { LoansController } from './loans/loans.controller';
 import { LoanSecurityService } from './loans/loan-security.service';
 import { LoansService } from './loans/loans.service';
+import { WriteOffService } from './loans/write-off.service';
 import { PaymentPoster } from './loans/payment-poster';
 import { MoneyController } from './money/money.controller';
 import { MoneyService } from './money/money.service';
@@ -61,6 +64,7 @@ import { UsersController } from './users/users.controller';
   ],
   controllers: [
     HealthController,
+    AccountingController,
     CompanyController,
     UsersController,
     SystemController,
@@ -100,6 +104,8 @@ import { UsersController } from './users/users.controller';
     StaffService,
     CompanySettingsService,
     ProductsService,
+    AccountingService,
+    WriteOffService,
   ],
 })
 export class AppModule {}

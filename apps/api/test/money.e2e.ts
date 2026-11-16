@@ -547,7 +547,7 @@ describe('the books', () => {
         FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a."id" = e."accountId" WHERE e."loanId" = l."id" AND a."code" = '1100') bal ON TRUE
       JOIN LATERAL (SELECT COALESCE(SUM(i."principalDue" - i."principalPaid"), 0) AS schedule
         FROM "ScheduleInstalment" i WHERE i."loanId" = l."id" AND i."supersededAt" IS NULL) due ON TRUE
-      WHERE l."status" <> 'PENDING_DISBURSEMENT' AND bal.ledger <> due.schedule`;
+      WHERE l."status" NOT IN ('PENDING_DISBURSEMENT', 'WRITTEN_OFF') AND bal.ledger <> due.schedule`;
     expect(mismatched).toEqual([]);
   });
 });

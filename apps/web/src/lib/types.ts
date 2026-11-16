@@ -717,3 +717,101 @@ export interface FairnessRow {
   averageScore: number;
   approveShare: number;
 }
+
+/** PRD §6.13: write-off requests on a loan and what was recovered after. */
+export interface WriteOffRequest {
+  id: string;
+  loanCode: string;
+  borrowerName: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reason: string;
+  principal: string;
+  interest: string;
+  allowanceUsed: string;
+  requestedById: string;
+  requestedAt: string;
+  decidedById: string | null;
+  decidedAt: string | null;
+}
+export interface LoanWriteOffs {
+  requests: WriteOffRequest[];
+  recovered: string;
+}
+
+// ── accounting (PRD §10) ──
+export type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
+export interface LedgerAccountRow {
+  code: string;
+  name: string;
+  type: AccountType;
+  system: boolean;
+  isActive: boolean;
+  description: string | null;
+  control: boolean;
+  debits: string;
+  credits: string;
+}
+export interface TrialBalanceReport {
+  asOf: string;
+  rows: Array<{ code: string; name: string; type: AccountType; debit: string; credit: string }>;
+  totalDebit: string;
+  totalCredit: string;
+  balanced: boolean;
+}
+export interface StatementLineRow {
+  code: string;
+  name: string;
+  amount: string;
+}
+export interface IncomeStatementReport {
+  from: string;
+  to: string;
+  income: StatementLineRow[];
+  expenses: StatementLineRow[];
+  totalIncome: string;
+  totalExpenses: string;
+  netProfit: string;
+}
+export interface BalanceSheetReport {
+  asOf: string;
+  assets: StatementLineRow[];
+  liabilities: StatementLineRow[];
+  equity: StatementLineRow[];
+  currentEarnings: string;
+  totalAssets: string;
+  totalLiabilities: string;
+  totalEquity: string;
+  balanced: boolean;
+}
+export interface JournalRow {
+  id: string;
+  code: string;
+  kind: 'EXPENSE' | 'GENERAL';
+  effectiveOn: string;
+  memo: string;
+  lines: Array<{
+    accountCode: string;
+    direction: 'DEBIT' | 'CREDIT';
+    amount: string;
+    note?: string;
+  }>;
+  total: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedById: string;
+  requestedBy: string | null;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  rejectReason: string | null;
+}
+export interface PeriodRow {
+  month: string;
+  closed: boolean;
+  closedAt: string | null;
+  closedBy: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenReason: string | null;
+  pendingJournals: number;
+  canClose: boolean;
+}
