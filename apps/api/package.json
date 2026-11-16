@@ -30,6 +30,7 @@
     "bullmq": "^6.7.6",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.0.0",
+    "exceljs": "4.4.0",
     "helmet": "^8.0.0",
     "ioredis": "^6.0.0",
     "multer": "^2.5.0",

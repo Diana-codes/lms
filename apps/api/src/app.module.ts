@@ -32,6 +32,8 @@ import { LoanSecurityService } from './loans/loan-security.service';
 import { LoansService } from './loans/loans.service';
 import { WriteOffService } from './loans/write-off.service';
 import { PaymentPoster } from './loans/payment-poster';
+import { MigrationController } from './migration/migration.controller';
+import { MigrationService } from './migration/migration.service';
 import { MoneyController } from './money/money.controller';
 import { MoneyService } from './money/money.service';
 import { ProvidersModule } from './providers/providers.module';
@@ -65,6 +67,7 @@ import { UsersController } from './users/users.controller';
   controllers: [
     HealthController,
     AccountingController,
+    MigrationController,
     CompanyController,
     UsersController,
     SystemController,
@@ -106,6 +109,7 @@ import { UsersController } from './users/users.controller';
     ProductsService,
     AccountingService,
     WriteOffService,
+    MigrationService,
   ],
 })
 export class AppModule {}

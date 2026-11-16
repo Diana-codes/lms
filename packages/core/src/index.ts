@@ -9,3 +9,4 @@ export * from './domain';
 export * from './payments';
 export * from './engine';
 export * from './accounting';
+export * from './migration';

@@ -48,8 +48,17 @@ export async function api<T = void>(path: string, opts: ApiOptions = {}): Promis
   const send = () =>
     fetch(`/api${path}`, {
       method: opts.method ?? 'GET',
-      headers: opts.body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      // FormData (file uploads) sets its own multipart content type.
+      headers:
+        opts.body === undefined || opts.body instanceof FormData
+          ? undefined
+          : { 'content-type': 'application/json' },
+      body:
+        opts.body === undefined
+          ? undefined
+          : opts.body instanceof FormData
+            ? opts.body
+            : JSON.stringify(opts.body),
     });
 
   let res: Response;

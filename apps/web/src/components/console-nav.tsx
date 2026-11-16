@@ -41,7 +41,12 @@ const NAV: Array<{ href: string; label: string; icon: ReactNode; roles?: readonl
     icon: <AccountingIcon />,
     roles: [...FINANCE_ROLES, 'AUDITOR'],
   },
-  { href: '/import', label: 'Import loan book', icon: <UploadIcon />, roles: ['ADMIN', 'MANAGER'] },
+  {
+    href: '/import',
+    label: 'Import loan book',
+    icon: <UploadIcon />,
+    roles: ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'AUDITOR'],
+  },
   {
     href: '/audit-log',
     label: 'Audit log',

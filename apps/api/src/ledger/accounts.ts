@@ -25,6 +25,8 @@ export const ACCOUNTS = {
   ACCRUED_EXPENSES: { code: '2400', name: 'Accrued expenses and payables', type: 'LIABILITY' },
   FUNDING: { code: '3000', name: 'Lending capital', type: 'EQUITY' },
   RETAINED_EARNINGS: { code: '3100', name: 'Retained earnings', type: 'EQUITY' },
+  /** Balances brought in from the lender's old records (PRD §6.14), to be reclassified. */
+  OPENING_BALANCES: { code: '3900', name: 'Opening balances (migration)', type: 'EQUITY' },
   INTEREST_INCOME: { code: '4000', name: 'Interest income', type: 'INCOME' },
   FEE_INCOME: { code: '4010', name: 'Fee income', type: 'INCOME' },
   PENALTY_INCOME: { code: '4020', name: 'Penalty income', type: 'INCOME' },

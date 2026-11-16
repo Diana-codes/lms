@@ -50,16 +50,16 @@ enum CreditClass {
 
 /// A lending company using the platform.
 model Company {
-  id              String        @id @default(uuid(7)) @db.Uuid
+  id                 String             @id @default(uuid(7)) @db.Uuid
   /// Subdomain, e.g. "bf" for bf.koralend.rw. Lowercase letters, digits and hyphens.
-  slug            String        @unique
-  name            String
-  legalName       String?
-  status          CompanyStatus @default(ACTIVE)
-  country         String        @default("RW")
-  currency        String        @default("RWF")
-  timezone        String        @default("Africa/Kigali")
-  defaultLanguage Language      @default(EN)
+  slug               String             @unique
+  name               String
+  legalName          String?
+  status             CompanyStatus      @default(ACTIVE)
+  country            String             @default("RW")
+  currency           String             @default("RWF")
+  timezone           String             @default("Africa/Kigali")
+  defaultLanguage    Language           @default(EN)
   /// Which 59/2023 DPD schedule to use for classification and provisioning.
   creditClassProfile CreditClassProfile @default(COMPANY)
 
@@ -75,12 +75,12 @@ model Company {
   logoUrl     String?
 
   /// Optional features, off unless the company turns them on.
-  aiFeatures  Boolean @default(false)
-  autoApprove Boolean @default(false)
+  aiFeatures        Boolean @default(false)
+  autoApprove       Boolean @default(false)
   /// Staff must complete SMS or authenticator 2FA at sign-in (and enrol if missing).
-  staffTwoFactor Boolean @default(false)
+  staffTwoFactor    Boolean @default(false)
   /// Borrowers must enter a texted one-time code to sign in to the app/portal.
-  borrowerOtp Boolean @default(false)
+  borrowerOtp       Boolean @default(false)
   /// Maker-checker on disbursement: whoever approved a loan cannot also pay it out.
   strictSegregation Boolean @default(false)
 
@@ -133,19 +133,20 @@ model Company {
   journalEntries     JournalEntry[]
   writeOffs          WriteOff[]
   accountingPeriods  AccountingPeriod[]
+  migrationBatches   MigrationBatch[]
 }
 
 /// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
 model LoanClassificationDaily {
-  id                    String      @id @default(uuid(7)) @db.Uuid
-  companyId             String      @default(dbgenerated("current_company_id()")) @db.Uuid
-  company               Company     @relation(fields: [companyId], references: [id])
-  day                   DateTime    @db.Date
-  creditClass           CreditClass
-  loanCount             Int
-  outstandingPrincipal  BigInt
-  requiredProvision     BigInt
-  recordedAt            DateTime    @default(now())
+  id                   String      @id @default(uuid(7)) @db.Uuid
+  companyId            String      @default(dbgenerated("current_company_id()")) @db.Uuid
+  company              Company     @relation(fields: [companyId], references: [id])
+  day                  DateTime    @db.Date
+  creditClass          CreditClass
+  loanCount            Int
+  outstandingPrincipal BigInt
+  requiredProvision    BigInt
+  recordedAt           DateTime    @default(now())
 
   @@unique([companyId, day, creditClass])
   @@index([day])
@@ -737,29 +738,29 @@ enum LoanStatus {
 }
 
 model Loan {
-  id                  String     @id @default(uuid(7)) @db.Uuid
-  companyId           String     @default(dbgenerated("current_company_id()")) @db.Uuid
-  company             Company    @relation(fields: [companyId], references: [id])
+  id                  String          @id @default(uuid(7)) @db.Uuid
+  companyId           String          @default(dbgenerated("current_company_id()")) @db.Uuid
+  company             Company         @relation(fields: [companyId], references: [id])
   /// Human reference, e.g. LN-0418-2026.
   code                String
-  borrowerId          String     @db.Uuid
-  applicationId       String?    @unique @db.Uuid
-  productId           String     @db.Uuid
+  borrowerId          String          @db.Uuid
+  applicationId       String?         @unique @db.Uuid
+  productId           String          @db.Uuid
   principal           BigInt
   annualRateBps       Int
   termMonths          Int
   /// The level instalment from the schedule calculator in @kora/core.
   instalmentAmount    BigInt
-  status              LoanStatus @default(PENDING_DISBURSEMENT)
-  disbursedOn         DateTime?  @db.Date
-  firstDueDate        DateTime   @db.Date
-  maturityDate        DateTime   @db.Date
-  closedOn            DateTime?  @db.Date
+  status              LoanStatus      @default(PENDING_DISBURSEMENT)
+  disbursedOn         DateTime?       @db.Date
+  firstDueDate        DateTime        @db.Date
+  maturityDate        DateTime        @db.Date
+  closedOn            DateTime?       @db.Date
   /// Short summary of what secures the loan (for KFS / lists). Kept in sync
   /// with LoanCollateral rows when staff manage structured collateral.
   collateral          String?
   /// Bumped on each restructure. Instalments from older versions are kept for history.
-  scheduleVersion     Int        @default(1)
+  scheduleVersion     Int             @default(1)
   /// The product terms the loan was issued under (LoanTerms), copied so later
   /// product changes never alter it. Null for loans issued before products
   /// had terms: those follow legacyTerms() in @kora/core.
@@ -771,19 +772,23 @@ model Loan {
   aprBps              Int?
   /// Fees collected with instalments (VAT included), and how they split, so
   /// each collection posts to fee income, VAT payable or third parties exactly.
-  spreadFeeTotal      BigInt     @default(0)
-  spreadFeeVat        BigInt     @default(0)
-  spreadFeeThirdParty BigInt     @default(0)
-  officerId           String?    @db.Uuid
-  branchId            String?    @db.Uuid
+  spreadFeeTotal      BigInt          @default(0)
+  spreadFeeVat        BigInt          @default(0)
+  spreadFeeThirdParty BigInt          @default(0)
+  officerId           String?         @db.Uuid
+  branchId            String?         @db.Uuid
   /// Set when the loan first hits 91+ DPD and interest accruals stop.
   /// Cleared when the loan cures below that threshold.
   interestSuspendedAt DateTime?
   /// Latest BNR 59/2023 class from the nightly run (objective DPD criteria).
-  creditClass         CreditClass @default(NORMAL)
-  classifiedOn        DateTime?   @db.Date
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  creditClass         CreditClass     @default(NORMAL)
+  classifiedOn        DateTime?       @db.Date
+  /// The lender's own loan number, for loans brought in from their old records.
+  migratedRef         String?
+  migrationBatchId    String?         @db.Uuid
+  migrationBatch      MigrationBatch? @relation(fields: [migrationBatchId], references: [id], onDelete: SetNull)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   // No balance columns here on purpose: outstanding principal and interest
   // are derived from LedgerEntry.
@@ -810,6 +815,7 @@ model Loan {
   smsMessages        SmsMessage[]
 
   @@unique([companyId, code])
+  @@unique([companyId, migratedRef])
   @@index([borrowerId])
   @@index([status])
   @@index([officerId])
@@ -1648,4 +1654,44 @@ model AccountingPeriod {
   reopenReason String?
 
   @@unique([companyId, month])
+}
+
+enum MigrationStatus {
+  /// Checked, with problems to fix in the spreadsheet.
+  INVALID
+  /// Checked and clean: ready to import.
+  VALIDATED
+  /// Loans created; waiting for the reconciliation sign-off.
+  IMPORTED
+  /// A second person confirmed the balances match the old records.
+  SIGNED_OFF
+}
+
+/**
+ * One upload of the lender's existing loan book (PRD §6.14). The parsed rows
+ * are kept so the import uses exactly what was checked.
+ */
+model MigrationBatch {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  companyId        String          @default(dbgenerated("current_company_id()")) @db.Uuid
+  company          Company         @relation(fields: [companyId], references: [id])
+  fileName         String
+  /// The cut-over date: balances in the file are as of this day.
+  asOf             DateTime        @db.Date
+  status           MigrationStatus
+  rowCount         Int
+  /// Parsed rows (amounts as digit strings).
+  rows             Json
+  /// [{ line, errors[] }] for rows with problems.
+  problems         Json
+  totalOutstanding BigInt          @default(0)
+  createdById      String          @db.Uuid
+  createdAt        DateTime        @default(now())
+  importedById     String?         @db.Uuid
+  importedAt       DateTime?
+  signedOffById    String?         @db.Uuid
+  signedOffAt      DateTime?
+  loans            Loan[]
+
+  @@index([companyId, createdAt])
 }
