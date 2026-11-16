@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { StaffRole } from '@kora/core';
+import { READ_ONLY_ROLES, type StaffRole } from '@kora/core';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompaniesService } from '../tenancy/companies.service';
@@ -156,11 +156,34 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    const req = context.switchToHttp().getRequest<AuthedRequest>();
+    const user = req.user;
+    // Auditors read everything and change nothing, except their own sign-in
+    // (password, two-factor, signing out): the routes marked for that.
+    if (
+      user &&
+      (READ_ONLY_ROLES as readonly string[]).includes(user.role) &&
+      !SAFE_METHODS.has(req.method) &&
+      !this.selfService(context)
+    ) {
+      throw new ForbiddenException('Your role has read-only access');
+    }
     if (!required?.length) return true;
-    const user = context.switchToHttp().getRequest<AuthedRequest>().user;
     if (!user || !required.includes(user.role)) {
       throw new ForbiddenException('Your role does not allow this');
     }
     return true;
+  }
+
+  private selfService(context: ExecutionContext): boolean {
+    // Everything under /auth is about the signed-in person's own account.
+    if (context.getClass().name === 'AuthController') return true;
+    return [ALLOW_WHILE_PASSWORD_CHANGE, ALLOW_WITHOUT_TWO_FACTOR].some(
+      (key) =>
+        !!this.reflector.getAllAndOverride<boolean>(key, [
+          context.getHandler(),
+          context.getClass(),
+        ]),
+    );
   }
 }

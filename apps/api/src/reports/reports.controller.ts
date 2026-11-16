@@ -1,4 +1,5 @@
 import { Controller, Get, Header, Query, Res } from '@nestjs/common';
+import { OVERSIGHT_ROLES } from '@kora/core';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { Roles } from '../auth/decorators';
@@ -6,10 +7,15 @@ import { ZodPipe } from '../common/zod.pipe';
 import { type Period, ReportsService } from './reports.service';
 
 const periodQuery = new ZodPipe(z.enum(['Q', 'YTD', '12M']).default('12M'));
-const asOfQuery = new ZodPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional());
+const asOfQuery = new ZodPipe(
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+);
 
 /** Portfolio-wide figures: managers and administrators. */
-@Roles('MANAGER', 'ADMIN')
+@Roles(...OVERSIGHT_ROLES)
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reports: ReportsService) {}

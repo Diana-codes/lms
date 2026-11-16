@@ -11,6 +11,7 @@ import { AuthFeaturesForm } from './auth-features-form';
 import { BrandingForm } from './branding-form';
 import { ClassificationForm } from './classification-form';
 import { ContactForm } from './contact-form';
+import { SegregationForm } from './segregation-form';
 
 export const metadata: Metadata = { title: 'Company settings' };
 export default async function CompanySettingsPage() {
@@ -28,6 +29,7 @@ export default async function CompanySettingsPage() {
         <div className="flex flex-col gap-6">
           <BrandingForm settings={s} />
           <AuthFeaturesForm settings={s} />
+          <SegregationForm settings={s} />
           <ContactForm settings={s} />
           <ClassificationForm settings={s} />
           <Card>

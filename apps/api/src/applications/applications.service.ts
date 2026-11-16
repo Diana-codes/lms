@@ -544,6 +544,7 @@ export class ApplicationsService {
     if (app.stage !== 'APPROVED') {
       throw new ConflictException('Only an approved application can be disbursed');
     }
+    assertSeparateDisburser(app, user);
 
     const today = kigaliDate();
     const quote = applicationQuote(app, today);
@@ -628,6 +629,7 @@ export class ApplicationsService {
     const app = await this.find(code);
     if (app.stage !== 'APPROVED')
       throw new ConflictException('Only an approved application can be disbursed');
+    assertSeparateDisburser(app, user);
     if (!app.borrower.momoLinked) {
       throw new ConflictException(
         'This borrower has no MoMo wallet linked. Disburse by bank transfer or cash.',
@@ -787,5 +789,21 @@ export class ApplicationsService {
     const app = await this.prisma.application.findFirst({ where: { code }, include: cardInclude });
     if (!app) throw new NotFoundException(`No application ${code}`);
     return app;
+  }
+}
+
+/**
+ * PRD §3.5 maker-checker: with strict segregation on, whoever approved an
+ * application (first or second approval) cannot also pay it out.
+ */
+function assertSeparateDisburser(
+  app: { decidedById: string | null; secondApproverId: string | null },
+  user: AuthUser,
+): void {
+  if (!companyFeatures().strictSegregation) return;
+  if (app.decidedById === user.id || app.secondApproverId === user.id) {
+    throw new ForbiddenException(
+      'You approved this loan, so another manager must disburse it (segregation of duties)',
+    );
   }
 }

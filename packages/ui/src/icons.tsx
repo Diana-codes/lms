@@ -121,6 +121,25 @@ export const SettingsIcon = make(
 );
 
 /** The sparkle that marks every AI feature. Filled, unlike the line icons. */
+export const AccountingIcon = make(
+  <>
+    <rect x="4" y="3" width="16" height="18" rx="2" />
+    <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
+  </>,
+);
+export const AuditIcon = make(
+  <>
+    <path d="M9 3h6l4 4v14H5V3h4" />
+    <path d="M9 13l2 2 4-4" />
+  </>,
+);
+export const UploadIcon = make(
+  <>
+    <path d="M12 16V4M7 9l5-5 5 5" />
+    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+  </>,
+);
+
 export function SparkleIcon({ size = 16, ...props }: IconProps) {
   return (
     <svg

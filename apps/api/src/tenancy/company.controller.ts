@@ -39,6 +39,7 @@ const brandingSchema = z
     creditClassProfile: creditClassProfile.optional(),
     staffTwoFactor: z.boolean().optional(),
     borrowerOtp: z.boolean().optional(),
+    strictSegregation: z.boolean().optional(),
   })
   .strict();
 

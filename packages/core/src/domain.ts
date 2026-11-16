@@ -1,14 +1,72 @@
 /** Shared domain vocabulary. Values match the Prisma enums in apps/api. */
 
-export const STAFF_ROLES = ['ADMIN', 'MANAGER', 'LOAN_OFFICER', 'COLLECTIONS_AGENT'] as const;
+export const STAFF_ROLES = [
+  'ADMIN',
+  'MANAGER',
+  'LOAN_OFFICER',
+  'CREDIT_ANALYST',
+  'COLLECTIONS_AGENT',
+  'ACCOUNTANT',
+  'AUDITOR',
+] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   ADMIN: 'Administrator',
   MANAGER: 'Manager',
   LOAN_OFFICER: 'Loan officer',
+  CREDIT_ANALYST: 'Credit analyst',
   COLLECTIONS_AGENT: 'Collections agent',
+  ACCOUNTANT: 'Accountant',
+  AUDITOR: 'Auditor',
 };
+
+/** What each role is for, shown when an administrator assigns roles. */
+export const STAFF_ROLE_DESCRIPTIONS: Record<StaffRole, string> = {
+  ADMIN: 'Company settings, staff, products, and everything a manager can do.',
+  MANAGER: 'Approves and disburses loans, decides restructures and write-offs.',
+  LOAN_OFFICER: 'Registers borrowers, takes applications and manages their own book.',
+  CREDIT_ANALYST: 'Assesses applications, cash flow and security; recommends decisions.',
+  COLLECTIONS_AGENT: 'Works overdue accounts: contacts, promises to pay and payments.',
+  ACCOUNTANT:
+    'Records expenses and journals, reconciles, runs financial statements and closes periods.',
+  AUDITOR: 'Read-only access to loans, accounts, reports and the audit log.',
+};
+
+/** Roles that work applications (create, move, score, assess). */
+export const LENDING_ROLES = [
+  'LOAN_OFFICER',
+  'CREDIT_ANALYST',
+  'MANAGER',
+  'ADMIN',
+] as const satisfies readonly StaffRole[];
+
+/** Roles that may record a repayment received outside MoMo. */
+export const PAYMENT_ROLES = [
+  'LOAN_OFFICER',
+  'COLLECTIONS_AGENT',
+  'ACCOUNTANT',
+  'MANAGER',
+  'ADMIN',
+] as const satisfies readonly StaffRole[];
+
+/** Roles that work in the accounting module. */
+export const FINANCE_ROLES = [
+  'ACCOUNTANT',
+  'MANAGER',
+  'ADMIN',
+] as const satisfies readonly StaffRole[];
+
+/** Roles that can read management reports and the books. */
+export const OVERSIGHT_ROLES = [
+  'MANAGER',
+  'ADMIN',
+  'ACCOUNTANT',
+  'AUDITOR',
+] as const satisfies readonly StaffRole[];
+
+/** Auditors can look at everything and change nothing. */
+export const READ_ONLY_ROLES = ['AUDITOR'] as const satisfies readonly StaffRole[];
 
 export const APPLICATION_STAGES = [
   'NEW',

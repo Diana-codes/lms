@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
+import { LENDING_ROLES } from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
@@ -54,7 +55,7 @@ export class ApplicationsController {
     return this.applications.keyFacts(code);
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post()
   create(
     @Body(new ZodPipe(createSchema)) body: z.infer<typeof createSchema>,
@@ -64,7 +65,7 @@ export class ApplicationsController {
     return this.applications.create(body, user, requestMeta(req));
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post(':code/move')
   @HttpCode(200)
   move(
@@ -76,7 +77,7 @@ export class ApplicationsController {
     return this.applications.move(code, body.to, body.reason, user, requestMeta(req));
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post(':code/approve')
   @HttpCode(200)
   approve(
@@ -90,7 +91,7 @@ export class ApplicationsController {
     });
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post(':code/score')
   @HttpCode(200)
   rescore(
@@ -101,7 +102,7 @@ export class ApplicationsController {
     return this.applications.rescore(code, user, requestMeta(req));
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post('auto-approve')
   @HttpCode(200)
   approveEligible(@CurrentUser() user: AuthUser, @Req() req: Request) {

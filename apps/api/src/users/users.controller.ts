@@ -54,7 +54,7 @@ const branchSchema = z.object({
 export class UsersController {
   constructor(private readonly staff: StaffService) {}
 
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AUDITOR')
   @Get('users')
   list() {
     return this.staff.list();

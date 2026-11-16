@@ -17,6 +17,7 @@ export interface CompanyProfile {
     autoApprove: boolean;
     staffTwoFactor: boolean;
     borrowerOtp: boolean;
+    strictSegregation: boolean;
   };
 }
 

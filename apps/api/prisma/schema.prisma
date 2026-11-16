@@ -81,6 +81,8 @@ model Company {
   staffTwoFactor Boolean @default(false)
   /// Borrowers must enter a texted one-time code to sign in to the app/portal.
   borrowerOtp Boolean @default(false)
+  /// Maker-checker on disbursement: whoever approved a loan cannot also pay it out.
+  strictSegregation Boolean @default(false)
 
   /// HMAC of the secret in this company's provider webhook URLs.
   webhookTokenHash String? @unique
@@ -231,6 +233,9 @@ enum StaffRole {
   MANAGER
   LOAN_OFFICER
   COLLECTIONS_AGENT
+  CREDIT_ANALYST
+  ACCOUNTANT
+  AUDITOR
 }
 
 model Branch {

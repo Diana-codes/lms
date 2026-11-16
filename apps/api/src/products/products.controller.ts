@@ -40,14 +40,14 @@ export class ProductsController {
   }
 
   /** Every product with its terms, for the products screen. */
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AUDITOR')
   @Get('manage')
   all() {
     return this.products.all();
   }
 
   /** Rwanda's starting terms and every option the engine offers, for the editor. */
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AUDITOR')
   @Get('options')
   options() {
     return {
@@ -71,7 +71,7 @@ export class ProductsController {
     return this.products.quote({ ...body, terms: body.terms as LoanTerms });
   }
 
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AUDITOR')
   @Get(':code')
   detail(@Param('code', productCode) code: string) {
     return this.products.detail(code);

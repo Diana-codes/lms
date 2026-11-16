@@ -1,14 +1,5 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Query,
-  Req,
-} from '@nestjs/common';
-import { COLLATERAL_KINDS, DPD_BUCKETS } from '@kora/core';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req } from '@nestjs/common';
+import { COLLATERAL_KINDS, DPD_BUCKETS, LENDING_ROLES, PAYMENT_ROLES } from '@kora/core';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
@@ -103,6 +94,7 @@ export class LoansController {
     return this.loans.keyFacts(code);
   }
 
+  @Roles(...PAYMENT_ROLES)
   @Post('loans/:code/payments')
   @HttpCode(200)
   recordPayment(
@@ -136,7 +128,7 @@ export class LoansController {
     return this.loans.decideRestructure(id, body.approve, user, requestMeta(req));
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post('loans/:code/collateral')
   addCollateral(
     @Param('code', codeParam) code: string,
@@ -156,7 +148,7 @@ export class LoansController {
     );
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post('loans/:code/collateral/:id/release')
   @HttpCode(200)
   releaseCollateral(
@@ -168,7 +160,7 @@ export class LoansController {
     return this.security.releaseCollateral(code, id, user, requestMeta(req));
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post('loans/:code/guarantors')
   addGuarantor(
     @Param('code', codeParam) code: string,
@@ -187,7 +179,7 @@ export class LoansController {
     );
   }
 
-  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Roles(...LENDING_ROLES)
   @Post('loans/:code/guarantors/:id/release')
   @HttpCode(200)
   releaseGuarantor(

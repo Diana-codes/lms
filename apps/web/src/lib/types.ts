@@ -92,6 +92,7 @@ export interface CompanySettings {
     autoApprove: boolean;
     staffTwoFactor: boolean;
     borrowerOtp: boolean;
+    strictSegregation: boolean;
   };
   /** Which provider settings are set, by key. Never their values. */
   secrets: Record<string, boolean>;

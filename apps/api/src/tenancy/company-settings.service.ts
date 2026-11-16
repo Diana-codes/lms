@@ -27,6 +27,7 @@ export interface BrandingInput {
   creditClassProfile?: CreditClassProfile;
   staffTwoFactor?: boolean;
   borrowerOtp?: boolean;
+  strictSegregation?: boolean;
 }
 
 /**
@@ -70,6 +71,7 @@ export class CompanySettingsService {
         autoApprove: company.autoApprove,
         staffTwoFactor: company.staffTwoFactor,
         borrowerOtp: company.borrowerOtp,
+        strictSegregation: company.strictSegregation,
       },
       secrets,
       webhookConfigured: secrets[SECRET.webhookToken],
@@ -94,6 +96,7 @@ export class CompanySettingsService {
         creditClassProfile: input.creditClassProfile,
         staffTwoFactor: input.staffTwoFactor,
         borrowerOtp: input.borrowerOtp,
+        strictSegregation: input.strictSegregation,
       },
     });
     this.companies.invalidate();

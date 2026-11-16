@@ -1,8 +1,10 @@
 'use client';
 
-import { STAFF_ROLE_LABELS } from '@kora/core';
+import { FINANCE_ROLES, OVERSIGHT_ROLES, STAFF_ROLE_LABELS, type StaffRole } from '@kora/core';
 import {
+  AccountingIcon,
   ApplicationsIcon,
+  AuditIcon,
   Avatar,
   BorrowersIcon,
   CollectionsIcon,
@@ -17,20 +19,35 @@ import {
   SettingsIcon,
   SignOutIcon,
   StaffIcon,
+  UploadIcon,
 } from '@kora/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Me } from '@/lib/types';
 
-const NAV = [
+/** Main navigation. `roles` limits an item to those roles; no `roles` means everyone. */
+const NAV: Array<{ href: string; label: string; icon: ReactNode; roles?: readonly StaffRole[] }> = [
   { href: '/', label: 'Overview', icon: <OverviewIcon /> },
   { href: '/applications', label: 'Applications', icon: <ApplicationsIcon /> },
   { href: '/loans', label: 'Loans', icon: <LoansIcon /> },
   { href: '/borrowers', label: 'Borrowers', icon: <BorrowersIcon /> },
   { href: '/collections', label: 'Collections', icon: <CollectionsIcon /> },
-  { href: '/reports', label: 'Reports', icon: <ReportsIcon /> },
+  { href: '/reports', label: 'Reports', icon: <ReportsIcon />, roles: OVERSIGHT_ROLES },
+  {
+    href: '/accounting',
+    label: 'Accounting',
+    icon: <AccountingIcon />,
+    roles: [...FINANCE_ROLES, 'AUDITOR'],
+  },
+  { href: '/import', label: 'Import loan book', icon: <UploadIcon />, roles: ['ADMIN', 'MANAGER'] },
+  {
+    href: '/audit-log',
+    label: 'Audit log',
+    icon: <AuditIcon />,
+    roles: ['ADMIN', 'MANAGER', 'AUDITOR'],
+  },
 ];
 
 const footerLink =
@@ -49,7 +66,9 @@ export function ConsoleNav({
   const pathname = usePathname();
   const [leaving, setLeaving] = useState(false);
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
-  const items: SidebarItem[] = NAV.map((item) => ({
+  const items: SidebarItem[] = NAV.filter(
+    (item) => !item.roles || item.roles.includes(me.role),
+  ).map(({ roles: _roles, ...item }) => ({
     ...item,
     active: isActive(item.href),
     badge: item.href === '/applications' && openApplications ? openApplications : undefined,
@@ -92,7 +111,7 @@ export function ConsoleNav({
                 Company
               </Link>
             ) : null}
-            {me.role === 'ADMIN' || me.role === 'MANAGER' ? (
+            {me.role === 'ADMIN' || me.role === 'MANAGER' || me.role === 'AUDITOR' ? (
               <Link
                 href="/settings/products"
                 className={footerLink}

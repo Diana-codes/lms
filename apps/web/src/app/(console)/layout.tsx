@@ -32,6 +32,14 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         id="main"
         className="box-border flex min-w-0 flex-[999_1_560px] flex-col gap-6 px-5 pt-7 pb-10 md:px-8"
       >
+        {me.data.role === 'AUDITOR' ? (
+          <p
+            role="note"
+            className="m-0 rounded-control border border-border bg-surface px-4 py-2 text-sm text-ink-muted"
+          >
+            Read-only access: you can view everything, but changes are disabled for auditors.
+          </p>
+        ) : null}
         {children}
       </main>
     </div>

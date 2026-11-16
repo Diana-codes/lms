@@ -175,6 +175,27 @@ const STAFF = [
     last: 'Bizimana',
     role: 'COLLECTIONS_AGENT',
   },
+  {
+    key: 'CA',
+    email: 'analyst@koralend.test',
+    first: 'Grace',
+    last: 'Ingabire',
+    role: 'CREDIT_ANALYST',
+  },
+  {
+    key: 'ACC',
+    email: 'accountant@koralend.test',
+    first: 'Patrick',
+    last: 'Habimana',
+    role: 'ACCOUNTANT',
+  },
+  {
+    key: 'AUD',
+    email: 'auditor@koralend.test',
+    first: 'Sandrine',
+    last: 'Umutoni',
+    role: 'AUDITOR',
+  },
 ] as const;
 
 type ProductCode = 'SME-WC' | 'PERSONAL' | 'SALARY' | 'AGRI' | 'ASSET';

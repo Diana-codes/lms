@@ -33,6 +33,7 @@ const SELECT = {
   autoApprove: true,
   staffTwoFactor: true,
   borrowerOtp: true,
+  strictSegregation: true,
 } as const;
 
 type Row = {
@@ -46,6 +47,7 @@ type Row = {
   autoApprove: boolean;
   staffTwoFactor: boolean;
   borrowerOtp: boolean;
+  strictSegregation: boolean;
 };
 
 const toInfo = (r: Row): CompanyInfo => ({
@@ -60,6 +62,7 @@ const toInfo = (r: Row): CompanyInfo => ({
     autoApprove: r.autoApprove,
     staffTwoFactor: r.staffTwoFactor,
     borrowerOtp: r.borrowerOtp,
+    strictSegregation: r.strictSegregation,
   },
 });
 
@@ -149,6 +152,7 @@ export class CompaniesService {
         autoApprove: true,
         staffTwoFactor: true,
         borrowerOtp: true,
+        strictSegregation: true,
       },
     });
     if (!c) return null;
@@ -165,6 +169,7 @@ export class CompaniesService {
         autoApprove: c.autoApprove,
         staffTwoFactor: c.staffTwoFactor,
         borrowerOtp: c.borrowerOtp,
+        strictSegregation: c.strictSegregation,
       },
     };
   }

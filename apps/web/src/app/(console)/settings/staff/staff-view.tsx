@@ -34,6 +34,9 @@ const ROLE_HINTS: Record<StaffRole, string> = {
   MANAGER: 'Approves loans, sees reports and staff',
   LOAN_OFFICER: 'Takes applications and looks after borrowers',
   COLLECTIONS_AGENT: 'Follows up late payments',
+  CREDIT_ANALYST: 'Assesses applications, cash flow and security',
+  ACCOUNTANT: 'Expenses, journals, reconciliation and financial statements',
+  AUDITOR: 'Read-only: loans, accounts, reports and the audit log',
 };
 
 /** A readable temporary password: four groups of four, no look-alike characters. */

@@ -17,7 +17,7 @@ interface LoanRiskRow {
 export class SystemController {
   constructor(private readonly prisma: PrismaService) {}
 
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'AUDITOR')
   @Get('stats')
   async stats() {
     const today = kigaliDate();

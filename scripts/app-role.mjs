@@ -72,7 +72,7 @@ try {
   await client.query(
     `GRANT UPDATE ("brandName", "brandColor", "accentColor", "logoUrl", "defaultLanguage", ` +
       `"supportPhone", "supportEmail", "address", "creditClassProfile", ` +
-      `"staffTwoFactor", "borrowerOtp", ` +
+      `"staffTwoFactor", "borrowerOtp", "strictSegregation", ` +
       `"webhookTokenHash", "updatedAt") ON TABLE "Company" TO ${user}`,
   );
   // The reporting context: the API registers which company a reporting

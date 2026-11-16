@@ -34,6 +34,8 @@ export interface CompanyFeatures {
   staffTwoFactor: boolean;
   /** Borrower phone one-time code for the app and portal. */
   borrowerOtp: boolean;
+  /** Maker-checker on disbursement (PRD §3.5). */
+  strictSegregation: boolean;
 }
 
 const FEATURES_OFF: CompanyFeatures = {
@@ -41,6 +43,7 @@ const FEATURES_OFF: CompanyFeatures = {
   autoApprove: false,
   staffTwoFactor: false,
   borrowerOtp: false,
+  strictSegregation: false,
 };
 
 /** The current company's optional features; all off when no company is known. */
