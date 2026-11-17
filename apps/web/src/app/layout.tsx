@@ -29,7 +29,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const company = await getCompany();
   return (
     <html lang="en" style={brandStyle(company)}>
-      <body>
+      {/* Browser extensions (password managers, translators) add attributes to <body>
+          before React loads; don't report that as a hydration mismatch. */}
+      <body suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>
