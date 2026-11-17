@@ -28,6 +28,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { LoansController } from './loans/loans.controller';
 import { LoansService } from './loans/loans.service';
 import { PaymentPoster } from './loans/payment-poster';
+import { PenaltiesService } from './loans/penalties.service';
 import { MoneyController } from './money/money.controller';
 import { MoneyService } from './money/money.service';
 import { ProvidersModule } from './providers/providers.module';
@@ -35,6 +36,7 @@ import { ReportsController } from './reports/reports.controller';
 import { ReportsService } from './reports/reports.service';
 import { SmsController } from './sms/sms.controller';
 import { SmsService } from './sms/sms.service';
+import { AgreementsService } from './agreements/agreements.service';
 import { DocumentsController } from './documents/documents.controller';
 import { DocumentsService } from './documents/documents.service';
 import { ProductsController } from './products/products.controller';
@@ -75,8 +77,10 @@ import { UsersController } from './users/users.controller';
     ApplicationsService,
     LoansService,
     PaymentPoster,
+    PenaltiesService,
     BorrowersService,
     DocumentsService,
+    AgreementsService,
     DashboardService,
     MoneyService,
     SmsService,

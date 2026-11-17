@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service';
 import { ENV, type Env } from '../config/env';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
+import { PenaltiesService } from '../loans/penalties.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
 
@@ -22,7 +23,8 @@ type JobName = 'poll-momo' | 'nightly';
  * Background work on BullMQ + Redis:
  *  - every minute, follow up MoMo requests still waiting on the provider;
  *  - every night at 01:00 Kigali, recompute days past due, open and close
- *    collection cases, mark broken promises, and send due-soon reminders.
+ *    collection cases, mark broken promises, charge late penalties and send
+ *    due-soon reminders.
  * The nightly run can also be started by hand from the API, for demos.
  */
 @Injectable()
@@ -39,6 +41,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     private readonly sms: SmsService,
     private readonly audit: AuditService,
     private readonly scoring: ScoringService,
+    private readonly penalties: PenaltiesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -87,6 +90,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   /** The end-of-day run. Safe to run more than once a day. */
   async nightly() {
     const today = kigaliDate();
+    // Penalties first, so today's amounts owed include them.
+    const penalties = await this.penalties.chargeDue(today);
     const loans = await this.prisma.loan.findMany({
       where: { status: 'ACTIVE' },
       select: {
@@ -168,6 +173,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       casesClosed: closed,
       promisesBroken: broken.count,
       reminders,
+      penaltiesCharged: penalties.charged,
+      penaltiesTotal: penalties.total,
       earlyWarnings: warnings?.flagged.length ?? null,
     };
     await this.audit.record({ action: 'system.nightly', actorType: 'SYSTEM', metadata: summary });

@@ -8,17 +8,20 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { DOCUMENT_TYPES, type DocumentType } from '@kora/core';
 import { Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
+import { AgreementsService } from '../agreements/agreements.service';
 import { DocumentsService } from '../documents/documents.service';
 import { BorrowerAppService } from './borrower-app.service';
 import { BorrowerAuthService } from './borrower-auth.service';
@@ -57,6 +60,7 @@ const applySchema = z.object({
   agreedTerms: z.boolean(),
   agreedBureau: z.boolean().default(false),
   consentVersion: z.string().min(1).max(20).default('2026-01'),
+  agreementVersion: z.string().min(1).max(40),
   idPhotoKey: z.string().max(200).optional(),
   selfieKey: z.string().max(200).optional(),
 });
@@ -71,6 +75,7 @@ export class BorrowerAppController {
     private readonly app: BorrowerAppService,
     private readonly uploads: UploadsService,
     private readonly documents: DocumentsService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   // ── sign-in ──
@@ -148,7 +153,7 @@ export class BorrowerAppController {
     const options = await this.app.applyOptions(req.borrower.borrowerId);
     const product = options.products.find((p) => p.code === q.productCode);
     if (!product) return { error: 'Choose a product' };
-    const quote = this.app.quote(q.amount, q.termMonths, product.annualRateBps);
+    const quote = this.app.quote(q.amount, q.termMonths, product.annualRateBps, product.feeBps);
     const affordability = await this.app.affordability(
       req.borrower.borrowerId,
       q.amount,
@@ -157,6 +162,32 @@ export class BorrowerAppController {
       3500,
     );
     return { ...quote, annualRateBps: product.annualRateBps, affordability };
+  }
+
+  /** The Key Facts and full agreement for the loan being applied for. */
+  @UseGuards(BorrowerGuard)
+  @Get('apply/agreement')
+  agreement(
+    @Req() req: BorrowerRequest,
+    @Query(new ZodPipe(quoteSchema)) q: z.infer<typeof quoteSchema>,
+  ) {
+    return this.agreements.preview(req.borrower.borrowerId, q.productCode, q.amount, q.termMonths);
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Get('loans/:code/agreement.pdf')
+  async agreementPdf(
+    @Req() req: BorrowerRequest,
+    @Param('code', loanCode) code: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { pdf, fileName } = await this.agreements.pdfForBorrower(req.borrower.borrowerId, code);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'Cache-Control': 'no-store',
+    });
+    return new StreamableFile(pdf);
   }
 
   @UseGuards(BorrowerGuard)

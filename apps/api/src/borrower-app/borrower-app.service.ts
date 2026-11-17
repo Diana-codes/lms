@@ -8,6 +8,7 @@ import {
 import {
   addMonths,
   buildSchedule,
+  costOfCredit,
   calcInstalment,
   checkAffordability,
   formatBps,
@@ -33,6 +34,8 @@ import { ENV, type Env } from '../config/env';
 import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
+import { AgreementsService } from '../agreements/agreements.service';
+import { AGREEMENT_VERSION } from '../agreements/template';
 import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
@@ -50,6 +53,8 @@ export interface ApplyInput {
   agreedTerms: boolean;
   agreedBureau: boolean;
   consentVersion: string;
+  /** The agreement version the borrower read and accepted. */
+  agreementVersion: string;
   idPhotoKey?: string;
   selfieKey?: string;
 }
@@ -70,6 +75,7 @@ export class BorrowerAppService {
     @Inject(ENV) private readonly env: Env,
     private readonly scoring: ScoringService,
     private readonly documents: DocumentsService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   /** Everything the home screen shows. */
@@ -216,6 +222,8 @@ export class BorrowerAppService {
         number: i.number,
         dueDate: utcDateToIso(i.dueDate),
         amount: i.principalDue + i.interestDue,
+        // Late penalties on this instalment, included in what is left to pay.
+        penalty: i.penaltyDue,
         remaining: instalmentRemaining(i),
         state: instalmentState(
           { ...i, dueDate: utcDateToIso(i.dueDate) },
@@ -304,6 +312,7 @@ export class BorrowerAppService {
         name: p.name,
         kind: p.kind,
         annualRateBps: p.annualRateBps,
+        feeBps: p.originationFeeBps,
         minAmount: p.minAmount,
         maxAmount: p.maxAmount,
         terms: [6, 12, 18, 24, 36].filter((t) => t >= p.minTermMonths && t <= p.maxTermMonths),
@@ -324,7 +333,7 @@ export class BorrowerAppService {
   }
 
   /** The figures for step 1, with the same calculator the console uses. */
-  quote(amount: bigint, termMonths: number, annualRateBps: number) {
+  quote(amount: bigint, termMonths: number, annualRateBps: number, feeBps = 0) {
     const today = kigaliDate();
     const s = buildSchedule({
       principal: amount,
@@ -332,11 +341,17 @@ export class BorrowerAppService {
       termMonths,
       firstDueDate: addMonths(today, 1),
     });
+    const cost = costOfCredit({ principal: amount, annualRateBps, termMonths, feeBps });
     return {
       monthly: s.instalment,
       totalInterest: s.totalInterest,
       totalToRepay: s.totalPayable,
       firstPayment: s.rows[0]!.dueDate,
+      // The fee comes out of the payout, so the borrower sees what lands in their wallet.
+      fee: cost.fee,
+      youReceive: cost.netDisbursed,
+      totalCost: cost.totalCost,
+      aprBps: cost.aprBps,
     };
   }
 
@@ -344,6 +359,8 @@ export class BorrowerAppService {
   async apply(borrowerId: string, input: ApplyInput, meta: RequestMeta) {
     if (!input.agreedTerms)
       throw new BadRequestException('You need to agree to the loan terms to continue');
+    if (input.agreementVersion !== AGREEMENT_VERSION)
+      throw new ConflictException('The loan agreement has changed. Please read it again.');
     if (!PURPOSES.includes(input.purpose))
       throw new BadRequestException('Choose what the loan is for');
     const product = await this.prisma.product.findFirst({
@@ -492,6 +509,8 @@ export class BorrowerAppService {
           ip: meta.ip ?? null,
         });
       await tx.consent.createMany({ data: consents });
+      // The borrower accepted the Key Facts and agreement for exactly these terms.
+      await this.agreements.record(tx, { applicationId: app.id, channel: 'APP', meta });
       // Statements are waived by MoMo consent, so count documents after consents exist.
       await this.documents.syncApplication(b.id, tx);
       await tx.loanOffer.updateMany({
@@ -664,7 +683,13 @@ export class BorrowerAppService {
       where: { id: borrowerId },
       include: {
         business: true,
-        loans: { orderBy: { createdAt: 'desc' }, include: { product: { select: { name: true } } } },
+        loans: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            product: { select: { name: true } },
+            application: { select: { agreement: { select: { id: true } } } },
+          },
+        },
         consents: { where: { revokedAt: null }, orderBy: { grantedAt: 'desc' } },
       },
     });
@@ -682,6 +707,7 @@ export class BorrowerAppService {
         principal: l.principal,
         status: l.status,
         disbursedOn: l.disbursedOn ? utcDateToIso(l.disbursedOn) : null,
+        hasAgreement: Boolean(l.application?.agreement),
       })),
       consents: b.consents.map((c) => ({ type: c.type, grantedAt: c.grantedAt })),
     };

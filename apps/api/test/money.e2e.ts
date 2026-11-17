@@ -62,6 +62,7 @@ async function approved(amount: string, number: string) {
     200,
   );
   await post(staff.officer, `/applications/${res.body.code}/approve`).expect(200);
+  await post(staff.officer, `/applications/${res.body.code}/agreement`).expect(200);
   return res.body as { code: string; borrowerCode: string };
 }
 

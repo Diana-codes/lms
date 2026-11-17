@@ -1,10 +1,21 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Req,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
 import { CurrentUser, Roles } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
+import { AgreementsService } from '../agreements/agreements.service';
 import { ApplicationsService } from './applications.service';
 
 const codeParam = new ZodPipe(z.string().regex(/^APP-\d{1,9}$/, 'Not an application reference'));
@@ -31,7 +42,10 @@ const disburseSchema = z.object({
 
 @Controller('applications')
 export class ApplicationsController {
-  constructor(private readonly applications: ApplicationsService) {}
+  constructor(
+    private readonly applications: ApplicationsService,
+    private readonly agreements: AgreementsService,
+  ) {}
 
   @Get()
   pipeline() {
@@ -113,5 +127,35 @@ export class ApplicationsController {
     @Req() req: Request,
   ) {
     return this.applications.disburse(code, body, user, requestMeta(req));
+  }
+
+  /** The agreement as a PDF: the signed copy, or one to print and sign. */
+  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Get(':code/agreement.pdf')
+  async agreementPdf(
+    @Param('code', codeParam) code: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { pdf, fileName } = await this.agreements.pdfForApplication(code, user, requestMeta(req));
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'Cache-Control': 'no-store',
+    });
+    return new StreamableFile(pdf);
+  }
+
+  /** The borrower signed the printed agreement at a branch. */
+  @Roles('LOAN_OFFICER', 'MANAGER', 'ADMIN')
+  @Post(':code/agreement')
+  @HttpCode(200)
+  signAgreement(
+    @Param('code', codeParam) code: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.agreements.signAtBranch(code, user, requestMeta(req));
   }
 }

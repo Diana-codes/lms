@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AGREEMENT_VERSION } from '../src/agreements/template';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
@@ -361,6 +362,7 @@ describe('documents', () => {
         termMonths: 12,
         purpose: 'Stock',
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
         idPhotoKey: body.key,
       })
       .expect(400);

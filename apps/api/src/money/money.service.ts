@@ -242,7 +242,7 @@ export class MoneyService {
           loanId: loan.id,
           effectiveOn: today,
           memo: `Disbursement of ${loan.code}`,
-          lines: disbursementLines(d.amount, 'MOMO_FLOAT'),
+          lines: disbursementLines(loan.principal, 'MOMO_FLOAT', loan.feeAmount),
           postedById: d.initiatedById,
         });
         await tx.disbursement.update({ where: { id: d.id }, data: { ledgerTransactionId } });

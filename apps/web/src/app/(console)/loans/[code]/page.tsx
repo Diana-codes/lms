@@ -1,4 +1,4 @@
-import { formatDate } from '@kora/core';
+import { formatDate, kigaliDate } from '@kora/core';
 import { buttonClasses, Card, EmptyState, LoansIcon, Money, WarningIcon } from '@kora/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { serverApi } from '@/lib/server-api';
 import type { LoanDetail, Me } from '@/lib/types';
 import { LoanActions, RestructureBanner } from './loan-actions';
 import { MomoRequestButton, PendingMomoBanner } from './momo-actions';
+import { PenaltiesCard } from './penalties-card';
 import { ScheduleTable } from './schedule-table';
 
 export async function generateMetadata({
@@ -192,8 +193,31 @@ export default async function LoanPage({ params }: { params: Promise<{ code: str
               </Term>
               <Term label="Channel">{terms.channel ?? '—'}</Term>
               <Term label="Collateral">{terms.collateral ?? 'None recorded'}</Term>
+              <Term label="Fee (from payout)">
+                {terms.fee === '0' ? 'None' : <Money amount={terms.fee} />}
+              </Term>
+              <Term label="Late penalty">
+                {terms.latePenaltyBps
+                  ? `${rate(terms.latePenaltyBps)} after ${terms.penaltyGraceDays} days`
+                  : 'None'}
+              </Term>
             </dl>
+            {loan.agreement ? (
+              <a
+                href={`/api/applications/${loan.agreement.applicationCode}/agreement.pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold"
+              >
+                Signed agreement ({loan.agreement.channel === 'APP' ? 'in the app' : 'at a branch'},{' '}
+                {formatDate(kigaliDate(new Date(loan.agreement.acceptedAt)))})
+              </a>
+            ) : (
+              <span className="text-[13px] text-ink-muted">No signed agreement on file.</span>
+            )}
           </Card>
+
+          <PenaltiesCard loan={loan} me={me.data} />
 
           <Card className="gap-3.5 p-[22px]">
             <h2 className="m-0 font-display text-base font-semibold">Borrower</h2>

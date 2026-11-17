@@ -12,6 +12,7 @@
  * All people, phone numbers and ID numbers here are made up.
  */
 import 'dotenv/config';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -19,14 +20,18 @@ import {
   addDays,
   addMonths,
   buildSchedule,
+  DEFAULT_PENALTY_GRACE_DAYS,
   daysBetween,
   daysPastDue,
   dpdBucket,
+  formatDate,
   formatRwf,
   formatRwfCompact,
   isoToUtcDate,
   type IsoDate,
   kigaliDate,
+  maskNationalId,
+  maskPhone,
   type Schedule,
 } from '@kora/core';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/auth/password';
@@ -50,6 +55,7 @@ import {
   type PostingLine,
   repaymentLines,
 } from '../src/ledger/posting';
+import { AGREEMENT_VERSION, agreementTerms, renderAgreement } from '../src/agreements/template';
 import { sampleIdCardPng, samplePdf } from './sample-files';
 
 const env = loadEnv();
@@ -429,6 +435,7 @@ const rows = {
   consents: [] as Prisma.ConsentCreateManyInput[],
   notifications: [] as Prisma.NotificationCreateManyInput[],
   inflows: [] as Prisma.MomoInflowMonthCreateManyInput[],
+  agreements: [] as Prisma.LoanAgreementCreateManyInput[],
 };
 
 const ids = {
@@ -1700,6 +1707,50 @@ function seedMomoHistory(): void {
   }
 }
 
+/**
+ * Approved applications the designs mark "Signed" get a signed agreement, so
+ * they can be paid out; those marked "Contract sent" are still waiting.
+ */
+function seedAgreements(): void {
+  for (const app of rows.applications) {
+    if (app.stage !== 'APPROVED' || !app.statusNote?.startsWith('Signed')) continue;
+    const borrower = rows.borrowers.find((b) => b.id === app.borrowerId)!;
+    const product = PRODUCTS.find((p) => ids.product.get(p.code) === app.productId)!;
+    const terms = agreementTerms({
+      principal: BigInt(app.amount),
+      annualRateBps: app.annualRateBps,
+      termMonths: app.termMonths,
+      feeBps: 150,
+      latePenaltyBps: 200,
+      penaltyGraceDays: DEFAULT_PENALTY_GRACE_DAYS,
+    });
+    const acceptedAt = new Date((app.stageEnteredAt as Date).getTime() + 2 * 3_600_000);
+    const body = renderAgreement(terms, {
+      borrowerName: borrower.fullName,
+      borrowerCode: borrower.code,
+      nationalId: borrower.nationalIdLast3
+        ? maskNationalId(`0000000000000${borrower.nationalIdLast3}`)
+        : null,
+      phone: maskPhone(borrower.phone),
+      applicationCode: app.code,
+      productName: product.name,
+      date: formatDate(kigaliDate(acceptedAt)),
+    });
+    rows.agreements.push({
+      id: uuid(),
+      applicationId: app.id!,
+      borrowerId: app.borrowerId,
+      templateVersion: AGREEMENT_VERSION,
+      terms: terms as unknown as Prisma.InputJsonValue,
+      body,
+      bodyHash: createHash('sha256').update(body).digest('hex'),
+      channel: 'BRANCH',
+      acceptedAt,
+      recordedById: app.officerId ?? null,
+    });
+  }
+}
+
 /** What each kind of product asks for (matches the documents migration). */
 const REQUIRED_DOCS: Record<ProductKind, KycDocumentType[]> = {
   SME: ['NATIONAL_ID', 'SELFIE', 'BUSINESS_REGISTRATION', 'FINANCIAL_STATEMENTS'],
@@ -1997,6 +2048,7 @@ async function main(): Promise<void> {
   seedFiller();
   seedMomoHistory();
   await seedDemoDocuments();
+  seedAgreements();
 
   // Capital paid in before the first loan went out: enough float to cover
   // every disbursement, plus a reserve at the bank.
@@ -2022,6 +2074,9 @@ async function main(): Promise<void> {
   await insertMany('businesses', rows.businesses, (data) => prisma.business.createMany({ data }));
   await insertMany('applications', rows.applications, (data) =>
     prisma.application.createMany({ data }),
+  );
+  await insertMany('loan agreements', rows.agreements, (data) =>
+    prisma.loanAgreement.createMany({ data }),
   );
   await insertMany('credit scores', rows.scores, (data) => prisma.creditScore.createMany({ data }));
   await insertMany('loans', rows.loans, (data) => prisma.loan.createMany({ data }));

@@ -116,6 +116,9 @@ export interface ApplicationCard {
   termMonths: number;
   annualRateBps: number;
   instalment: string;
+  /** Origination fee, taken from the payout. */
+  fee: string;
+  agreement: { channel: 'APP' | 'BRANCH'; acceptedAt: string } | null;
   score: number | null;
   ai: {
     tone: 'ok' | 'warn' | 'flag';
@@ -191,6 +194,8 @@ export interface ScheduleRow {
   interest: string;
   payment: string;
   paid: string;
+  /** Late penalties on this instalment, after any waiver. */
+  penalty: string;
   remaining: string;
   balanceAfter: string;
   state: InstalmentState;
@@ -226,7 +231,30 @@ export interface LoanDetail {
     maturityDate: string;
     channel: string | null;
     collateral: string | null;
+    /** Origination fee taken from the payout, and what reached the borrower. */
+    fee: string;
+    netDisbursed: string;
+    /** 0 when the loan was signed without a penalty term. */
+    latePenaltyBps: number;
+    penaltyGraceDays: number;
   };
+  agreement: {
+    applicationCode: string;
+    channel: 'APP' | 'BRANCH';
+    acceptedAt: string;
+    version: string;
+  } | null;
+  penalties: Array<{
+    id: string;
+    instalment: number;
+    chargedOn: string;
+    amount: string;
+    waivedAmount: string;
+    waivedBy: string | null;
+    waiveReason: string | null;
+    canWaive: boolean;
+  }>;
+  penaltiesOwed: string;
   figures: {
     outstandingPrincipal: string;
     totalRepaid: string;

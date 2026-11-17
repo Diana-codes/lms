@@ -79,6 +79,11 @@ export interface Quote {
   totalToRepay: string;
   firstPayment: string;
   annualRateBps: number;
+  /** The fee comes out of the payout: this is what reaches the wallet. */
+  fee: string;
+  youReceive: string;
+  totalCost: string;
+  aprBps: number;
   affordability: { affordable: boolean; ratio: string; limit: string } | null;
 }
 
@@ -90,6 +95,8 @@ export interface Schedule {
     number: number;
     dueDate: string;
     amount: string;
+    /** Late penalties on this instalment, included in remaining. */
+    penalty: string;
     remaining: string;
     state: Home['loan'] extends infer L
       ? L extends { next: infer N }
@@ -114,6 +121,7 @@ export interface Profile {
     principal: string;
     status: string;
     disbursedOn: string | null;
+    hasAgreement: boolean;
   }>;
   consents: Array<{ type: string; grantedAt: string }>;
 }
@@ -164,3 +172,11 @@ export interface Insights {
 }
 
 export type Tab = 'home' | 'loans' | 'insights' | 'profile';
+
+/** The Key Facts and full agreement shown before applying. */
+export interface AgreementPreview {
+  version: string;
+  keyFacts: Array<{ label: string; value: string }>;
+  /** Plain text; "# " title, "## " heading, "| label | value" a key fact row. */
+  body: string;
+}

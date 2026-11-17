@@ -1,9 +1,16 @@
 'use client';
 
-import { PAYMENT_CHANNEL_LABELS, type PaymentChannel, scoreLabel } from '@kora/core';
+import {
+  formatDate,
+  kigaliDate,
+  PAYMENT_CHANNEL_LABELS,
+  type PaymentChannel,
+  scoreLabel,
+} from '@kora/core';
 import {
   AiPanel,
   Button,
+  buttonClasses,
   FormError,
   Modal,
   Money,
@@ -20,7 +27,7 @@ import { api, ApiError } from '@/lib/api';
 import { cardAge, termLine } from '@/lib/format';
 import type { ApplicationCard, Me } from '@/lib/types';
 
-type Mode = 'view' | 'decline' | 'disburse' | 'override';
+type Mode = 'view' | 'decline' | 'disburse' | 'override' | 'sign';
 const CHANNELS: PaymentChannel[] = ['MTN_MOMO', 'BANK_TRANSFER', 'CASH'];
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -67,6 +74,11 @@ export function ApplicationDialog({
   const canDecide = me.role !== 'COLLECTIONS_AGENT';
   const canDisburse = me.role === 'MANAGER' || me.role === 'ADMIN';
   const awaitingSecond = card.firstApprovalBy != null;
+  // An agreement can be signed until the money goes out.
+  const open = ['NEW', 'UNDER_REVIEW', 'CREDIT_CHECK', 'APPROVED', 'DISBURSED'].includes(
+    card.stage,
+  );
+  const payout = (BigInt(card.amount) - BigInt(card.fee)).toString();
 
   async function run(
     path: string,
@@ -137,7 +149,46 @@ export function ApplicationDialog({
           {card.docsReceived} of {card.docsRequired} received
         </Fact>
         <Fact label="Officer">{card.officerName ?? 'Unassigned'}</Fact>
+        <Fact label="Fee (taken from the payout)">
+          <Money amount={card.fee} />
+        </Fact>
       </dl>
+
+      {open ? (
+        <section
+          aria-label="Loan agreement"
+          className="flex flex-wrap items-center gap-3 rounded-panel border border-line px-4 py-3"
+        >
+          <div className="mr-auto flex min-w-0 flex-col gap-0.5">
+            <span className="text-sm font-semibold">Loan agreement</span>
+            <span className="text-[13px] text-ink-muted">
+              {card.agreement
+                ? `${card.agreement.channel === 'APP' ? 'Accepted in the app' : 'Signed at a branch'} · ${formatDate(kigaliDate(new Date(card.agreement.acceptedAt)))}`
+                : 'Not signed yet. Print it for the borrower to sign, or they accept it when applying in the app.'}
+            </span>
+          </div>
+          <a
+            href={`/api/applications/${code}/agreement.pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClasses({ variant: 'secondary' })}
+          >
+            {card.agreement ? 'View signed copy' : 'Print agreement'}
+          </a>
+          {!card.agreement && canDecide && card.stage !== 'DISBURSED' && mode !== 'sign' ? (
+            <Button variant="secondary" onClick={() => setMode('sign')}>
+              Mark as signed
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {mode === 'sign' ? (
+        <p className="m-0 rounded-control bg-info-bg px-3.5 py-2.5 text-sm text-info-fg">
+          Confirm that {card.borrowerName} has signed the printed agreement for these terms. It is
+          recorded with your name and cannot be undone. Keep the paper copy on file.
+        </p>
+      ) : null}
 
       {!card.ai && canDecide && card.stage !== 'DISBURSED' && card.stage !== 'APPROVED' ? (
         <Button
@@ -242,13 +293,15 @@ export function ApplicationDialog({
           <p className="m-0 rounded-control bg-paid-row px-3 py-2.5 text-[13px] leading-snug text-success-fg">
             {channel === 'MTN_MOMO' ? (
               <>
-                Sends <Money amount={card.amount} /> to the borrower’s MoMo wallet. The loan starts,
-                and the ledger is posted, once MoMo confirms the transfer.
+                Sends <Money amount={payout} /> to the borrower’s MoMo wallet, keeping the{' '}
+                <Money amount={card.fee} /> fee. The loan starts, and the ledger is posted, once
+                MoMo confirms the transfer.
               </>
             ) : (
               <>
-                Records that <Money amount={card.amount} /> has been sent, creates the loan and its
-                repayment schedule, and posts it to the ledger.
+                Records that <Money amount={payout} /> has been sent, keeping the{' '}
+                <Money amount={card.fee} /> fee, creates the loan and its repayment schedule, and
+                posts it to the ledger.
               </>
             )}{' '}
             The first instalment falls due in one month.
@@ -280,6 +333,20 @@ export function ApplicationDialog({
               onClick={() => move('DECLINED', `${code} declined.`, true)}
             >
               Decline application
+            </Button>
+          </>
+        ) : mode === 'sign' ? (
+          <>
+            <Button variant="secondary" onClick={() => setMode('view')}>
+              Back
+            </Button>
+            <Button
+              loading={busy}
+              onClick={() =>
+                run('/agreement', undefined, () => `Signed agreement recorded for ${code}.`)
+              }
+            >
+              Yes, they signed it
             </Button>
           </>
         ) : mode === 'disburse' ? (
@@ -354,7 +421,11 @@ export function ApplicationDialog({
               </Button>
             ) : null}
             {card.stage === 'APPROVED' ? (
-              canDisburse ? (
+              !card.agreement ? (
+                <span className="text-[13px] text-ink-muted">
+                  The loan can be paid out once the agreement is signed.
+                </span>
+              ) : canDisburse ? (
                 <Button onClick={() => setMode('disburse')}>Record disbursement</Button>
               ) : (
                 <span className="text-[13px] text-ink-muted">

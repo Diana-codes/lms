@@ -13,6 +13,7 @@ import {
   APPLICATION_STAGE_LABELS,
   buildSchedule,
   calcInstalment,
+  originationFee,
   canMoveStage,
   checkAffordability,
   formatBps,
@@ -34,6 +35,7 @@ import type { PaymentChannel, Prisma } from '../generated/prisma/client';
 import { CHANNEL_ACCOUNT } from '../ledger/accounts';
 import { LedgerService } from '../ledger/ledger.service';
 import { disbursementLines } from '../ledger/posting';
+import type { AgreementTerms } from '../agreements/template';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -52,6 +54,7 @@ const cardInclude = {
   decidedBy: { select: { id: true, firstName: true, lastName: true } },
   secondApprover: { select: { id: true, firstName: true, lastName: true } },
   creditScores: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+  agreement: { select: { channel: true, acceptedAt: true, terms: true } },
   loan: {
     select: {
       code: true,
@@ -90,6 +93,13 @@ function toCard(app: ApplicationRow) {
     termMonths: app.termMonths,
     annualRateBps: app.annualRateBps,
     instalment: calcInstalment(app.amount, app.annualRateBps, app.termMonths),
+    // The fee is taken from the payout; the signed agreement fixes it.
+    fee: app.agreement
+      ? BigInt((app.agreement.terms as unknown as AgreementTerms).fee)
+      : originationFee(app.amount, app.product.originationFeeBps),
+    agreement: app.agreement
+      ? { channel: app.agreement.channel, acceptedAt: app.agreement.acceptedAt }
+      : null,
     score: score?.value ?? null,
     // Stored, advisory output. A person makes every decision.
     ai: score
@@ -144,6 +154,31 @@ function toCard(app: ApplicationRow) {
 }
 
 export type ApplicationCard = ReturnType<typeof toCard>;
+
+/**
+ * The fee and penalty terms a loan is paid out on: always the ones the
+ * borrower signed. No signed agreement, no payout.
+ */
+function signedTerms(app: ApplicationRow) {
+  if (!app.agreement) {
+    throw new ConflictException(
+      'The borrower has not signed the loan agreement yet. Print it for signing, or ask them to accept it in the app.',
+    );
+  }
+  const t = app.agreement.terms as unknown as AgreementTerms;
+  if (
+    BigInt(t.principal) !== app.amount ||
+    t.termMonths !== app.termMonths ||
+    t.annualRateBps !== app.annualRateBps
+  ) {
+    throw new ConflictException('The signed agreement does not match this application');
+  }
+  return {
+    fee: BigInt(t.fee),
+    latePenaltyBps: t.latePenaltyBps,
+    penaltyGraceDays: t.penaltyGraceDays,
+  };
+}
 
 export interface CreateApplicationInput {
   name: string;
@@ -496,6 +531,7 @@ export class ApplicationsService {
     if (app.stage !== 'APPROVED') {
       throw new ConflictException('Only an approved application can be disbursed');
     }
+    const terms = signedTerms(app);
 
     const today = kigaliDate();
     const firstDue = addMonths(today, 1);
@@ -530,6 +566,9 @@ export class ApplicationsService {
           firstDueDate: isoToUtcDate(firstDue),
           maturityDate: isoToUtcDate(schedule.rows[schedule.rows.length - 1]!.dueDate),
           collateral: input.collateral?.trim() || null,
+          feeAmount: terms.fee,
+          latePenaltyBps: terms.latePenaltyBps,
+          penaltyGraceDays: terms.penaltyGraceDays,
           officerId: app.officerId,
           branchId: app.branchId,
           instalments: {
@@ -549,13 +588,14 @@ export class ApplicationsService {
         loanId: loan.id,
         effectiveOn: today,
         memo: `Disbursement of ${newCode}`,
-        lines: disbursementLines(app.amount, CHANNEL_ACCOUNT[input.channel]),
+        lines: disbursementLines(app.amount, CHANNEL_ACCOUNT[input.channel], terms.fee),
         postedById: user.id,
       });
       await tx.disbursement.create({
         data: {
           loanId: loan.id,
-          amount: app.amount,
+          // What actually goes out: the principal less the fee.
+          amount: app.amount - terms.fee,
           channel: input.channel,
           status: 'SUCCESSFUL',
           idempotencyKey: key,
@@ -572,7 +612,12 @@ export class ApplicationsService {
           actorId: user.id,
           entityType: 'Loan',
           entityId: newCode,
-          metadata: { application: app.code, amount: app.amount, channel: input.channel },
+          metadata: {
+            application: app.code,
+            amount: app.amount,
+            fee: terms.fee,
+            channel: input.channel,
+          },
           ...meta,
         },
         tx,
@@ -606,6 +651,8 @@ export class ApplicationsService {
       if (failed) return { application: await this.get(code), ...failed };
       throw new ConflictException(`Already disbursed as ${app.loan.code}`);
     }
+    const terms = signedTerms(app);
+    const payout = app.amount - terms.fee;
 
     const today = kigaliDate();
     const firstDue = addMonths(today, 1);
@@ -639,6 +686,9 @@ export class ApplicationsService {
           firstDueDate: isoToUtcDate(firstDue),
           maturityDate: isoToUtcDate(schedule.rows[schedule.rows.length - 1]!.dueDate),
           collateral: collateral?.trim() || null,
+          feeAmount: terms.fee,
+          latePenaltyBps: terms.latePenaltyBps,
+          penaltyGraceDays: terms.penaltyGraceDays,
           officerId: app.officerId,
           branchId: app.branchId,
           instalments: {
@@ -654,7 +704,7 @@ export class ApplicationsService {
       const d = await tx.disbursement.create({
         data: {
           loanId: loan.id,
-          amount: app.amount,
+          amount: payout,
           channel: 'MTN_MOMO',
           status: 'PENDING',
           idempotencyKey: `momo:${referenceId}`,
@@ -669,7 +719,12 @@ export class ApplicationsService {
           actorId: user.id,
           entityType: 'Loan',
           entityId: newCode,
-          metadata: { application: app.code, amount: app.amount, channel: 'MTN_MOMO' },
+          metadata: {
+            application: app.code,
+            amount: app.amount,
+            fee: terms.fee,
+            channel: 'MTN_MOMO',
+          },
           ...meta,
         },
         tx,
@@ -680,7 +735,7 @@ export class ApplicationsService {
     try {
       await this.momo.transfer({
         referenceId,
-        amount: app.amount,
+        amount: payout,
         phone,
         externalId: loanCode,
         message: `Kora Lend loan ${loanCode}`,
@@ -719,7 +774,7 @@ export class ApplicationsService {
     const d = await this.prisma.disbursement.create({
       data: {
         loanId: loan.id,
-        amount: loan.principal,
+        amount: loan.principal - loan.feeAmount,
         channel: 'MTN_MOMO',
         status: 'PENDING',
         idempotencyKey: `momo:${referenceId}`,
@@ -738,7 +793,7 @@ export class ApplicationsService {
     try {
       await this.momo.transfer({
         referenceId,
-        amount: loan.principal,
+        amount: loan.principal - loan.feeAmount,
         phone: loan.borrower.phone,
         externalId: loan.code,
         message: `Kora Lend loan ${loan.code}`,

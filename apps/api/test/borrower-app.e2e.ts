@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { addMonths, calcInstalment, kigaliDate } from '@kora/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AGREEMENT_VERSION } from '../src/agreements/template';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
@@ -76,6 +77,10 @@ async function borrowerWithLoan(
     .expect(200);
   await http()
     .post(`/applications/${created.body.code}/approve`)
+    .set('Cookie', staffCookies)
+    .expect(200);
+  await http()
+    .post(`/applications/${created.body.code}/agreement`)
     .set('Cookie', staffCookies)
     .expect(200);
   const res = await http()
@@ -395,6 +400,7 @@ describe('applying in the app', () => {
         nationalId,
         shareMomoHistory: true,
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
         agreedBureau: true,
         idPhotoKey: idUpload.body.key,
       })
@@ -445,6 +451,7 @@ describe('applying in the app', () => {
         termMonths: 6,
         purpose: 'Stock',
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
       })
       .expect(409);
     const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
@@ -463,6 +470,7 @@ describe('applying in the app', () => {
       termMonths: 6,
       purpose: 'Stock',
       agreedTerms: true,
+      agreementVersion: AGREEMENT_VERSION,
       nationalId,
     };
     await http()

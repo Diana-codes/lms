@@ -44,6 +44,7 @@ export interface PostedPayment {
   memo: string;
   principal: bigint;
   interest: bigint;
+  penalty: bigint;
   credit: bigint;
 }
 
@@ -89,7 +90,7 @@ export class PaymentPoster {
     const allocation =
       applied > 0n
         ? allocatePayment(loan.instalments, applied)
-        : { allocations: [], principal: 0n, interest: 0n, unallocated: 0n };
+        : { allocations: [], principal: 0n, interest: 0n, penalty: 0n, unallocated: 0n };
 
     const paidAt =
       input.receivedOn === kigaliDate()
@@ -103,6 +104,7 @@ export class PaymentPoster {
         data: {
           principalPaid: inst.principalPaid + part.principal,
           interestPaid: inst.interestPaid + part.interest,
+          penaltyPaid: inst.penaltyPaid + part.penalty,
           status: part.settles ? 'PAID' : 'PARTIAL',
           paidAt: part.settles ? paidAt : null,
         },
@@ -130,6 +132,8 @@ export class PaymentPoster {
         { account: CHANNEL_ACCOUNT[input.channel], direction: 'DEBIT', amount: input.amount },
         { account: 'LOANS_PRINCIPAL', direction: 'CREDIT', amount: allocation.principal },
         { account: 'INTEREST_INCOME', direction: 'CREDIT', amount: allocation.interest },
+        // Penalties were earned when charged; paying one clears the receivable.
+        { account: 'FEES_RECEIVABLE', direction: 'CREDIT', amount: allocation.penalty },
         { account: 'BORROWER_CREDIT', direction: 'CREDIT', amount: credit },
       ]),
       postedById: input.recordedById ?? null,
@@ -182,6 +186,7 @@ export class PaymentPoster {
           receivedOn: input.receivedOn,
           principal: allocation.principal,
           interest: allocation.interest,
+          penalty: allocation.penalty,
           credit,
           instalments: allocation.allocations.map((a) => a.number),
           closedLoan: repaid,
@@ -199,6 +204,7 @@ export class PaymentPoster {
       memo,
       principal: allocation.principal,
       interest: allocation.interest,
+      penalty: allocation.penalty,
       credit,
     };
   }

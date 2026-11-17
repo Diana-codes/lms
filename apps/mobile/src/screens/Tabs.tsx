@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { api, clearTokens, errorMessage } from '../lib/api';
+import { api, clearTokens, errorMessage, openPdf } from '../lib/api';
 import type { Home, Insights, Profile, Schedule, Statement } from '../lib/types';
 import { Button, DarkCard, Muted, Panel, Row, RoundButton, Sheet, Toggle } from '../ui';
 import {
@@ -172,6 +172,11 @@ export function LoansTab({ loanCode, onApply }: { loanCode: string | null; onApp
                   {row.state === 'PARTIAL' ||
                   (row.state === 'OVERDUE' && row.remaining !== row.amount) ? (
                     <Muted>{formatRwf(BigInt(row.remaining))} left</Muted>
+                  ) : null}
+                  {row.penalty !== '0' ? (
+                    <Text style={{ fontSize: 12, color: c['caution-fg'], fontFamily: font.body }}>
+                      incl. {formatRwf(BigInt(row.penalty))} late penalty
+                    </Text>
                   ) : null}
                 </View>
                 <Text
@@ -365,6 +370,18 @@ export function ProfileTab({
     onSignedOut();
   }
 
+  const [opening, setOpening] = useState<string | null>(null);
+  async function openAgreement(loanCode: string) {
+    setOpening(loanCode);
+    try {
+      await openPdf(`/app/loans/${loanCode}/agreement.pdf`, `${loanCode}-agreement.pdf`);
+    } catch (err) {
+      toast(errorMessage(err));
+    } finally {
+      setOpening(null);
+    }
+  }
+
   async function stopSharing() {
     try {
       await api('/app/profile/consents/withdraw', {
@@ -468,6 +485,19 @@ export function ProfileTab({
                     {l.productName}
                   </Text>
                   <Muted>{l.code}</Muted>
+                  {l.hasAgreement ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open the loan agreement for ${l.code}`}
+                      onPress={() => openAgreement(l.code)}
+                      hitSlop={10}
+                      style={{ minHeight: 28, justifyContent: 'center' }}
+                    >
+                      <Text style={{ fontSize: 13, fontFamily: font.semibold, color: c.forest }}>
+                        {opening === l.code ? 'Opening…' : 'Agreement (PDF)'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
                 <Text
                   style={{
