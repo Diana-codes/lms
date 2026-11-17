@@ -27,8 +27,18 @@ import { type ReactNode, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Me } from '@/lib/types';
 
-/** Main navigation. `roles` limits an item to those roles; no `roles` means everyone. */
-const NAV: Array<{ href: string; label: string; icon: ReactNode; roles?: readonly StaffRole[] }> = [
+/**
+ * Main navigation. `roles` limits an item to those roles; no `roles` means
+ * everyone. `hidden` keeps a built page out of the menu for now (it still
+ * works at its address); remove the flag to show it again.
+ */
+const NAV: Array<{
+  href: string;
+  label: string;
+  icon: ReactNode;
+  roles?: readonly StaffRole[];
+  hidden?: boolean;
+}> = [
   { href: '/', label: 'Overview', icon: <OverviewIcon /> },
   { href: '/applications', label: 'Applications', icon: <ApplicationsIcon /> },
   { href: '/loans', label: 'Loans', icon: <LoansIcon /> },
@@ -52,12 +62,14 @@ const NAV: Array<{ href: string; label: string; icon: ReactNode; roles?: readonl
     label: 'Credit bureau',
     icon: <ShieldIcon />,
     roles: [...OVERSIGHT_ROLES],
+    hidden: true,
   },
   {
     href: '/audit-log',
     label: 'Audit log',
     icon: <AuditIcon />,
     roles: ['ADMIN', 'MANAGER', 'AUDITOR'],
+    hidden: true,
   },
 ];
 
@@ -78,8 +90,8 @@ export function ConsoleNav({
   const [leaving, setLeaving] = useState(false);
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
   const items: SidebarItem[] = NAV.filter(
-    (item) => !item.roles || item.roles.includes(me.role),
-  ).map(({ roles: _roles, ...item }) => ({
+    (item) => !item.hidden && (!item.roles || item.roles.includes(me.role)),
+  ).map(({ roles: _roles, hidden: _hidden, ...item }) => ({
     ...item,
     active: isActive(item.href),
     badge: item.href === '/applications' && openApplications ? openApplications : undefined,
