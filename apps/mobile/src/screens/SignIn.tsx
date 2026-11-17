@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { api, saveTokens, type Tokens } from '../lib/api';
-import { LanguageSwitch, useI18n } from '../lib/i18n';
-import { Button, ErrorText, Heading, Muted } from '../ui';
-import { c, font, r } from '../ui/theme';
+import { api, errorMessage, saveTokens, type Tokens } from '../lib/api';
+import { Button, ErrorText, Muted } from '../ui';
+import { c, font } from '../ui/theme';
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
-  const { t, lender, error: errorMessage } = useI18n();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [masked, setMasked] = useState<string | null>(null);
@@ -17,19 +15,11 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<
-        | ({ otpRequired: false; phone: string } & Tokens)
-        | { otpRequired: true; sent: true; phone: string }
-      >('/app/auth/request-code', {
+      const r = await api<{ phone: string }>('/app/auth/request-code', {
         method: 'POST',
         body: { phone },
         auth: false,
       });
-      if (r.otpRequired === false) {
-        await saveTokens(r);
-        onSignedIn();
-        return;
-      }
       setMasked(r.phone);
     } catch (err) {
       setError(errorMessage(err));
@@ -63,27 +53,38 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     >
       <View style={styles.hero}>
         <View style={styles.logo}>
-          <Text style={{ color: c.forest, fontFamily: font.display, fontSize: 22 }}>
-            {lender.charAt(0)}
-          </Text>
+          <Text style={{ color: c.forest, fontFamily: font.display, fontSize: 24 }}>K</Text>
         </View>
-        <Text style={{ color: c.surface, fontFamily: font.display, fontSize: 28 }}>{lender}</Text>
-        <Text style={{ color: c['forest-muted'], fontSize: 14, marginTop: 4 }}>
-          {t('signin.taglineApp')}
+        <Text
+          style={{ color: c.surface, fontFamily: font.display, fontSize: 32, letterSpacing: -0.6 }}
+        >
+          Kora Lend
         </Text>
-        <View style={{ marginTop: 14 }}>
-          <LanguageSwitch dark />
-        </View>
+        <Text
+          style={{ color: c['forest-muted'], fontSize: 15, lineHeight: 22, fontFamily: font.body }}
+        >
+          Loans for your business, repaid with MoMo.
+        </Text>
       </View>
       <View style={styles.form}>
-        <Heading size={22}>{masked ? t('signin.titleCode') : t('signin.titlePhone')}</Heading>
-        <Muted>
-          {masked ? t('signin.codeSent', { phone: masked }) : t('signin.enterPhone', { lender })}
+        <Text
+          accessibilityRole="header"
+          style={{ fontFamily: font.display, fontSize: 24, color: c.ink, letterSpacing: -0.4 }}
+        >
+          {masked ? 'Enter your code' : 'Muraho! Sign in'}
+        </Text>
+        <Muted style={{ fontSize: 14, lineHeight: 20 }}>
+          {masked
+            ? `We sent a 6-digit code by SMS to ${masked}.`
+            : 'Enter your phone number and we will text you a 6-digit code. No password needed.'}
         </Muted>
         {masked ? (
           <TextInput
-            accessibilityLabel={t('signin.codeLabel')}
-            style={[styles.input, { fontSize: 24, letterSpacing: 6, textAlign: 'center' }]}
+            accessibilityLabel="6-digit code"
+            style={[
+              styles.input,
+              { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontFamily: font.display },
+            ]}
             keyboardType="number-pad"
             textContentType="oneTimeCode"
             autoComplete="sms-otp"
@@ -93,38 +94,49 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
             autoFocus
           />
         ) : (
-          <TextInput
-            accessibilityLabel={t('signin.phoneLabel')}
-            style={styles.input}
-            keyboardType="phone-pad"
-            textContentType="telephoneNumber"
-            autoComplete="tel"
-            placeholder="078 812 3412"
-            placeholderTextColor={c['ink-muted']}
-            value={phone}
-            onChangeText={setPhone}
-            autoFocus
-          />
+          <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+            <Text style={{ fontSize: 17, color: c['ink-muted'], fontFamily: font.medium }}>
+              🇷🇼 +250
+            </Text>
+            <View style={{ width: 1, height: 24, backgroundColor: c.line }} />
+            <TextInput
+              accessibilityLabel="Phone number"
+              style={{ flex: 1, fontSize: 18, color: c.ink, fontFamily: font.body, height: '100%' }}
+              keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              placeholder="788 123 412"
+              placeholderTextColor={c['ink-muted']}
+              value={phone}
+              onChangeText={setPhone}
+              autoFocus
+            />
+          </View>
         )}
         <ErrorText>{error}</ErrorText>
         <Button
-          label={busy ? t('common.oneMoment') : masked ? t('signin.submit') : t('common.continue')}
+          label={busy ? 'One moment…' : masked ? 'Sign in' : 'Send me a code'}
+          variant="lime"
           loading={busy}
           disabled={masked ? code.length !== 6 : phone.replace(/\D/g, '').length < 9}
           onPress={masked ? verify : requestCode}
         />
         {masked ? (
           <Button
-            label={t('signin.differentNumber')}
+            label="Use a different number"
             variant="ghost"
+            height={44}
             onPress={() => {
               setMasked(null);
               setCode('');
               setError(null);
             }}
           />
-        ) : null}
-        <Muted style={{ textAlign: 'center' }}>{t('signin.onlyCustomers', { lender })}</Muted>
+        ) : (
+          <Muted style={{ textAlign: 'center' }}>
+            For Kora Lend customers. Not a customer yet? Visit a branch.
+          </Muted>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -132,31 +144,31 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: c.forest },
-  hero: { flex: 1, justifyContent: 'flex-end', padding: 24, gap: 6 },
+  hero: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 24, paddingBottom: 28, gap: 8 },
   logo: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     backgroundColor: c.lime,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   form: {
     backgroundColor: c.ground,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 24,
-    paddingBottom: 36,
-    gap: 14,
+    paddingBottom: 32,
+    gap: 16,
   },
   input: {
-    minHeight: 52,
+    height: 56,
     borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: r.control,
+    borderColor: c.field,
+    borderRadius: 14,
     backgroundColor: c.surface,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     fontSize: 18,
     color: c.ink,
     fontFamily: font.body,

@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  addMonths,
   borrowerLanguage,
   type BorrowerLanguage,
   checkAffordability,
@@ -18,8 +19,10 @@ import {
   isoToUtcDate,
   kigaliDate,
   maskNationalId,
+  isMtnRwPhone,
   maskPhone,
   monthlyEquivalent,
+  normaliseRwPhone,
   PAYMENT_CHANNEL_LABELS,
   translate,
   utcDateToIso,
@@ -34,6 +37,7 @@ import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ScoringService } from '../ai/scoring.service';
 import { loanTerms, productTerms, quoteFor } from '../products/terms';
 import { MoneyService } from '../money/money.service';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
 
@@ -54,6 +58,9 @@ export interface ApplyInput {
   selfieKey?: string;
 }
 
+const mimeOfKey = (key: string) =>
+  key.endsWith('.png') ? 'image/png' : key.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+
 const PURPOSES = ['Stock', 'Equipment', 'Expand shop', 'School fees', 'Other'];
 
 @Injectable()
@@ -66,6 +73,7 @@ export class BorrowerAppService {
     private readonly crypto: PiiCrypto,
     @Inject(ENV) private readonly env: Env,
     private readonly scoring: ScoringService,
+    private readonly documents: DocumentsService,
   ) {}
 
   /** Everything the home screen shows. */
@@ -74,6 +82,8 @@ export class BorrowerAppService {
     const b = await this.prisma.borrower.findUniqueOrThrow({
       where: { id: borrowerId },
       include: {
+        officer: { select: { firstName: true, lastName: true } },
+        branch: { select: { name: true } },
         loans: {
           where: { status: { in: ['ACTIVE', 'PENDING_DISBURSEMENT'] } },
           orderBy: { createdAt: 'desc' },
@@ -191,6 +201,11 @@ export class BorrowerAppService {
           }
         : null,
       wallet: b.momoLinked ? `MTN MoMo · ${maskPhone(b.phone).replace('+250 ', '0')}` : null,
+      support: {
+        officerName: b.officer ? `${b.officer.firstName} ${b.officer.lastName.charAt(0)}.` : null,
+        branch: b.branch?.name ?? null,
+      },
+      documentsNeeded: (await this.documents.checklist(borrowerId)).needsAction,
     };
   }
 
@@ -222,7 +237,22 @@ export class BorrowerAppService {
   }
 
   /** "Pay with MoMo": a Request to Pay for the next instalment, or an amount of the borrower's choosing. */
-  async pay(borrowerId: string, code: string, amount: bigint | undefined, meta: RequestMeta) {
+  async pay(
+    borrowerId: string,
+    code: string,
+    amount: bigint | undefined,
+    meta: RequestMeta,
+    phone?: string,
+  ) {
+    // Paying from someone else's wallet: it must be a real MTN Rwanda number.
+    let payer: string | undefined;
+    if (phone) {
+      const e164 = normaliseRwPhone(phone);
+      if (!e164) throw new BadRequestException('Enter a Rwandan mobile number, like 078 123 4567');
+      if (!isMtnRwPhone(e164))
+        throw new BadRequestException('MoMo payments need an MTN number starting 078 or 079');
+      payer = e164;
+    }
     const loan = await this.prisma.loan.findFirst({
       where: { code, borrowerId },
       include: {
@@ -234,12 +264,19 @@ export class BorrowerAppService {
       },
     });
     if (!loan) throw new NotFoundException('No such loan');
-    if (!loan.borrower.momoLinked)
+    // Their own wallet must be linked; another number is checked by its owner's PIN.
+    if (!payer && !loan.borrower.momoLinked)
       throw new ConflictException('No MoMo wallet is linked to this account');
     const next = loan.instalments[0];
     const toPay = amount ?? (next ? instalmentRemaining(next) : 0n);
     if (toPay <= 0n) throw new BadRequestException('Nothing is due');
-    return this.money.requestPayment(code, toPay, { borrowerId }, meta);
+    return this.money.requestPayment(
+      code,
+      toPay,
+      { borrowerId },
+      meta,
+      payer === loan.borrower.phone ? undefined : payer,
+    );
   }
 
   async paymentStatus(borrowerId: string, paymentId: string) {
@@ -353,6 +390,10 @@ export class BorrowerAppService {
       throw new ConflictException(
         `Your application ${b.applications[0]!.code} is still being reviewed`,
       );
+    for (const key of [input.idPhotoKey, input.selfieKey]) {
+      if (key && !this.documents.ownsKey(b.id, key))
+        throw new BadRequestException('Upload your photos again');
+    }
 
     const code = await this.prisma.$transaction(async (tx) => {
       // An ID number typed in the app is stored encrypted, like one entered by staff.
@@ -406,11 +447,8 @@ export class BorrowerAppService {
           statedMonthlyIncome: input.monthlyRevenue ?? null,
           businessName: input.businessName ?? null,
           businessSector: input.businessSector ?? null,
-          docsRequired: 4,
-          docsReceived:
-            (b.kycStatus === 'VERIFIED' ? 2 : 0) +
-            (input.idPhotoKey ? 1 : 0) +
-            (input.selfieKey ? 1 : 0),
+          // Filled in from the borrower's documents once they are attached below.
+          docsRequired: product.requiredDocuments.length,
           officerId: b.officerId,
           branchId: b.branchId,
         },
@@ -418,10 +456,23 @@ export class BorrowerAppService {
       const docs: Array<{ type: KycDocumentType; key: string }> = [];
       if (input.idPhotoKey) docs.push({ type: 'NATIONAL_ID', key: input.idPhotoKey });
       if (input.selfieKey) docs.push({ type: 'SELFIE', key: input.selfieKey });
-      for (const d of docs)
-        await tx.kycDocument.create({
-          data: { borrowerId: b.id, type: d.type, storageKey: d.key, status: 'PENDING' },
+      for (const d of docs) {
+        // A fresh photo replaces any earlier one of the same type.
+        await tx.kycDocument.updateMany({
+          where: { borrowerId: b.id, type: d.type, supersededAt: null },
+          data: { supersededAt: new Date() },
         });
+        await tx.kycDocument.create({
+          data: {
+            borrowerId: b.id,
+            type: d.type,
+            storageKey: d.key,
+            mimeType: mimeOfKey(d.key),
+            applicationId: app.id,
+            status: 'PENDING',
+          },
+        });
+      }
       const consents: Array<Prisma.ConsentCreateManyInput> = [
         {
           borrowerId: b.id,
@@ -459,6 +510,8 @@ export class BorrowerAppService {
           ip: meta.ip ?? null,
         });
       await tx.consent.createMany({ data: consents });
+      // Statements are waived by MoMo consent, so count documents after consents exist.
+      await this.documents.syncApplication(b.id, tx);
       await tx.loanOffer.updateMany({
         where: { borrowerId: b.id, acceptedAt: null, dismissedAt: null },
         data: { acceptedAt: new Date() },
@@ -542,6 +595,84 @@ export class BorrowerAppService {
       affordable: check.affordable,
       ratio: formatBps(check.ratioBps, 0),
       limit: formatBps(limitBps, 0),
+    };
+  }
+
+  /** Payments received on one loan, newest first, for the Statement screen. */
+  async statement(borrowerId: string, code: string) {
+    const loan = await this.prisma.loan.findFirst({
+      where: { code, borrowerId },
+      include: {
+        product: { select: { name: true } },
+        payments: {
+          where: { status: 'SUCCESSFUL' },
+          orderBy: { confirmedAt: 'desc' },
+          include: { ledgerTransaction: { select: { memo: true } } },
+        },
+        instalments: { where: { supersededAt: null } },
+      },
+    });
+    if (!loan) throw new NotFoundException('No such loan');
+    return {
+      code: loan.code,
+      productName: loan.product.name,
+      principal: loan.principal,
+      disbursedOn: loan.disbursedOn ? utcDateToIso(loan.disbursedOn) : null,
+      totalPaid: loan.payments.reduce((sum, p) => sum + p.amount, 0n),
+      leftToPay: loan.instalments.reduce((sum, i) => sum + instalmentRemaining(i), 0n),
+      payments: loan.payments.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        channel: PAYMENT_CHANNEL_LABELS[p.channel],
+        receivedOn: kigaliDate(p.confirmedAt ?? p.initiatedAt),
+        note: p.ledgerTransaction?.memo ?? 'Payment',
+        reference: p.externalRef,
+      })),
+    };
+  }
+
+  /** The borrower's own repayment record, for the Insights tab. */
+  async insights(borrowerId: string) {
+    const today = kigaliDate();
+    const b = await this.prisma.borrower.findUniqueOrThrow({
+      where: { id: borrowerId },
+      include: {
+        loans: { include: { instalments: { where: { supersededAt: null } } } },
+        payments: { where: { status: 'SUCCESSFUL' }, select: { amount: true, confirmedAt: true } },
+      },
+    });
+    const all = b.loans.flatMap((l) => l.instalments);
+    const paid = all.filter((i) => i.status === 'PAID' && i.paidAt);
+    const onTime = paid.filter((i) => kigaliDate(i.paidAt!) <= utcDateToIso(i.dueDate));
+    const early = paid.filter((i) => kigaliDate(i.paidAt!) < utcDateToIso(i.dueDate));
+    const overdue = all.filter((i) => i.status !== 'PAID' && utcDateToIso(i.dueDate) < today);
+    const yearStart = `${today.slice(0, 4)}-01-01`;
+    // Payments by month for the last six months, oldest first.
+    const months: Array<{ month: string; amount: bigint }> = [];
+    for (let m = 5; m >= 0; m--) {
+      const start = addMonths(`${today.slice(0, 7)}-01`, -m);
+      const end = addMonths(start, 1);
+      const amount = b.payments
+        .filter(
+          (p) =>
+            p.confirmedAt && kigaliDate(p.confirmedAt) >= start && kigaliDate(p.confirmedAt) < end,
+        )
+        .reduce((sum, p) => sum + p.amount, 0n);
+      months.push({ month: start, amount });
+    }
+    return {
+      instalmentsPaid: paid.length,
+      paidOnTime: onTime.length,
+      paidEarly: early.length,
+      overdueNow: overdue.length,
+      onTimeRatePct: paid.length ? Math.round((onTime.length / paid.length) * 100) : null,
+      paidThisYear: b.payments
+        .filter((p) => p.confirmedAt && kigaliDate(p.confirmedAt) >= yearStart)
+        .reduce((sum, p) => sum + p.amount, 0n),
+      paidAllTime: b.payments.reduce((sum, p) => sum + p.amount, 0n),
+      loansRepaid: b.loans.filter((l) => l.status === 'REPAID').length,
+      preApprovedLimit: b.preApprovedLimit,
+      months,
     };
   }
 

@@ -17,6 +17,7 @@ import {
   maskEmail,
   maskNationalId,
   maskPhone,
+  isMtnRwPhone,
   normaliseRwPhone,
   redactPii,
 } from './mask';
@@ -95,6 +96,13 @@ describe('masking', () => {
     expect(normaliseRwPhone('788123412')).toBe('+250788123412');
     expect(normaliseRwPhone('0758123412')).toBeNull();
     expect(normaliseRwPhone('12345')).toBeNull();
+  });
+  it('tells MTN numbers from Airtel ones', () => {
+    expect(isMtnRwPhone('+250788123412')).toBe(true);
+    expect(isMtnRwPhone('+250798123412')).toBe(true);
+    expect(isMtnRwPhone('+250722550118')).toBe(false);
+    expect(isMtnRwPhone('+250732550118')).toBe(false);
+    expect(isMtnRwPhone('0788123412')).toBe(false);
   });
   it('builds initials', () => {
     expect(initials('Aline Uwase')).toBe('AU');

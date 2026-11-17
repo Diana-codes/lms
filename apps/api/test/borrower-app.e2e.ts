@@ -284,6 +284,70 @@ describe('home and payments', () => {
     expect(schedule.rows).toHaveLength(12);
   });
 
+  it('can pay from another MTN number, whose owner approves the prompt', async () => {
+    const number = phone();
+    const { loanCode } = await borrowerWithLoan(number);
+    const token = await signInBorrower(number);
+    const pay = (phoneNumber: string) =>
+      http().post(`/app/loans/${loanCode}/pay`).set(bearer(token)).send({ phone: phoneNumber });
+
+    const bad = await pay('0758 123 412').expect(400);
+    expect(bad.body.message).toBe('Enter a Rwandan mobile number, like 078 123 4567');
+    const airtel = await pay('0722 550 118').expect(400);
+    expect(airtel.body.message).toBe('MoMo payments need an MTN number starting 078 or 079');
+    expect(await prisma.payment.count({ where: { loan: { code: loanCode } } })).toBe(0);
+
+    const other = `079${randomInt(1_000_000, 9_999_999)}`;
+    const res = await pay(other).expect(202);
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: res.body.paymentId } });
+    expect(payment.payerPhone).toBe(`+250${other.slice(1)}`);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'loan.payment.request', entityId: loanCode },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit.metadata).toMatchObject({ otherPayer: true });
+    // The number never appears in full in the audit trail.
+    expect(JSON.stringify(audit.metadata)).not.toContain(other.slice(1));
+    const status = await http()
+      .get(`/app/payments/${res.body.paymentId}`)
+      .set(bearer(token))
+      .expect(200);
+    expect(status.body.status).toBe('SUCCESSFUL');
+  });
+
+  it('shows the statement, insights and who to contact', async () => {
+    const number = phone();
+    const { loanCode } = await borrowerWithLoan(number);
+    const token = await signInBorrower(number);
+    const pay = await http()
+      .post(`/app/loans/${loanCode}/pay`)
+      .set(bearer(token))
+      .send({})
+      .expect(202);
+    await http().get(`/app/payments/${pay.body.paymentId}`).set(bearer(token)).expect(200);
+
+    const statement = (
+      await http().get(`/app/loans/${loanCode}/statement`).set(bearer(token)).expect(200)
+    ).body;
+    expect(statement.payments).toHaveLength(1);
+    expect(statement.payments[0]).toMatchObject({ channel: 'MTN MoMo', note: 'Instalment 1' });
+    expect(BigInt(statement.totalPaid) + BigInt(statement.leftToPay)).toBeGreaterThan(1_200_000n);
+
+    const insights = (await http().get('/app/insights').set(bearer(token)).expect(200)).body;
+    expect(insights).toMatchObject({
+      instalmentsPaid: 1,
+      paidOnTime: 1,
+      paidEarly: 1,
+      onTimeRatePct: 100,
+      overdueNow: 0,
+    });
+    expect(insights.months).toHaveLength(6);
+    expect(insights.months[5].amount).toBe(statement.payments[0].amount);
+
+    const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
+    expect(home.support).toHaveProperty('officerName');
+  });
+
   it('cannot see or pay another borrower’s loan', async () => {
     const mine = phone();
     const theirs = phone();
@@ -292,6 +356,7 @@ describe('home and payments', () => {
     const token = await signInBorrower(mine);
     await http().get(`/app/loans/${other.loanCode}/schedule`).set(bearer(token)).expect(404);
     await http().post(`/app/loans/${other.loanCode}/pay`).set(bearer(token)).send({}).expect(404);
+    await http().get(`/app/loans/${other.loanCode}/statement`).set(bearer(token)).expect(404);
   });
 });
 

@@ -12,6 +12,8 @@
  * All people, phone numbers and ID numbers here are made up.
  */
 import 'dotenv/config';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
   addDays,
@@ -45,6 +47,7 @@ import type {
   CollectionAction,
   ContactChannel,
   ContactOutcome,
+  KycDocumentType,
   PaymentChannel,
   ProductKind,
   ScoreRecommendation,
@@ -60,6 +63,7 @@ import {
   type PostingLine,
   repaymentLines,
 } from '../src/ledger/posting';
+import { sampleIdCardPng, samplePdf } from './sample-files';
 
 const env = loadEnv();
 if (env.NODE_ENV === 'production') {
@@ -1743,6 +1747,58 @@ function seedMomoHistory(): void {
   }
 }
 
+/** What each kind of product asks for (matches the documents migration). */
+const REQUIRED_DOCS: Record<ProductKind, KycDocumentType[]> = {
+  SME: ['NATIONAL_ID', 'SELFIE', 'BUSINESS_REGISTRATION', 'FINANCIAL_STATEMENTS'],
+  ASSET: ['NATIONAL_ID', 'SELFIE', 'BUSINESS_REGISTRATION', 'FINANCIAL_STATEMENTS'],
+  AGRI: ['NATIONAL_ID', 'SELFIE', 'PROOF_OF_ADDRESS'],
+  PERSONAL: ['NATIONAL_ID', 'SELFIE', 'FINANCIAL_STATEMENTS'],
+};
+
+/**
+ * APP-20934 (Moses Tuyisenge) has two documents waiting for an officer: an ID
+ * photo and an RDB certificate. Real sample files are written to UPLOAD_DIR
+ * so View, Verify and "Ask for a new one" all work in the console.
+ */
+async function seedDemoDocuments(): Promise<void> {
+  const app = rows.applications.find((a) => a.code === 'APP-20934');
+  if (!app?.borrowerId) return;
+  const borrowerId = app.borrowerId;
+  const name = rows.borrowers.find((b) => b.id === borrowerId)?.fullName ?? 'Sample Borrower';
+  const files: Array<[KycDocumentType, string, string, Buffer]> = [
+    ['NATIONAL_ID', 'id-sample.png', 'image/png', sampleIdCardPng()],
+    [
+      'BUSINESS_REGISTRATION',
+      'business-registration-sample.pdf',
+      'application/pdf',
+      samplePdf([
+        'SAMPLE - Certificate of Domestic Company Registration',
+        `Company: ${name} Trading Ltd`,
+        'Company code: 000000000 (sample)',
+        'Registered: 14 March 2023, Kigali',
+        'This is a made-up document for the Kora Lend development seed.',
+      ]),
+    ],
+  ];
+  const uploadRoot = path.resolve(env.UPLOAD_DIR);
+  for (const [i, [type, file, mimeType, body]] of files.entries()) {
+    const storageKey = `kyc/${borrowerId}/${file}`;
+    await mkdir(path.join(uploadRoot, 'kyc', borrowerId), { recursive: true });
+    await writeFile(path.join(uploadRoot, storageKey), body, { mode: 0o600 });
+    rows.kyc.push({
+      id: uuid(),
+      borrowerId,
+      type,
+      status: 'PENDING',
+      storageKey,
+      mimeType,
+      sizeBytes: body.length,
+      applicationId: app.id,
+      uploadedAt: hoursAgo(2 - i),
+    });
+  }
+}
+
 function seedNotifications(): void {
   // Each staff member gets their own copy, so reading one does not hide it from the others.
   for (const userId of ids.staff.values()) {
@@ -2017,6 +2073,7 @@ async function seedCompany(passwordHash: string): Promise<void> {
         autoApproveMinScore: p.autoScore,
         autoApproveMaxAmount: p.autoMax,
         secondApprovalAbove: p.secondAbove,
+        requiredDocuments: REQUIRED_DOCS[p.kind],
       },
     });
   }
@@ -2034,6 +2091,7 @@ async function seedCompany(passwordHash: string): Promise<void> {
   seedNotifications();
   seedFiller();
   seedMomoHistory();
+  await seedDemoDocuments();
 
   // Capital paid in before the first loan went out: enough float to cover
   // every disbursement, plus a reserve at the bank.

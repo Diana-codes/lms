@@ -58,6 +58,11 @@ export function normaliseRwPhone(input: string): string | null {
   return /^7[2389]\d{7}$/.test(local) ? `+250${local}` : null;
 }
 
+/** MTN Rwanda mobile numbers start 078 or 079 (Airtel is 072 and 073). Takes E.164. */
+export function isMtnRwPhone(e164: string): boolean {
+  return /^\+2507[89]\d{7}$/.test(e164);
+}
+
 /** "Aline Uwase" -> "AU"; "Kalisa Trading Ltd" -> "KT". */
 export function initials(name: string): string {
   const words = name

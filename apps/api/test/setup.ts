@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import 'reflect-metadata';
 import { E2E_COMPANY_SLUG, E2E_WEBHOOK_TOKEN, ML_TEST_PORT, testDatabaseUrl } from './test-db';
 
@@ -19,3 +21,5 @@ process.env.ML_URL = `http://127.0.0.1:${ML_TEST_PORT}`;
 // The test company was provisioned with this webhook secret (global-setup.ts).
 process.env.WEBHOOK_TOKEN = E2E_WEBHOOK_TOKEN;
 process.env.JOBS_ENABLED = 'false';
+// Uploaded test files go to a scratch folder, never the developer's uploads.
+process.env.UPLOAD_DIR = path.join(tmpdir(), 'kora-lend-e2e-uploads');

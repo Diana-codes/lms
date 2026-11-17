@@ -17,6 +17,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
+import { UploadsService } from '../borrower-app/uploads.service';
 import { escapeLike } from '../common/http';
 import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ACCOUNTS } from '../ledger/accounts';
@@ -45,6 +46,7 @@ export class BorrowersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly uploads: UploadsService,
   ) {}
 
   async list(query: { q?: string; mine?: boolean; page: number }, user: AuthUser) {
@@ -102,7 +104,7 @@ export class BorrowersService {
       include: {
         business: true,
         officer: { select: { firstName: true, lastName: true } },
-        kycDocuments: { orderBy: { uploadedAt: 'asc' } },
+        kycDocuments: { where: { supersededAt: null }, orderBy: { uploadedAt: 'asc' } },
         creditScores: { orderBy: { createdAt: 'desc' }, take: 12 },
         notes: {
           orderBy: { createdAt: 'desc' },
@@ -119,6 +121,16 @@ export class BorrowersService {
       },
     });
     if (!b) throw new NotFoundException(`No borrower ${code}`);
+    // Which documents have a file the officer can actually open.
+    const onDisk = new Set(
+      (
+        await Promise.all(
+          b.kycDocuments.map(async (d) =>
+            (await this.uploads.locate(d.storageKey)) ? d.id : null,
+          ),
+        )
+      ).filter(Boolean),
+    );
     const today = kigaliDate();
 
     const owedRows = await this.prisma.$queryRaw<Array<{ owed: bigint }>>`
@@ -227,13 +239,25 @@ export class BorrowersService {
           expires >= today &&
           expires <= kigaliDate(new Date(Date.now() + 30 * 86_400_000));
         const expired = expires != null && expires < today;
+        const reviewedOn = doc.rejectedAt ?? doc.verifiedAt;
         return {
+          id: doc.id,
+          type: doc.type,
+          file: onDisk.has(doc.id)
+            ? doc.mimeType === 'application/pdf'
+              ? ('pdf' as const)
+              : ('image' as const)
+            : null,
+          reviewable: doc.status === 'PENDING',
+          reason: doc.status === 'REJECTED' ? doc.rejectionReason : null,
           name: DOC_NAMES[doc.type],
           meta: expires
             ? `${expired ? 'Expired' : 'Expires'} ${formatDate(expires)}`
-            : doc.verifiedVia
-              ? `Verified via ${doc.verifiedVia} · ${formatMonthYear(kigaliDate(doc.verifiedAt ?? doc.uploadedAt))}`
-              : `Uploaded ${formatMonthYear(kigaliDate(doc.uploadedAt))}`,
+            : doc.status === 'REJECTED' && reviewedOn
+              ? `Rejected ${formatDate(kigaliDate(reviewedOn))}`
+              : doc.verifiedVia
+                ? `Verified via ${doc.verifiedVia} · ${formatMonthYear(kigaliDate(doc.verifiedAt ?? doc.uploadedAt))}`
+                : `Uploaded ${formatDate(kigaliDate(doc.uploadedAt))}${doc.mimeType ? (doc.mimeType === 'application/pdf' ? ' · PDF' : ' · Photo') : ''}`,
           status: expired
             ? 'Expired'
             : expiringSoon
