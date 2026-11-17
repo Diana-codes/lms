@@ -7,3 +7,4 @@ export * from './domain';
 export * from './payments';
 export * from './documents';
 export * from './charges';
+export * from './registration';

@@ -8,6 +8,7 @@ import {
   isIsoDate,
   isoToUtcDate,
   kigaliDate,
+  kigaliStartOfDay,
   utcDateToIso,
 } from './dates';
 import { canMoveStage, scoreBand, scorePercent } from './domain';
@@ -43,6 +44,8 @@ describe('dates', () => {
   });
   it('uses the Kigali calendar day', () => {
     expect(kigaliDate(new Date('2026-11-12T21:59:00Z'))).toBe('2026-11-12');
+    // A Kigali day starts at 22:00 UTC the evening before.
+    expect(kigaliStartOfDay('2026-11-13').toISOString()).toBe('2026-11-12T22:00:00.000Z');
     expect(kigaliDate(new Date('2026-11-12T22:00:00Z'))).toBe('2026-11-13');
   });
   it('round-trips through Date and formats like the designs', () => {

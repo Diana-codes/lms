@@ -32,6 +32,7 @@ import {
   kigaliDate,
   maskNationalId,
   maskPhone,
+  REGISTRATION_CONSENT_VERSION,
   type Schedule,
 } from '@kora/core';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../src/auth/password';
@@ -1711,6 +1712,43 @@ function seedMomoHistory(): void {
  * Approved applications the designs mark "Signed" get a signed agreement, so
  * they can be paid out; those marked "Contract sent" are still waiting.
  */
+/**
+ * A customer who signed up in the borrower app yesterday and has no officer
+ * yet: shows the "No officer" filter and "Take this customer" in the console.
+ * Runs last so it does not change any other seeded data.
+ */
+function seedAppSignup(): void {
+  const id = addBorrower({
+    name: 'Grace Mukamana',
+    officer: 'KN', // cleared below
+    business: { name: 'Grace Tailoring', sector: 'Garments & tailoring', role: 'Owner' },
+    kyc: 'PENDING',
+    momo: false,
+    since: addDays(TODAY, -1),
+  });
+  const b = rows.borrowers[rows.borrowers.length - 1]!;
+  b.officerId = null;
+  b.source = 'APP';
+  for (const type of ['TERMS', 'DATA_PROCESSING'] as const) {
+    rows.consents.push({
+      id: uuid(),
+      borrowerId: id,
+      type,
+      textVersion: REGISTRATION_CONSENT_VERSION,
+      channel: 'APP',
+      grantedAt: at(addDays(TODAY, -1), 18),
+    });
+  }
+  rows.notifications.push({
+    id: uuid(),
+    userId: ids.staff.get('MGR'),
+    kind: 'SYSTEM',
+    title: `Grace Mukamana signed up in the app and needs an officer`,
+    href: `/borrowers/${b.code}`,
+    createdAt: new Date(NOW.getTime() - 15 * 3_600_000),
+  });
+}
+
 function seedAgreements(): void {
   for (const app of rows.applications) {
     if (app.stage !== 'APPROVED' || !app.statusNote?.startsWith('Signed')) continue;
@@ -2049,6 +2087,7 @@ async function main(): Promise<void> {
   seedMomoHistory();
   await seedDemoDocuments();
   seedAgreements();
+  seedAppSignup();
 
   // Capital paid in before the first loan went out: enough float to cover
   // every disbursement, plus a reserve at the bank.

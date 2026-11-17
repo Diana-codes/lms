@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -70,6 +71,9 @@ export class DocumentsService {
     const checklist = documentChecklist({
       required: app?.product.requiredDocuments ?? BASELINE,
       docs: b.kycDocuments.map((d) => ({
+        id: d.id,
+        hasFile: d.storageKey != null,
+        mimeType: d.mimeType,
         type: d.type,
         status: d.status,
         expiresOn: d.expiresOn ? utcDateToIso(d.expiresOn) : null,
@@ -176,6 +180,55 @@ export class DocumentsService {
     return this.checklist(borrowerId);
   }
 
+  /** The borrower's own file, so they can check what they sent. */
+  async borrowerFile(borrowerId: string, id: string) {
+    const doc = await this.prisma.kycDocument.findFirst({
+      where: { id, borrowerId, withdrawnAt: null },
+    });
+    const path = doc && (await this.uploads.locate(doc.storageKey));
+    if (!doc || !path) throw new NotFoundException('This file is not available');
+    return { path, mimeType: doc.mimeType ?? 'application/octet-stream' };
+  }
+
+  /**
+   * The borrower takes back a document nobody has reviewed yet, e.g. the
+   * wrong photo. The row and file stay for the record; it just leaves the
+   * checklist and the officer's queue.
+   */
+  async withdraw(borrowerId: string, id: string, meta: RequestMeta): Promise<BorrowerChecklist> {
+    const doc = await this.prisma.kycDocument.findFirst({ where: { id, borrowerId } });
+    if (!doc || doc.supersededAt) throw new NotFoundException('This document has already gone');
+    if (doc.status !== 'PENDING')
+      throw new ConflictException(
+        doc.status === 'VERIFIED'
+          ? 'This document is verified, so it cannot be removed. Ask your officer if it needs changing.'
+          : 'This document has been reviewed. Send a new one instead.',
+      );
+    await this.prisma.$transaction(async (tx) => {
+      // Only if still unreviewed: an officer may be verifying it at this moment.
+      const done = await tx.kycDocument.updateMany({
+        where: { id, status: 'PENDING', supersededAt: null },
+        data: { withdrawnAt: new Date(), supersededAt: new Date() },
+      });
+      if (done.count !== 1)
+        throw new ConflictException('This document was just reviewed. Pull down to refresh.');
+      await this.syncApplication(borrowerId, tx);
+      await this.audit.record(
+        {
+          action: 'borrower.document.withdraw',
+          actorType: 'BORROWER',
+          actorId: borrowerId,
+          entityType: 'KycDocument',
+          entityId: id,
+          metadata: { type: doc.type },
+          ...meta,
+        },
+        tx,
+      );
+    });
+    return this.checklist(borrowerId);
+  }
+
   /** Files from the apply flow: only keys this borrower's own uploads produced are accepted. */
   ownsKey(borrowerId: string, key: string): boolean {
     return key.startsWith(UploadsService.prefix(borrowerId)) && !key.includes('..');
@@ -221,6 +274,7 @@ export class DocumentsService {
     meta: RequestMeta,
   ) {
     const doc = await this.findDoc(borrowerCode, id);
+    if (doc.withdrawnAt) throw new ConflictException('The borrower removed this document');
     if (doc.supersededAt) throw new ConflictException('A newer file has replaced this one');
     if (doc.status !== 'PENDING') {
       throw new ConflictException(
@@ -243,7 +297,12 @@ export class DocumentsService {
               verifiedById: user.id,
               verifiedVia: 'Officer review',
             }
-          : { status: 'REJECTED', rejectionReason: decision.reason, rejectedAt: now },
+          : {
+              status: 'REJECTED',
+              rejectionReason: decision.reason,
+              rejectedAt: now,
+              rejectedById: user.id,
+            },
       });
       // ID and selfie both checked by a person means the customer's identity is verified.
       if (decision.verify && (doc.type === 'NATIONAL_ID' || doc.type === 'SELFIE')) {
@@ -308,5 +367,126 @@ export class DocumentsService {
       status: decision.verify ? 'VERIFIED' : 'REJECTED',
       reviewedOn: formatDate(kigaliDate(now)),
     };
+  }
+
+  /**
+   * Whether this person may put a reviewed document back to "being checked".
+   * Managers may undo any review; an officer only their own, on the same day.
+   * A verification a loan was later paid out on stays: ask for a new document.
+   */
+  async undoBlock(
+    doc: {
+      borrowerId: string;
+      status: string;
+      supersededAt: Date | null;
+      verifiedAt: Date | null;
+      verifiedById: string | null;
+      verifiedVia: string | null;
+      rejectedAt: Date | null;
+      rejectedById: string | null;
+    },
+    user: AuthUser,
+    db: Db = this.prisma,
+  ): Promise<string | null> {
+    if (doc.status !== 'VERIFIED' && doc.status !== 'REJECTED')
+      return 'Only a verified or rejected document can be undone';
+    if (doc.supersededAt) return 'A newer file has replaced this one';
+    if (doc.status === 'VERIFIED' && doc.verifiedVia !== 'Officer review')
+      return 'This was verified outside the console, so it cannot be undone here';
+    const isManager = user.role === 'MANAGER' || user.role === 'ADMIN';
+    if (!isManager) {
+      const by = doc.status === 'VERIFIED' ? doc.verifiedById : doc.rejectedById;
+      const at = doc.status === 'VERIFIED' ? doc.verifiedAt : doc.rejectedAt;
+      if (by !== user.id) return 'Only a manager can undo someone else’s review';
+      if (!at || kigaliDate(at) !== kigaliDate())
+        return 'You can undo your own review on the same day. After that, ask a manager.';
+    }
+    if (doc.status === 'VERIFIED' && doc.verifiedAt) {
+      const paidOut = await db.loan.count({
+        where: { borrowerId: doc.borrowerId, createdAt: { gt: doc.verifiedAt } },
+      });
+      if (paidOut > 0)
+        return 'A loan was paid out after this was verified. Ask the borrower for a new document instead.';
+    }
+    return null;
+  }
+
+  /** Put a reviewed document back to "being checked", e.g. after a wrong click. */
+  async undoReview(
+    borrowerCode: string,
+    id: string,
+    reason: string,
+    user: AuthUser,
+    meta: RequestMeta,
+  ) {
+    const doc = await this.findDoc(borrowerCode, id);
+    const blocked = await this.undoBlock(doc, user);
+    if (blocked) {
+      if (blocked.startsWith('Only a manager') || blocked.startsWith('You can undo'))
+        throw new ForbiddenException(blocked);
+      throw new ConflictException(blocked);
+    }
+    const name = DOCUMENT_INFO[doc.type].name;
+    const wasRejected = doc.status === 'REJECTED';
+
+    await this.prisma.$transaction(async (tx) => {
+      const done = await tx.kycDocument.updateMany({
+        where: { id: doc.id, status: doc.status, supersededAt: null },
+        data: {
+          status: 'PENDING',
+          verifiedAt: null,
+          verifiedById: null,
+          verifiedVia: null,
+          rejectionReason: null,
+          rejectedAt: null,
+          rejectedById: null,
+        },
+      });
+      if (done.count !== 1) throw new ConflictException('This document just changed. Reload.');
+      // An undone ID or selfie check means the customer's identity is not verified any more.
+      if (!wasRejected && (doc.type === 'NATIONAL_ID' || doc.type === 'SELFIE')) {
+        await tx.borrower.update({
+          where: { id: doc.borrowerId },
+          data: { kycStatus: 'PENDING' },
+        });
+      }
+      await this.syncApplication(doc.borrowerId, tx);
+      await tx.notification.create({
+        data: {
+          borrowerId: doc.borrowerId,
+          kind: 'DOCUMENT',
+          title: wasRejected
+            ? `Please ignore our last message about your ${name}. It is being checked again.`
+            : `Your ${name} is being checked again`,
+          href: 'documents',
+        },
+      });
+      await this.audit.record(
+        {
+          action: 'document.review.undo',
+          actorId: user.id,
+          entityType: 'KycDocument',
+          entityId: doc.id,
+          metadata: { borrower: borrowerCode, type: doc.type, was: doc.status, reason },
+          ...meta,
+        },
+        tx,
+      );
+    });
+
+    if (wasRejected) {
+      // They were told by SMS to send it again, so correct that by SMS too.
+      try {
+        await this.sms.send({
+          toPhone: doc.borrower.phone,
+          borrowerId: doc.borrowerId,
+          sentById: user.id,
+          body: `Kora Lend: please ignore our last message about your ${name}. We are checking it again and will let you know.`,
+        });
+      } catch (err) {
+        this.logger.warn(`Undo SMS for document ${doc.id} failed: ${(err as Error).message}`);
+      }
+    }
+    return { status: 'PENDING' as const };
   }
 }

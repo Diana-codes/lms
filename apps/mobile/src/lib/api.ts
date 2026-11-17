@@ -161,10 +161,15 @@ export async function uploadFile<T>(
 }
 
 /**
- * Download a PDF the borrower is allowed to see (their loan agreement) and
- * open it in the phone's document viewer, where they can also save or share it.
+ * Download a file the borrower is allowed to see (their loan agreement, a
+ * document they sent) and open it in the phone's viewer, where they can
+ * zoom, save or share it.
  */
-export async function openPdf(path: string, fileName: string): Promise<void> {
+export async function openFile(
+  path: string,
+  fileName: string,
+  mimeType = 'application/pdf',
+): Promise<void> {
   const download = async () => {
     const token = await SecureStore.getItemAsync(ACCESS);
     return File.downloadFileAsync(`${API_URL}${path}`, new File(Paths.cache, fileName), {
@@ -182,15 +187,15 @@ export async function openPdf(path: string, fileName: string): Promise<void> {
       file = await download();
     } catch (err) {
       console.warn(`Download of ${path} failed:`, err);
-      throw new ApiError(
-        0,
-        'Could not download the document. Check your connection and try again.',
-      );
+      throw new ApiError(0, 'Could not download the file. Check your connection and try again.');
     }
   }
-  if (await File.canPreview(file)) await File.preview(file, { mimeType: 'application/pdf' });
-  else throw new ApiError(0, 'This phone cannot open PDFs here. Ask your officer for a copy.');
+  if (await File.canPreview(file)) await File.preview(file, { mimeType });
+  else throw new ApiError(0, 'This phone cannot open the file here. Ask your officer for a copy.');
 }
+
+/** A loan agreement or other PDF. */
+export const openPdf = (path: string, fileName: string) => openFile(path, fileName);
 
 export const errorMessage = (err: unknown) =>
   err instanceof ApiError ? err.message : 'Something went wrong. Try again.';

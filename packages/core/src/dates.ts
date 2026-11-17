@@ -67,6 +67,14 @@ export function kigaliDate(instant: Date = new Date()): IsoDate {
 }
 
 /** A Date at UTC midnight, the form Prisma expects for DATE columns. */
+/**
+ * The instant a Kigali day starts (22:00 UTC the evening before). Use this,
+ * not isoToUtcDate, when comparing timestamps with "today".
+ */
+export function kigaliStartOfDay(date: IsoDate = kigaliDate()): Date {
+  return new Date(isoToUtcDate(date).getTime() - KIGALI_OFFSET_MINUTES * 60_000);
+}
+
 export function isoToUtcDate(date: IsoDate): Date {
   const [y, m, d] = parts(date);
   return new Date(Date.UTC(y, m - 1, d));

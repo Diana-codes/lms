@@ -1,10 +1,21 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, errorMessage, saveTokens, type Tokens } from '../lib/api';
+import type { RegistrationNeeded } from '../lib/types';
 import { Button, ErrorText, Muted } from '../ui';
 import { c, font } from '../ui/theme';
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({
+  onSignedIn,
+  onRegister,
+  notice,
+}: {
+  onSignedIn: () => void;
+  /** The number is confirmed but has no account yet. */
+  onRegister: (r: RegistrationNeeded) => void;
+  /** Shown above the form, e.g. when a sign-up expired. */
+  notice?: string | null;
+}) {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [masked, setMasked] = useState<string | null>(null);
@@ -32,13 +43,16 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await saveTokens(
-        await api<Tokens>('/app/auth/verify', {
-          method: 'POST',
-          body: { phone, code },
-          auth: false,
-        }),
-      );
+      const r = await api<Tokens | RegistrationNeeded>('/app/auth/verify', {
+        method: 'POST',
+        body: { phone, code },
+        auth: false,
+      });
+      if ('registrationToken' in r) {
+        onRegister(r);
+        return;
+      }
+      await saveTokens(r);
       onSignedIn();
     } catch (err) {
       setError(errorMessage(err));
@@ -71,13 +85,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           accessibilityRole="header"
           style={{ fontFamily: font.display, fontSize: 24, color: c.ink, letterSpacing: -0.4 }}
         >
-          {masked ? 'Enter your code' : 'Muraho! Sign in'}
+          {masked ? 'Enter your code' : 'Muraho! Sign in or sign up'}
         </Text>
         <Muted style={{ fontSize: 14, lineHeight: 20 }}>
           {masked
             ? `We sent a 6-digit code by SMS to ${masked}.`
             : 'Enter your phone number and we will text you a 6-digit code. No password needed.'}
         </Muted>
+        {!masked && notice ? <ErrorText>{notice}</ErrorText> : null}
         {masked ? (
           <TextInput
             accessibilityLabel="6-digit code"
@@ -134,7 +149,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           />
         ) : (
           <Muted style={{ textAlign: 'center' }}>
-            For Kora Lend customers. Not a customer yet? Visit a branch.
+            New to Kora Lend? Use the same steps: after the code we will ask a few details to open
+            your account.
           </Muted>
         )}
       </View>

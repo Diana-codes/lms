@@ -76,7 +76,8 @@ model User {
   secondApprovals      Application[]       @relation("ApplicationSecondApprover")
   loans                Loan[]              @relation("LoanOfficer")
   scoreOverrides       CreditScore[]
-  verifiedDocuments    KycDocument[]
+  verifiedDocuments    KycDocument[]       @relation("DocumentVerifiedBy")
+  rejectedDocuments    KycDocument[]       @relation("DocumentRejectedBy")
   paymentsRecorded     Payment[]
   disbursementsStarted Disbursement[]      @relation("DisbursementInitiator")
   disbursementsOkayed  Disbursement[]      @relation("DisbursementApprover")
@@ -134,6 +135,11 @@ enum Language {
   FR
 }
 
+enum BorrowerSource {
+  BRANCH
+  APP
+}
+
 enum KycStatus {
   PENDING
   VERIFIED
@@ -172,8 +178,10 @@ model Borrower {
   /// Verified monthly income or revenue, used by the affordability rule.
   monthlyIncome    BigInt?
   incomeVerifiedAt DateTime?
-  momoLinked       Boolean    @default(false)
-  kycStatus        KycStatus  @default(PENDING)
+  momoLinked       Boolean        @default(false)
+  kycStatus        KycStatus      @default(PENDING)
+  /// Where the customer was first registered: by staff at a branch, or by signing up in the app.
+  source           BorrowerSource @default(BRANCH)
   riskLevel        RiskLevel?
   preApprovedLimit BigInt?
 
@@ -246,8 +254,12 @@ model KycDocument {
   /// Shown to the borrower so they know what to fix.
   rejectionReason String?
   rejectedAt      DateTime?
+  /// Who rejected it, so they can undo their own mistake the same day.
+  rejectedById    String?         @db.Uuid
   /// Set when the borrower uploads a newer file of the same type. Kept for the record.
   supersededAt    DateTime?
+  /// The borrower removed it before anyone reviewed it (wrong photo). Kept for the record.
+  withdrawnAt     DateTime?
   /// Where verification came from, e.g. "NIDA".
   verifiedVia     String?
   note            String?
@@ -257,7 +269,8 @@ model KycDocument {
   verifiedById    String?         @db.Uuid
 
   borrower    Borrower     @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
-  verifiedBy  User?        @relation(fields: [verifiedById], references: [id])
+  verifiedBy  User?        @relation("DocumentVerifiedBy", fields: [verifiedById], references: [id])
+  rejectedBy  User?        @relation("DocumentRejectedBy", fields: [rejectedById], references: [id])
   application Application? @relation(fields: [applicationId], references: [id])
 
   @@index([borrowerId])
@@ -1017,11 +1030,16 @@ model OtpChallenge {
   phone      String
   codeHash   String
   attempts   Int       @default(0)
+  /// Requester IP, to cap how many codes one device can send to different numbers.
+  ip         String?
+  /// A code for a number with no account yet, i.e. someone signing up.
+  signup     Boolean   @default(false)
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+  @@index([ip, signup, createdAt])
 }
 
 /// A borrower's sign-in session in the mobile app.

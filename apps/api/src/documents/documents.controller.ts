@@ -29,6 +29,10 @@ const rejectSchema = z.object({
     .max(MAX_REJECTION_REASON, `Keep the reason under ${MAX_REJECTION_REASON} characters`),
 });
 
+const undoSchema = z.object({
+  reason: z.string().trim().min(5, 'Say briefly why it is being undone').max(300),
+});
+
 /**
  * KYC documents in the console. Identity papers are sensitive, so only
  * people who decide on loans can open or review them: not collections.
@@ -89,5 +93,17 @@ export class DocumentsController {
       user,
       requestMeta(req),
     );
+  }
+
+  @Post(':id/undo')
+  @HttpCode(200)
+  undo(
+    @Param('code', codeParam) code: string,
+    @Param('id', idParam) id: string,
+    @Body(new ZodPipe(undoSchema)) body: z.infer<typeof undoSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.documents.undoReview(code, id, body.reason, user, requestMeta(req));
   }
 }

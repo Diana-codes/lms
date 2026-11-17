@@ -145,16 +145,16 @@ afterAll(async () => {
 });
 
 describe('sign-in by phone', () => {
-  it('sends a code only to known numbers, but answers the same either way', async () => {
-    const unknown = await http()
-      .post('/app/auth/request-code')
-      .send({ phone: phone() })
-      .expect(200);
+  it('answers the same for known and new numbers', async () => {
+    const number = phone();
+    const unknown = await http().post('/app/auth/request-code').send({ phone: number }).expect(200);
     expect(unknown.body.sent).toBe(true);
     expect(unknown.body.phone).toMatch(/^\+250 78• ••• \d{3}$/);
-    expect(
-      await prisma.otpChallenge.count({ where: { phone: `+250${unknown.body.phone.slice(-3)}` } }),
-    ).toBe(0);
+    // A new number gets a code to sign up with (see register.e2e.ts).
+    const challenge = await prisma.otpChallenge.findFirstOrThrow({
+      where: { phone: `+250${number.slice(1)}` },
+    });
+    expect(challenge.signup).toBe(true);
     await http().post('/app/auth/request-code').send({ phone: '12345' }).expect(400);
   });
 

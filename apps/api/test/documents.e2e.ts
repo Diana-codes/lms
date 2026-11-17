@@ -7,6 +7,7 @@ import { AGREEMENT_VERSION } from '../src/agreements/template';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
+import { DocumentsService } from '../src/documents/documents.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
@@ -18,8 +19,9 @@ const PRODUCT = `E2ED-${randomUUID().slice(0, 8)}`;
 
 let app: INestApplication;
 let prisma: PrismaService;
-const cookies: Record<'officer' | 'manager' | 'collections', string[]> = {
+const cookies: Record<'officer' | 'other' | 'manager' | 'collections', string[]> = {
   officer: [],
+  other: [],
   manager: [],
   collections: [],
 };
@@ -80,14 +82,15 @@ const upload = (token: string, type: string, file: Buffer, name: string, content
 type Item = { type: string; state: string; reason: string | null; required: boolean };
 const item = (body: { items: Item[] }, type: string) => body.items.find((i) => i.type === type)!;
 
-async function profileDocs(borrowerCode: string) {
-  const res = await http().get(`/borrowers/${borrowerCode}`).set('Cookie', cookies.officer);
+async function profileDocs(borrowerCode: string, who: keyof typeof cookies = 'officer') {
+  const res = await http().get(`/borrowers/${borrowerCode}`).set('Cookie', cookies[who]);
   return res.body.documents as Array<{
     id: string;
     type: string;
     status: string;
     file: 'image' | 'pdf' | null;
     reviewable: boolean;
+    canUndo: boolean;
     reason: string | null;
   }>;
 }
@@ -115,6 +118,7 @@ beforeAll(async () => {
   const hash = await hashPassword(PASSWORD);
   for (const [role, key] of [
     ['LOAN_OFFICER', 'officer'],
+    ['LOAN_OFFICER', 'other'],
     ['MANAGER', 'manager'],
     ['COLLECTIONS_AGENT', 'collections'],
   ] as const) {
@@ -367,5 +371,198 @@ describe('documents', () => {
       })
       .expect(400);
     expect(res.body.message).toBe('Upload your photos again');
+  });
+});
+
+describe('fixing mistakes', () => {
+  type Full = Item & { documentId: string | null; hasFile: boolean; canRemove: boolean };
+
+  it('lets the borrower view their file and remove one nobody has reviewed', async () => {
+    const { number, borrowerCode } = await applicant();
+    const token = await signInBorrower(number);
+    let list = (await upload(token, 'NATIONAL_ID', JPEG, 'id.jpg', 'image/jpeg').expect(201)).body;
+    const id = item(list, 'NATIONAL_ID') as Full;
+    expect(id).toMatchObject({ state: 'PENDING', hasFile: true, canRemove: true });
+
+    const file = await http()
+      .get(`/app/documents/${id.documentId}/file`)
+      .set(bearer(token))
+      .expect(200);
+    expect(file.headers['content-type']).toBe('image/jpeg');
+    expect(file.headers['cache-control']).toBe('no-store');
+    // Nobody else's session can open it.
+    const stranger = await applicant();
+    const otherToken = await signInBorrower(stranger.number);
+    await http().get(`/app/documents/${id.documentId}/file`).set(bearer(otherToken)).expect(404);
+    await http().post(`/app/documents/${id.documentId}/remove`).set(bearer(otherToken)).expect(404);
+
+    list = (
+      await http().post(`/app/documents/${id.documentId}/remove`).set(bearer(token)).expect(200)
+    ).body;
+    expect(item(list, 'NATIONAL_ID').state).toBe('MISSING');
+    expect((await profileDocs(borrowerCode)).some((d) => d.id === id.documentId)).toBe(false);
+    const row = await prisma.kycDocument.findUniqueOrThrow({ where: { id: id.documentId! } });
+    expect(row.withdrawnAt).not.toBeNull();
+    expect(row.storageKey).not.toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: { action: 'borrower.document.withdraw', entityId: id.documentId! },
+      }),
+    ).toBe(1);
+    await http().post(`/app/documents/${id.documentId}/remove`).set(bearer(token)).expect(404);
+    await http()
+      .post(`/borrowers/${borrowerCode}/documents/${id.documentId}/verify`)
+      .set('Cookie', cookies.officer)
+      .expect(409);
+
+    // Once reviewed, it can no longer be removed.
+    list = (await upload(token, 'SELFIE', PNG, 'me.png', 'image/png').expect(201)).body;
+    const selfie = item(list, 'SELFIE') as Full;
+    await http()
+      .post(`/borrowers/${borrowerCode}/documents/${selfie.documentId}/verify`)
+      .set('Cookie', cookies.officer)
+      .expect(200);
+    list = (await http().get('/app/documents').set(bearer(token)).expect(200)).body;
+    expect((item(list, 'SELFIE') as Full).canRemove).toBe(false);
+    const locked = await http()
+      .post(`/app/documents/${selfie.documentId}/remove`)
+      .set(bearer(token))
+      .expect(409);
+    expect(locked.body.message).toContain('verified');
+  });
+
+  it('lets an officer undo their own rejection the same day, and corrects the borrower', async () => {
+    const { number, borrowerCode } = await applicant();
+    const token = await signInBorrower(number);
+    const list = (await upload(token, 'NATIONAL_ID', JPEG, 'id.jpg', 'image/jpeg').expect(201))
+      .body;
+    const docId = (item(list, 'NATIONAL_ID') as Full).documentId!;
+    const base = `/borrowers/${borrowerCode}/documents/${docId}`;
+    await http()
+      .post(`${base}/reject`)
+      .set('Cookie', cookies.officer)
+      .send({ reason: 'The photo is blurry. Retake it in good light.' })
+      .expect(200);
+    expect(
+      (await prisma.kycDocument.findUniqueOrThrow({ where: { id: docId } })).rejectedById,
+    ).toBeTruthy();
+
+    // Another officer neither sees Undo nor may use it; the manager may.
+    expect((await profileDocs(borrowerCode, 'officer')).find((d) => d.id === docId)?.canUndo).toBe(
+      true,
+    );
+    expect((await profileDocs(borrowerCode, 'other')).find((d) => d.id === docId)?.canUndo).toBe(
+      false,
+    );
+    expect((await profileDocs(borrowerCode, 'manager')).find((d) => d.id === docId)?.canUndo).toBe(
+      true,
+    );
+    await http()
+      .post(`${base}/undo`)
+      .set('Cookie', cookies.other)
+      .send({ reason: 'Clicked the wrong button' })
+      .expect(403);
+    await http()
+      .post(`${base}/undo`)
+      .set('Cookie', cookies.collections)
+      .send({ reason: 'Oops oops' })
+      .expect(403);
+    await http()
+      .post(`${base}/undo`)
+      .set('Cookie', cookies.officer)
+      .send({ reason: 'x' })
+      .expect(400);
+
+    await http()
+      .post(`${base}/undo`)
+      .set('Cookie', cookies.officer)
+      .send({ reason: 'Clicked the wrong button' })
+      .expect(200);
+    const doc = await prisma.kycDocument.findUniqueOrThrow({ where: { id: docId } });
+    expect(doc).toMatchObject({ status: 'PENDING', rejectionReason: null, rejectedById: null });
+    const after = (await http().get('/app/documents').set(bearer(token)).expect(200)).body;
+    expect(item(after, 'NATIONAL_ID')).toMatchObject({ state: 'PENDING', reason: null });
+    const b = await prisma.borrower.findUniqueOrThrow({ where: { code: borrowerCode } });
+    expect(
+      await prisma.notification.count({
+        where: { borrowerId: b.id, title: { startsWith: 'Please ignore our last message' } },
+      }),
+    ).toBe(1);
+    const sms = await prisma.smsMessage.findFirstOrThrow({
+      where: { borrowerId: b.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(sms.body).toContain('please ignore our last message');
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'document.review.undo', entityId: docId },
+    });
+    expect(audit.metadata).toMatchObject({ was: 'REJECTED', reason: 'Clicked the wrong button' });
+    // Nothing left to undo now.
+    await http()
+      .post(`${base}/undo`)
+      .set('Cookie', cookies.officer)
+      .send({ reason: 'Clicked the wrong button' })
+      .expect(409);
+  });
+
+  it('undoing an ID check makes identity unverified again; next day only a manager can', async () => {
+    const { number, borrowerCode } = await applicant();
+    const token = await signInBorrower(number);
+    let list = (await upload(token, 'NATIONAL_ID', JPEG, 'id.jpg', 'image/jpeg').expect(201)).body;
+    const idDoc = (item(list, 'NATIONAL_ID') as Full).documentId!;
+    list = (await upload(token, 'SELFIE', PNG, 'me.png', 'image/png').expect(201)).body;
+    const selfieDoc = (item(list, 'SELFIE') as Full).documentId!;
+    for (const id of [idDoc, selfieDoc])
+      await http()
+        .post(`/borrowers/${borrowerCode}/documents/${id}/verify`)
+        .set('Cookie', cookies.officer)
+        .expect(200);
+    expect(
+      (await prisma.borrower.findUniqueOrThrow({ where: { code: borrowerCode } })).kycStatus,
+    ).toBe('VERIFIED');
+
+    // Pretend the verification happened yesterday.
+    await prisma.kycDocument.update({
+      where: { id: idDoc },
+      data: { verifiedAt: new Date(Date.now() - 36 * 3_600_000) },
+    });
+    const late = await http()
+      .post(`/borrowers/${borrowerCode}/documents/${idDoc}/undo`)
+      .set('Cookie', cookies.officer)
+      .send({ reason: 'Wrong person on the photo' })
+      .expect(403);
+    expect(late.body.message).toContain('same day');
+    await http()
+      .post(`/borrowers/${borrowerCode}/documents/${idDoc}/undo`)
+      .set('Cookie', cookies.manager)
+      .send({ reason: 'Wrong person on the photo' })
+      .expect(200);
+    expect(
+      (await prisma.borrower.findUniqueOrThrow({ where: { code: borrowerCode } })).kycStatus,
+    ).toBe('PENDING');
+    list = (await http().get('/app/documents').set(bearer(token)).expect(200)).body;
+    expect(item(list, 'NATIONAL_ID').state).toBe('PENDING');
+  });
+
+  it('keeps a verification that a loan was later paid out on', async () => {
+    const documents = app.get(DocumentsService);
+    const manager = { id: randomUUID(), role: 'MANAGER' } as never;
+    const verified = {
+      borrowerId: randomUUID(),
+      status: 'VERIFIED',
+      supersededAt: null,
+      verifiedAt: new Date(Date.now() - 86_400_000),
+      verifiedById: randomUUID(),
+      verifiedVia: 'Officer review',
+      rejectedAt: null,
+      rejectedById: null,
+    };
+    const withLoan = { loan: { count: async () => 1 } } as never;
+    const noLoan = { loan: { count: async () => 0 } } as never;
+    expect(await documents.undoBlock(verified, manager, withLoan)).toContain('paid out');
+    expect(await documents.undoBlock(verified, manager, noLoan)).toBeNull();
+    expect(
+      await documents.undoBlock({ ...verified, verifiedVia: 'NIDA' }, manager, noLoan),
+    ).toContain('outside the console');
   });
 });

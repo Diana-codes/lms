@@ -1,4 +1,10 @@
-import { formatDate, formatRwf, formatRwfCompact, maskNationalId } from '@kora/core';
+import {
+  BUSINESS_SECTORS,
+  formatDate,
+  formatRwf,
+  formatRwfCompact,
+  maskNationalId,
+} from '@kora/core';
 import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
@@ -35,7 +41,7 @@ import {
 import { CameraIcon, CheckIcon, ChevronDownIcon, IdCardIcon, LockIcon } from '../ui/icons';
 import { c, font } from '../ui/theme';
 
-const SECTORS = ['Garments & tailoring', 'Retail shop', 'Agriculture', 'Transport', 'Other'];
+const SECTORS: readonly string[] = BUSINESS_SECTORS;
 const STEP = 100_000n;
 const CONSENT_VERSION = '2026-01';
 const groupDigits = (s: string) =>

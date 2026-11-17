@@ -48,6 +48,12 @@ export interface Documents {
     state: DocumentState;
     required: boolean;
     reason: string | null;
+    /** The latest file of this type, if one was sent. */
+    documentId: string | null;
+    hasFile: boolean;
+    fileType: 'photo' | 'pdf' | null;
+    /** Not reviewed yet, so it can still be removed. */
+    canRemove: boolean;
   }>;
 }
 
@@ -179,4 +185,19 @@ export interface AgreementPreview {
   keyFacts: Array<{ label: string; value: string }>;
   /** Plain text; "# " title, "## " heading, "| label | value" a key fact row. */
   body: string;
+}
+
+/** GET /app/auth/register: what the sign-up form needs. */
+export interface RegistrationOptions {
+  branches: Array<{ code: string; name: string; district: string }>;
+  sectors: string[];
+  consentVersion: string;
+  /** The privacy notice, one point per line. */
+  privacy: string[];
+}
+
+/** POST /app/auth/verify for a number with no account yet. */
+export interface RegistrationNeeded {
+  registrationToken: string;
+  phone: string;
 }

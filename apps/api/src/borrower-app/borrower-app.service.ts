@@ -517,16 +517,24 @@ export class BorrowerAppService {
         where: { borrowerId: b.id, acceptedAt: null, dismissedAt: null },
         data: { acceptedAt: new Date() },
       });
-      if (b.officerId) {
-        await tx.notification.create({
-          data: {
-            userId: b.officerId,
-            kind: 'SYSTEM',
-            title: `${b.fullName} applied for ${formatRwf(input.amount)} in the app`,
-            href: `/applications?open=${app.code}`,
-          },
-        });
-      }
+      // To the customer's officer; a customer with none yet goes to the branch managers.
+      const recipients = b.officerId
+        ? [b.officerId]
+        : (
+            await tx.user.findMany({
+              where: { branchId: b.branchId ?? undefined, role: 'MANAGER', isActive: true },
+              select: { id: true },
+            })
+          ).map((u) => u.id);
+      const title = `${b.fullName} applied for ${formatRwf(input.amount)} in the app${
+        b.officerId ? '' : ' and needs an officer'
+      }`;
+      const href = `/applications?open=${app.code}`;
+      await tx.notification.createMany({
+        data: recipients.length
+          ? recipients.map((userId) => ({ userId, kind: 'SYSTEM' as const, title, href }))
+          : [{ kind: 'SYSTEM' as const, title, href }],
+      });
       await this.audit.record(
         {
           action: 'application.create',
