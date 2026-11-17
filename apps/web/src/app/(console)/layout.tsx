@@ -13,7 +13,10 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
   ]);
   if (!me.ok) redirect('/login');
   if (me.data.mustChangePassword) redirect('/change-password');
-  if (!me.data.twoFactorEnabled) redirect('/two-factor');
+  // Two-factor sign-in is required only where the company has switched it on.
+  if ((company?.features.staffTwoFactor ?? true) && !me.data.twoFactorEnabled) {
+    redirect('/two-factor');
+  }
 
   return (
     <div className="flex min-h-screen flex-wrap bg-ground">

@@ -7,12 +7,14 @@ import { StaffTwoFactorSetup } from './setup';
 
 export const metadata: Metadata = { title: 'Turn on two-factor sign-in' };
 
-/** Two-factor sign-in is required for staff: this page comes before the console. */
+/** Where the company requires two-factor sign-in, this page comes before the console. */
 export default async function TwoFactorPage() {
   const [me, company] = await Promise.all([serverApi<Me>('/auth/me'), getCompany()]);
   if (!me.ok) redirect('/login');
   if (me.data.mustChangePassword) redirect('/change-password');
   if (me.data.twoFactorEnabled) redirect('/');
+  // Not required for this company: staff can still turn it on under Settings → Security.
+  if (company && !company.features.staffTwoFactor) redirect('/');
   const name = company?.displayName ?? PRODUCT_NAME;
 
   return (
