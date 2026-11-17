@@ -36,6 +36,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { disbursementLines } from '../ledger/posting';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
+import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MomoGateway } from '../providers/momo.gateway';
 
@@ -161,6 +162,7 @@ export class ApplicationsService {
     private readonly momo: MomoGateway,
     private readonly money: MoneyService,
     private readonly scoring: ScoringService,
+    private readonly documents: DocumentsService,
   ) {}
 
   /** Everything on the board: applications in progress, plus recent disbursements. */
@@ -242,7 +244,7 @@ export class ApplicationsService {
           termMonths,
           annualRateBps: product.annualRateBps,
           stage: 'NEW',
-          docsRequired: 4,
+          docsRequired: product.requiredDocuments.length,
           officerId: user.id,
           branchId: user.branchId,
           channel: 'CONSOLE',
@@ -264,6 +266,8 @@ export class ApplicationsService {
         },
         tx,
       );
+      // A returning borrower may already have documents on file.
+      await this.documents.syncApplication(borrower.id, tx);
       return created.code;
     });
     // Score straight away; if the scoring service is down the card says "Not scored yet".

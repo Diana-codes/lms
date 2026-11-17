@@ -71,6 +71,14 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every push and pull req
 - **Who sees what:** loan officers see their own book on the Overview; managers, administrators and collections agents see the whole portfolio. Lists show everything, with an "Assigned to me" filter.
 - **AI output** shown in Phase 1 is the stored sample data from the seed, always in the purple treatment. Nothing generates scores until Phase 5, and new applications show "Not scored yet".
 
+## KYC documents
+
+- **What's needed** is set per product (`Product.requiredDocuments`): ID and selfie for everyone; SME and asset finance add the RDB certificate and statements; agri adds proof of address; personal and salary add statements. Statements are waived when the borrower shares MoMo history, and ID and selfie when identity is already verified. `documentChecklist` in `@kora/core` works it out, so the app, API and console agree.
+- **Borrowers** send files from **Profile → Your documents** in the app (or the banner on Home): take a photo, choose one from the gallery, or choose a PDF. ID and selfie must be photos. Files must be JPEG, PNG, WebP or PDF under 8 MB, and the API checks the first bytes, not just the declared type. A new upload replaces the earlier one of the same type; the old row is kept with `supersededAt`.
+- **Officers and managers** open files from the borrower profile (served with `no-store`, never cached; each view is audited), then **Verify** or **Ask for a new one** with a reason. A rejection reaches the borrower in the app and by SMS. Verifying both ID and selfie marks the customer's identity as verified. Collections agents see the list but can't open files.
+- **Storage:** files go to `UPLOAD_DIR` (default `apps/api/uploads`, gitignored) under random names. For production, swap `UploadsService` for encrypted object storage hosted in Rwanda.
+- **Demo:** the seed gives Moses Tuyisenge (APP-20934) a sample ID photo and RDB certificate waiting for review.
+
 ## Sign-in
 
 Staff sign in with email and password, plus a 6-digit authenticator code once they turn on two-factor (Security in the sidebar). Sessions are httpOnly cookies: a 15-minute access token and a 7-day rotating refresh token. Five failed attempts lock an account for 15 minutes. Roles are `ADMIN`, `MANAGER`, `LOAN_OFFICER` and `COLLECTIONS_AGENT`; restrict a route with `@Roles(...)`.

@@ -229,24 +229,36 @@ enum KycDocumentType {
 }
 
 model KycDocument {
-  id           String          @id @default(uuid(7)) @db.Uuid
-  borrowerId   String          @db.Uuid
-  type         KycDocumentType
-  status       KycStatus       @default(PENDING)
+  id              String          @id @default(uuid(7)) @db.Uuid
+  borrowerId      String          @db.Uuid
+  type            KycDocumentType
+  status          KycStatus       @default(PENDING)
   /// Object-storage key. The file itself never lives in the database.
-  storageKey   String?
+  storageKey      String?
+  /// image/jpeg, image/png, image/webp or application/pdf.
+  mimeType        String?
+  sizeBytes       Int?
+  /// The application this was uploaded for, if any.
+  applicationId   String?         @db.Uuid
+  /// Shown to the borrower so they know what to fix.
+  rejectionReason String?
+  rejectedAt      DateTime?
+  /// Set when the borrower uploads a newer file of the same type. Kept for the record.
+  supersededAt    DateTime?
   /// Where verification came from, e.g. "NIDA".
-  verifiedVia  String?
-  note         String?
-  uploadedAt   DateTime        @default(now())
-  verifiedAt   DateTime?
-  expiresOn    DateTime?       @db.Date
-  verifiedById String?         @db.Uuid
+  verifiedVia     String?
+  note            String?
+  uploadedAt      DateTime        @default(now())
+  verifiedAt      DateTime?
+  expiresOn       DateTime?       @db.Date
+  verifiedById    String?         @db.Uuid
 
-  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
-  verifiedBy User?    @relation(fields: [verifiedById], references: [id])
+  borrower    Borrower     @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  verifiedBy  User?        @relation(fields: [verifiedById], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
 
   @@index([borrowerId])
+  @@index([applicationId])
 }
 
 enum ConsentType {
@@ -293,8 +305,8 @@ enum ProductKind {
 }
 
 model Product {
-  id                String      @id @default(uuid(7)) @db.Uuid
-  code              String      @unique
+  id                String            @id @default(uuid(7)) @db.Uuid
+  code              String            @unique
   name              String
   /// Short name used on pipeline cards, e.g. "Agri input".
   shortName         String
@@ -305,10 +317,13 @@ model Product {
   maxTermMonths     Int
   minAmount         BigInt
   maxAmount         BigInt
-  originationFeeBps Int         @default(0)
-  latePenaltyBps    Int         @default(0)
+  originationFeeBps Int               @default(0)
+  latePenaltyBps    Int               @default(0)
   /// Instalments may be at most this share of verified income (35% = 3500).
-  affordabilityBps  Int         @default(3500)
+  affordabilityBps  Int               @default(3500)
+  /// Documents an applicant must provide. Bank & MoMo statements are waived
+  /// when the borrower agrees to share their MoMo history.
+  requiredDocuments KycDocumentType[] @default([NATIONAL_ID, SELFIE])
 
   /// Auto-approve policy. Null means every application needs an officer.
   autoApproveMinScore  Int?
@@ -388,6 +403,7 @@ model Application {
 
   creditScores CreditScore[]
   consents     Consent[]
+  documents    KycDocument[]
   loan         Loan?
 
   @@index([stage])
@@ -856,6 +872,7 @@ enum NotificationKind {
   CONTRACT
   PAYMENT
   SYSTEM
+  DOCUMENT
 }
 
 /// In-app notification for a staff member (userId) or a borrower (borrowerId).

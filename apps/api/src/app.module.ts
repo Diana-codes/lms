@@ -35,6 +35,8 @@ import { ReportsController } from './reports/reports.controller';
 import { ReportsService } from './reports/reports.service';
 import { SmsController } from './sms/sms.controller';
 import { SmsService } from './sms/sms.service';
+import { DocumentsController } from './documents/documents.controller';
+import { DocumentsService } from './documents/documents.service';
 import { ProductsController } from './products/products.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { SystemController } from './system/system.controller';
@@ -58,6 +60,7 @@ import { UsersController } from './users/users.controller';
     ApplicationsController,
     LoansController,
     BorrowersController,
+    DocumentsController,
     DashboardController,
     MoneyController,
     SmsController,
@@ -73,6 +76,7 @@ import { UsersController } from './users/users.controller';
     LoansService,
     PaymentPoster,
     BorrowersService,
+    DocumentsService,
     DashboardService,
     MoneyService,
     SmsService,

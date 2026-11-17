@@ -1,3 +1,5 @@
+import type { DocumentType } from '@kora/core';
+
 export interface Home {
   firstName: string;
   initials: string;
@@ -28,6 +30,25 @@ export interface Home {
     annualRateBps: number;
   } | null;
   wallet: string | null;
+  support: { officerName: string | null; branch: string | null };
+  /** Required documents still to send (missing, rejected or expired). */
+  documentsNeeded: number;
+}
+
+export type DocumentState = 'MISSING' | 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED' | 'WAIVED';
+
+export interface Documents {
+  applicationCode: string | null;
+  productName: string | null;
+  required: number;
+  received: number;
+  needsAction: number;
+  items: Array<{
+    type: DocumentType;
+    state: DocumentState;
+    required: boolean;
+    reason: string | null;
+  }>;
 }
 
 export interface ApplyOptions {
@@ -111,3 +132,35 @@ export interface Draft {
   idPhotoKey: string | null;
   selfieKey: string | null;
 }
+
+export interface Statement {
+  code: string;
+  productName: string;
+  principal: string;
+  disbursedOn: string | null;
+  totalPaid: string;
+  leftToPay: string;
+  payments: Array<{
+    id: string;
+    amount: string;
+    channel: string;
+    receivedOn: string;
+    note: string;
+    reference: string | null;
+  }>;
+}
+
+export interface Insights {
+  instalmentsPaid: number;
+  paidOnTime: number;
+  paidEarly: number;
+  overdueNow: number;
+  onTimeRatePct: number | null;
+  paidThisYear: string;
+  paidAllTime: string;
+  loansRepaid: number;
+  preApprovedLimit: string | null;
+  months: Array<{ month: string; amount: string }>;
+}
+
+export type Tab = 'home' | 'loans' | 'insights' | 'profile';

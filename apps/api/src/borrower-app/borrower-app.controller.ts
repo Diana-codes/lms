@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -14,9 +15,11 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { z } from 'zod';
+import { DOCUMENT_TYPES, type DocumentType } from '@kora/core';
 import { Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
+import { DocumentsService } from '../documents/documents.service';
 import { BorrowerAppService } from './borrower-app.service';
 import { BorrowerAuthService } from './borrower-auth.service';
 import { BorrowerGuard, type BorrowerPrincipal } from './borrower.guard';
@@ -28,7 +31,11 @@ const loanCode = new ZodPipe(z.string().regex(/^LN-\d{4}-\d{4}$/));
 const phoneSchema = z.object({ phone: z.string().trim().min(9).max(20) });
 const verifySchema = phoneSchema.extend({ code: z.string().regex(/^\d{6}$/) });
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
-const paySchema = z.object({ amount: rwfString.optional() });
+const paySchema = z.object({
+  amount: rwfString.optional(),
+  /** Pay from another MTN number instead of the borrower's own. */
+  phone: z.string().trim().min(9).max(20).optional(),
+});
 const quoteSchema = z.object({
   productCode: z.string().min(1),
   amount: rwfString,
@@ -63,6 +70,7 @@ export class BorrowerAppController {
     private readonly auth: BorrowerAuthService,
     private readonly app: BorrowerAppService,
     private readonly uploads: UploadsService,
+    private readonly documents: DocumentsService,
   ) {}
 
   // ── sign-in ──
@@ -115,7 +123,7 @@ export class BorrowerAppController {
     @Param('code', loanCode) code: string,
     @Body(new ZodPipe(paySchema)) body: z.infer<typeof paySchema>,
   ) {
-    return this.app.pay(req.borrower.borrowerId, code, body.amount, requestMeta(req));
+    return this.app.pay(req.borrower.borrowerId, code, body.amount, requestMeta(req), body.phone);
   }
 
   @UseGuards(BorrowerGuard)
@@ -159,8 +167,31 @@ export class BorrowerAppController {
     @Param('kind', new ZodPipe(z.enum(['id', 'selfie']))) kind: 'id' | 'selfie',
     @UploadedFile() file: { mimetype: string; size: number; buffer: Buffer } | undefined,
   ) {
-    if (!file) return { error: 'Attach a photo' };
-    return { key: await this.uploads.store(req.borrower.borrowerId, kind, file) };
+    if (!file) throw new BadRequestException('Attach a photo');
+    const stored = await this.uploads.store(
+      req.borrower.borrowerId,
+      kind === 'id' ? 'NATIONAL_ID' : 'SELFIE',
+      file,
+    );
+    return { key: stored.key };
+  }
+
+  // ── documents ──
+  @UseGuards(BorrowerGuard)
+  @Get('documents')
+  documentList(@Req() req: BorrowerRequest) {
+    return this.documents.checklist(req.borrower.borrowerId);
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Post('documents/:type')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 } }))
+  uploadDocument(
+    @Req() req: BorrowerRequest,
+    @Param('type', new ZodPipe(z.enum(DOCUMENT_TYPES))) type: DocumentType,
+    @UploadedFile() file: { mimetype: string; size: number; buffer: Buffer } | undefined,
+  ) {
+    return this.documents.upload(req.borrower.borrowerId, type, file, requestMeta(req));
   }
 
   @UseGuards(BorrowerGuard)
@@ -177,6 +208,18 @@ export class BorrowerAppController {
   @Get('notifications')
   notifications(@Req() req: BorrowerRequest) {
     return this.app.notifications(req.borrower.borrowerId);
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Get('loans/:code/statement')
+  statement(@Req() req: BorrowerRequest, @Param('code', loanCode) code: string) {
+    return this.app.statement(req.borrower.borrowerId, code);
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Get('insights')
+  insights(@Req() req: BorrowerRequest) {
+    return this.app.insights(req.borrower.borrowerId);
   }
 
   @UseGuards(BorrowerGuard)

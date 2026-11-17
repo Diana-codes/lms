@@ -87,7 +87,7 @@ export interface NotificationList {
   unread: number;
   items: Array<{
     id: string;
-    kind: 'AI_FLAG' | 'RISK' | 'CONTRACT' | 'PAYMENT' | 'SYSTEM';
+    kind: 'AI_FLAG' | 'RISK' | 'CONTRACT' | 'PAYMENT' | 'SYSTEM' | 'DOCUMENT';
     title: string;
     href: string | null;
     read: boolean;
@@ -299,7 +299,20 @@ export interface BorrowerProfile {
   } | null;
   onTimeRateBps: number | null;
   debtToIncomeBps: number | null;
-  documents: Array<{ name: string; meta: string; status: string; tone: PillToneName }>;
+  documents: Array<{
+    id: string;
+    type: string;
+    name: string;
+    meta: string;
+    status: string;
+    tone: PillToneName;
+    /** What the file is, or null when there is no file to open. */
+    file: 'image' | 'pdf' | null;
+    /** Still waiting for an officer to verify or reject it. */
+    reviewable: boolean;
+    /** Why it was rejected, as the borrower was told. */
+    reason: string | null;
+  }>;
   contact: {
     phone: string;
     nationalId: string | null;
