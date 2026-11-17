@@ -83,7 +83,7 @@ test.describe('reports', () => {
     await expect(page.getByText(/^Last 3 months · all branches/)).toBeVisible();
 
     const download = page.waitForEvent('download');
-    await page.getByRole('link', { name: 'Export CSV' }).click();
+    await page.locator('header').getByRole('link', { name: 'Export CSV' }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('kora-lend-report-Q.csv');
 

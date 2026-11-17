@@ -21,5 +21,7 @@ process.env.ML_URL = `http://127.0.0.1:${ML_TEST_PORT}`;
 // The test company was provisioned with this webhook secret (global-setup.ts).
 process.env.WEBHOOK_TOKEN = E2E_WEBHOOK_TOKEN;
 process.env.JOBS_ENABLED = 'false';
+// The platform admin tests cover the second factor, which is off by default for local demos.
+process.env.PLATFORM_TWO_FACTOR = 'true';
 // Uploaded test files go to a scratch folder, never the developer's uploads.
 process.env.UPLOAD_DIR = path.join(tmpdir(), 'kora-lend-e2e-uploads');

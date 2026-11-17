@@ -45,11 +45,25 @@ export function SecurityPanel({
       <section className="flex flex-col gap-2">
         <h3 className="m-0 text-sm font-semibold">Collateral</h3>
         {activeCollateral.length === 0 ? (
-          <p className="m-0 text-sm text-ink-muted">None recorded.</p>
+          loan.terms.collateral ? (
+            <p className="m-0 text-sm">
+              {loan.terms.collateral}
+              <span className="block text-xs text-ink-muted">
+                Noted at disbursement. Add it below with a value to count it for provisioning.
+              </span>
+            </p>
+          ) : (
+            <p className="m-0 text-sm text-ink-muted">None recorded.</p>
+          )
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {activeCollateral.map((c) => (
-              <CollateralRow key={c.id} loanCode={loan.code} item={c} canEdit={canEdit && !closed} />
+              <CollateralRow
+                key={c.id}
+                loanCode={loan.code}
+                item={c}
+                canEdit={canEdit && !closed}
+              />
             ))}
           </ul>
         )}
@@ -162,7 +176,11 @@ function GuarantorRow({
         <div>
           <div className="font-semibold">{item.fullName}</div>
           <div className="text-xs text-ink-muted">
-            {[item.relationship, item.phone, item.nationalIdLast3 ? `ID …${item.nationalIdLast3}` : null]
+            {[
+              item.relationship,
+              item.phone,
+              item.nationalIdLast3 ? `ID …${item.nationalIdLast3}` : null,
+            ]
               .filter(Boolean)
               .join(' · ') || 'Guarantor'}
           </div>
@@ -242,7 +260,11 @@ function AddCollateralForm({ loanCode }: { loanCode: string }) {
 
   return (
     <form onSubmit={save} className="flex flex-col gap-3 rounded-lg border border-line p-3">
-      <SelectField label="Kind" value={kind} onChange={(e) => setKind(e.target.value as CollateralKind)}>
+      <SelectField
+        label="Kind"
+        value={kind}
+        onChange={(e) => setKind(e.target.value as CollateralKind)}
+      >
         {KINDS.map((k) => (
           <option key={k} value={k}>
             {COLLATERAL_KIND_LABELS[k]}
@@ -347,7 +369,12 @@ function AddGuarantorForm({ loanCode }: { loanCode: string }) {
         required
         maxLength={120}
       />
-      <TextField label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
+      <TextField
+        label="Phone"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        maxLength={30}
+      />
       <TextField
         label="Relationship"
         value={relationship}

@@ -238,7 +238,7 @@ test.describe('the seeded screens', () => {
   test('the loan detail matches the design for LN-0418-2026', async ({ page }) => {
     await page.goto('/loans/LN-0418-2026');
     await expect(page.getByRole('heading', { name: 'Aline Uwase', level: 1 })).toBeVisible();
-    await expect(page.getByText('RWF 3,124,680')).toBeVisible();
+    await expect(page.getByText('RWF 3,124,680').first()).toBeVisible();
     await expect(page.getByText('RWF 284,985').first()).toBeVisible();
     await expect(page.getByText('6 of 18 paid · 0 late')).toBeVisible();
     await expect(page.getByRole('img', { name: '31 percent of principal repaid' })).toBeVisible();
