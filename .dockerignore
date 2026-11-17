@@ -1,0 +1,22 @@
+# Keep images small and secrets out of them.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.expo
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+apps/api/src/generated
+apps/api/uploads
+**/__pycache__
+**/.venv
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
+apps/web/e2e/.results
+apps/mobile
+design
+.git
