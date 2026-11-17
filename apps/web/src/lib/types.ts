@@ -87,7 +87,7 @@ export interface NotificationList {
   unread: number;
   items: Array<{
     id: string;
-    kind: 'AI_FLAG' | 'RISK' | 'CONTRACT' | 'PAYMENT' | 'SYSTEM';
+    kind: 'AI_FLAG' | 'RISK' | 'CONTRACT' | 'PAYMENT' | 'SYSTEM' | 'DOCUMENT';
     title: string;
     href: string | null;
     read: boolean;
@@ -116,6 +116,9 @@ export interface ApplicationCard {
   termMonths: number;
   annualRateBps: number;
   instalment: string;
+  /** Origination fee, taken from the payout. */
+  fee: string;
+  agreement: { channel: 'APP' | 'BRANCH'; acceptedAt: string } | null;
   score: number | null;
   ai: {
     tone: 'ok' | 'warn' | 'flag';
@@ -191,6 +194,8 @@ export interface ScheduleRow {
   interest: string;
   payment: string;
   paid: string;
+  /** Late penalties on this instalment, after any waiver. */
+  penalty: string;
   remaining: string;
   balanceAfter: string;
   state: InstalmentState;
@@ -226,7 +231,30 @@ export interface LoanDetail {
     maturityDate: string;
     channel: string | null;
     collateral: string | null;
+    /** Origination fee taken from the payout, and what reached the borrower. */
+    fee: string;
+    netDisbursed: string;
+    /** 0 when the loan was signed without a penalty term. */
+    latePenaltyBps: number;
+    penaltyGraceDays: number;
   };
+  agreement: {
+    applicationCode: string;
+    channel: 'APP' | 'BRANCH';
+    acceptedAt: string;
+    version: string;
+  } | null;
+  penalties: Array<{
+    id: string;
+    instalment: number;
+    chargedOn: string;
+    amount: string;
+    waivedAmount: string;
+    waivedBy: string | null;
+    waiveReason: string | null;
+    canWaive: boolean;
+  }>;
+  penaltiesOwed: string;
   figures: {
     outstandingPrincipal: string;
     totalRepaid: string;
@@ -281,6 +309,8 @@ export interface BorrowerListItem {
   score: number | null;
   activeLoans: number;
   officerName: string | null;
+  /** BRANCH: added by staff; APP: signed up in the borrower app. */
+  source: 'BRANCH' | 'APP';
 }
 
 export interface BorrowerProfile {
@@ -299,7 +329,22 @@ export interface BorrowerProfile {
   } | null;
   onTimeRateBps: number | null;
   debtToIncomeBps: number | null;
-  documents: Array<{ name: string; meta: string; status: string; tone: PillToneName }>;
+  documents: Array<{
+    id: string;
+    type: string;
+    name: string;
+    meta: string;
+    status: string;
+    tone: PillToneName;
+    /** What the file is, or null when there is no file to open. */
+    file: 'image' | 'pdf' | null;
+    /** Still waiting for an officer to verify or reject it. */
+    reviewable: boolean;
+    /** This person may put the review back to pending (a wrong click). */
+    canUndo: boolean;
+    /** Why it was rejected, as the borrower was told. */
+    reason: string | null;
+  }>;
   contact: {
     phone: string;
     nationalId: string | null;
@@ -307,7 +352,9 @@ export interface BorrowerProfile {
     sector: string | null;
     monthlyRevenue: string | null;
     officerName: string | null;
+    officerId: string | null;
   };
+  source: 'BRANCH' | 'APP';
   aiSummary: {
     text: string;
     reasons: Array<{ kind: 'why' | 'watch'; text: string }>;

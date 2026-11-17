@@ -90,9 +90,15 @@ export function ScheduleTable({ rows }: { rows: ScheduleRow[] }) {
                   >
                     {INSTALMENT_STATE_LABELS[r.state]}
                   </span>
-                  {r.state === 'PARTIAL' || (r.state === 'OVERDUE' && r.paid !== '0') ? (
+                  {r.state === 'PARTIAL' ||
+                  (r.state === 'OVERDUE' && (r.paid !== '0' || r.penalty !== '0')) ? (
                     <span className="mt-0.5 block text-xs text-ink-muted">
                       <Money amount={r.remaining} bare /> left
+                    </span>
+                  ) : null}
+                  {r.penalty !== '0' ? (
+                    <span className="mt-0.5 block text-xs text-caution-fg">
+                      incl. <Money amount={r.penalty} bare /> late penalty
                     </span>
                   ) : null}
                 </td>

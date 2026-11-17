@@ -100,6 +100,16 @@ export type ActivityKind = 'payment' | 'system' | 'disbursement' | 'restructure'
 const short = (u: { firstName: string; lastName: string } | null | undefined) =>
   u ? shortStaffName(u.firstName, u.lastName) : null;
 
+/** Late penalties still owed on the given instalments; restructuring waits until they are cleared. */
+function assertNoPenaltiesOwed(instalments: Array<{ penaltyDue: bigint; penaltyPaid: bigint }>) {
+  const owed = instalments.reduce((sum, i) => sum + i.penaltyDue - i.penaltyPaid, 0n);
+  if (owed > 0n) {
+    throw new ConflictException(
+      `Collect or waive the ${formatRwf(owed)} in late penalties before restructuring`,
+    );
+  }
+}
+
 @Injectable()
 export class LoansService {
   constructor(
@@ -226,6 +236,21 @@ export class LoansService {
           },
         },
         smsMessages: { orderBy: { createdAt: 'desc' }, take: 5 },
+        penaltyCharges: {
+          orderBy: [{ chargedOn: 'asc' }, { sequence: 'asc' }],
+          include: {
+            instalment: {
+              select: { number: true, penaltyDue: true, penaltyPaid: true, supersededAt: true },
+            },
+            waivedBy: { select: { firstName: true, lastName: true } },
+          },
+        },
+        application: {
+          select: {
+            code: true,
+            agreement: { select: { channel: true, acceptedAt: true, templateVersion: true } },
+          },
+        },
         contactLogs: {
           orderBy: { occurredAt: 'desc' },
           take: 5,
@@ -240,9 +265,7 @@ export class LoansService {
     const outstanding = await this.ledger.outstandingPrincipal(loan.id);
 
     // The schedule, with the principal balance left after each instalment.
-    const firstUnpaid = loan.instalments.find(
-      (i) => i.principalDue - i.principalPaid + (i.interestDue - i.interestPaid) > 0n,
-    );
+    const firstUnpaid = loan.instalments.find((i) => instalmentRemaining(i) > 0n);
     let balance = loan.instalments.reduce((sum, i) => sum + i.principalDue, 0n);
     const schedule = loan.instalments.map((i) => {
       balance -= i.principalDue;
@@ -253,7 +276,9 @@ export class LoansService {
         principal: i.principalDue,
         interest: i.interestDue,
         payment: i.principalDue + i.interestDue,
-        paid: i.principalPaid + i.interestPaid,
+        paid: i.principalPaid + i.interestPaid + i.penaltyPaid,
+        // Late penalties on this instalment (after any waiver).
+        penalty: i.penaltyDue,
         remaining: instalmentRemaining(i),
         balanceAfter: balance,
         state: instalmentState({ ...i, dueDate }, today, i.id === firstUnpaid?.id),
@@ -383,7 +408,35 @@ export class LoansService {
         maturityDate: utcDateToIso(loan.maturityDate),
         channel: disbursement ? PAYMENT_CHANNEL_LABELS[disbursement.channel] : null,
         collateral: loan.collateral,
+        fee: loan.feeAmount,
+        netDisbursed: loan.principal - loan.feeAmount,
+        latePenaltyBps: loan.latePenaltyBps,
+        penaltyGraceDays: loan.penaltyGraceDays,
       },
+      agreement: loan.application?.agreement
+        ? {
+            applicationCode: loan.application.code,
+            channel: loan.application.agreement.channel,
+            acceptedAt: loan.application.agreement.acceptedAt,
+            version: loan.application.agreement.templateVersion,
+          }
+        : null,
+      penalties: loan.penaltyCharges.map((c) => ({
+        id: c.id,
+        instalment: c.instalment.number,
+        chargedOn: utcDateToIso(c.chargedOn),
+        amount: c.amount,
+        waivedAmount: c.waivedAmount,
+        waivedBy: short(c.waivedBy),
+        waiveReason: c.waiveReason,
+        // A charge can be waived while its instalment still owes penalties.
+        canWaive:
+          !c.waivedAt &&
+          !c.instalment.supersededAt &&
+          c.instalment.penaltyDue > c.instalment.penaltyPaid &&
+          loan.status === 'ACTIVE',
+      })),
+      penaltiesOwed: loan.instalments.reduce((sum, i) => sum + i.penaltyDue - i.penaltyPaid, 0n),
       figures: {
         outstandingPrincipal: outstanding,
         totalRepaid,
@@ -512,6 +565,7 @@ export class LoansService {
     }
     const remainingMonths = loan.instalments.length;
     if (remainingMonths === 0) throw new ConflictException('There is nothing left to restructure');
+    assertNoPenaltiesOwed(loan.instalments);
 
     const outstanding = await this.ledger.outstandingPrincipal(loan.id);
     const base = {
@@ -609,6 +663,7 @@ export class LoansService {
           const paid = loan.instalments.filter((i) => i.status === 'PAID');
           if (unpaid.length === 0)
             throw new ConflictException('There is nothing left to restructure');
+          assertNoPenaltiesOwed(unpaid);
 
           let principal = await this.ledger.outstandingPrincipal(loan.id, tx);
           const holiday = request.type === 'PAYMENT_HOLIDAY';

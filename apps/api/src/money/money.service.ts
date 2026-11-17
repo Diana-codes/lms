@@ -54,7 +54,18 @@ export class MoneyService {
   ) {}
 
   /** Ask the borrower to approve a repayment on their phone (MoMo "Request to Pay"). */
-  async requestPayment(loanCode: string, amount: bigint, actor: Actor, meta: RequestMeta = {}) {
+  /**
+   * Ask MoMo to collect a repayment. The prompt goes to the borrower's own
+   * number unless `payerPhone` names another MTN wallet (a spouse's, the
+   * business's): its owner still has to approve with their PIN.
+   */
+  async requestPayment(
+    loanCode: string,
+    amount: bigint,
+    actor: Actor,
+    meta: RequestMeta = {},
+    payerPhone?: string,
+  ) {
     const loan = await this.prisma.loan.findUnique({
       where: { code: loanCode },
       include: {
@@ -74,6 +85,7 @@ export class MoneyService {
     if (amount > owed)
       throw new BadRequestException(`That is more than the ${formatRwf(owed)} left to pay`);
 
+    const payer = payerPhone ?? loan.borrower.phone;
     const referenceId = randomUUID();
     const payment = await this.prisma.payment.create({
       data: {
@@ -83,7 +95,7 @@ export class MoneyService {
         channel: 'MTN_MOMO',
         status: 'PENDING',
         idempotencyKey: `${MOMO_PREFIX}${referenceId}`,
-        payerPhone: loan.borrower.phone,
+        payerPhone: payer,
         recordedById: actor.staffId ?? null,
       },
     });
@@ -91,7 +103,7 @@ export class MoneyService {
       await this.momo.requestToPay({
         referenceId,
         amount,
-        phone: loan.borrower.phone,
+        phone: payer,
         externalId: loan.code,
         message: `Kora Lend repayment for ${loan.code}`,
       });
@@ -109,7 +121,12 @@ export class MoneyService {
       actorType: actor.staffId ? 'STAFF' : 'BORROWER',
       entityType: 'Loan',
       entityId: loan.code,
-      metadata: { paymentId: payment.id, amount, phone: maskPhone(loan.borrower.phone) },
+      metadata: {
+        paymentId: payment.id,
+        amount,
+        phone: maskPhone(payer),
+        otherPayer: payer !== loan.borrower.phone,
+      },
       ...meta,
     });
     return { paymentId: payment.id, status: 'PENDING' as const };
@@ -225,7 +242,7 @@ export class MoneyService {
           loanId: loan.id,
           effectiveOn: today,
           memo: `Disbursement of ${loan.code}`,
-          lines: disbursementLines(d.amount, 'MOMO_FLOAT'),
+          lines: disbursementLines(loan.principal, 'MOMO_FLOAT', loan.feeAmount),
           postedById: d.initiatedById,
         });
         await tx.disbursement.update({ where: { id: d.id }, data: { ledgerTransactionId } });

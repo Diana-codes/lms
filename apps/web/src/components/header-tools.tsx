@@ -14,6 +14,7 @@ const DOT: Record<NotificationList['items'][number]['kind'], string> = {
   CONTRACT: 'bg-lime-deep',
   PAYMENT: 'bg-lime-deep',
   SYSTEM: 'bg-ink-muted',
+  DOCUMENT: 'bg-amber',
 };
 
 /** Closes a popover when the user clicks elsewhere or presses Escape. */

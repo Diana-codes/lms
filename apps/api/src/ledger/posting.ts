@@ -32,11 +32,38 @@ export function balancedLines(lines: PostingLine[]): PostingLine[] {
   return kept;
 }
 
-/** Disbursing a loan: the receivable goes up, the cash account goes down. */
-export function disbursementLines(principal: bigint, cash: AccountKey): PostingLine[] {
+/**
+ * Disbursing a loan: the receivable goes up by the full principal. The cash
+ * account pays out the principal less the origination fee, which is earned
+ * as fee income straight away (it is deducted from the payout).
+ */
+export function disbursementLines(
+  principal: bigint,
+  cash: AccountKey,
+  fee: bigint = 0n,
+): PostingLine[] {
+  if (fee < 0n || fee >= principal)
+    throw new UnbalancedPostingError('Fee must be below the principal');
   return balancedLines([
     { account: 'LOANS_PRINCIPAL', direction: 'DEBIT', amount: principal },
-    { account: cash, direction: 'CREDIT', amount: principal },
+    { account: cash, direction: 'CREDIT', amount: principal - fee },
+    { account: 'FEE_INCOME', direction: 'CREDIT', amount: fee },
+  ]);
+}
+
+/** Charging a late penalty: the borrower owes it now, and it is earned. */
+export function penaltyChargeLines(amount: bigint): PostingLine[] {
+  return balancedLines([
+    { account: 'FEES_RECEIVABLE', direction: 'DEBIT', amount },
+    { account: 'PENALTY_INCOME', direction: 'CREDIT', amount },
+  ]);
+}
+
+/** Waiving a penalty: the charge is undone. */
+export function penaltyWaiverLines(amount: bigint): PostingLine[] {
+  return balancedLines([
+    { account: 'PENALTY_INCOME', direction: 'DEBIT', amount },
+    { account: 'FEES_RECEIVABLE', direction: 'CREDIT', amount },
   ]);
 }
 

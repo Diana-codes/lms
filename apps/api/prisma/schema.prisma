@@ -76,7 +76,8 @@ model User {
   secondApprovals      Application[]       @relation("ApplicationSecondApprover")
   loans                Loan[]              @relation("LoanOfficer")
   scoreOverrides       CreditScore[]
-  verifiedDocuments    KycDocument[]
+  verifiedDocuments    KycDocument[]       @relation("DocumentVerifiedBy")
+  rejectedDocuments    KycDocument[]       @relation("DocumentRejectedBy")
   paymentsRecorded     Payment[]
   disbursementsStarted Disbursement[]      @relation("DisbursementInitiator")
   disbursementsOkayed  Disbursement[]      @relation("DisbursementApprover")
@@ -89,6 +90,8 @@ model User {
   notifications        Notification[]
   smsSent              SmsMessage[]
   ledgerTransactions   LedgerTransaction[]
+  penaltiesWaived      PenaltyCharge[]
+  agreementsRecorded   LoanAgreement[]
 }
 
 /// A refresh-token session. Only a hash of the token is stored.
@@ -132,6 +135,11 @@ enum Language {
   FR
 }
 
+enum BorrowerSource {
+  BRANCH
+  APP
+}
+
 enum KycStatus {
   PENDING
   VERIFIED
@@ -170,8 +178,10 @@ model Borrower {
   /// Verified monthly income or revenue, used by the affordability rule.
   monthlyIncome    BigInt?
   incomeVerifiedAt DateTime?
-  momoLinked       Boolean    @default(false)
-  kycStatus        KycStatus  @default(PENDING)
+  momoLinked       Boolean        @default(false)
+  kycStatus        KycStatus      @default(PENDING)
+  /// Where the customer was first registered: by staff at a branch, or by signing up in the app.
+  source           BorrowerSource @default(BRANCH)
   riskLevel        RiskLevel?
   preApprovedLimit BigInt?
 
@@ -186,6 +196,7 @@ model Borrower {
 
   business      Business?
   kycDocuments  KycDocument[]
+  agreements    LoanAgreement[]
   consents      Consent[]
   applications  Application[]
   creditScores  CreditScore[]
@@ -229,24 +240,41 @@ enum KycDocumentType {
 }
 
 model KycDocument {
-  id           String          @id @default(uuid(7)) @db.Uuid
-  borrowerId   String          @db.Uuid
-  type         KycDocumentType
-  status       KycStatus       @default(PENDING)
+  id              String          @id @default(uuid(7)) @db.Uuid
+  borrowerId      String          @db.Uuid
+  type            KycDocumentType
+  status          KycStatus       @default(PENDING)
   /// Object-storage key. The file itself never lives in the database.
-  storageKey   String?
+  storageKey      String?
+  /// image/jpeg, image/png, image/webp or application/pdf.
+  mimeType        String?
+  sizeBytes       Int?
+  /// The application this was uploaded for, if any.
+  applicationId   String?         @db.Uuid
+  /// Shown to the borrower so they know what to fix.
+  rejectionReason String?
+  rejectedAt      DateTime?
+  /// Who rejected it, so they can undo their own mistake the same day.
+  rejectedById    String?         @db.Uuid
+  /// Set when the borrower uploads a newer file of the same type. Kept for the record.
+  supersededAt    DateTime?
+  /// The borrower removed it before anyone reviewed it (wrong photo). Kept for the record.
+  withdrawnAt     DateTime?
   /// Where verification came from, e.g. "NIDA".
-  verifiedVia  String?
-  note         String?
-  uploadedAt   DateTime        @default(now())
-  verifiedAt   DateTime?
-  expiresOn    DateTime?       @db.Date
-  verifiedById String?         @db.Uuid
+  verifiedVia     String?
+  note            String?
+  uploadedAt      DateTime        @default(now())
+  verifiedAt      DateTime?
+  expiresOn       DateTime?       @db.Date
+  verifiedById    String?         @db.Uuid
 
-  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
-  verifiedBy User?    @relation(fields: [verifiedById], references: [id])
+  borrower    Borrower     @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  verifiedBy  User?        @relation("DocumentVerifiedBy", fields: [verifiedById], references: [id])
+  rejectedBy  User?        @relation("DocumentRejectedBy", fields: [rejectedById], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
 
   @@index([borrowerId])
+  @@index([applicationId])
 }
 
 enum ConsentType {
@@ -293,8 +321,8 @@ enum ProductKind {
 }
 
 model Product {
-  id                String      @id @default(uuid(7)) @db.Uuid
-  code              String      @unique
+  id                String            @id @default(uuid(7)) @db.Uuid
+  code              String            @unique
   name              String
   /// Short name used on pipeline cards, e.g. "Agri input".
   shortName         String
@@ -305,10 +333,15 @@ model Product {
   maxTermMonths     Int
   minAmount         BigInt
   maxAmount         BigInt
-  originationFeeBps Int         @default(0)
-  latePenaltyBps    Int         @default(0)
+  originationFeeBps Int               @default(0)
+  latePenaltyBps    Int               @default(0)
+  /// Days an instalment can be late before the first penalty.
+  penaltyGraceDays  Int               @default(5)
   /// Instalments may be at most this share of verified income (35% = 3500).
-  affordabilityBps  Int         @default(3500)
+  affordabilityBps  Int               @default(3500)
+  /// Documents an applicant must provide. Bank & MoMo statements are waived
+  /// when the borrower agrees to share their MoMo history.
+  requiredDocuments KycDocumentType[] @default([NATIONAL_ID, SELFIE])
 
   /// Auto-approve policy. Null means every application needs an officer.
   autoApproveMinScore  Int?
@@ -388,6 +421,8 @@ model Application {
 
   creditScores CreditScore[]
   consents     Consent[]
+  documents    KycDocument[]
+  agreement    LoanAgreement?
   loan         Loan?
 
   @@index([stage])
@@ -466,6 +501,11 @@ model Loan {
   closedOn         DateTime?  @db.Date
   /// What secures the loan, if anything, e.g. "Equipment lien".
   collateral       String?
+  /// Terms from the signed agreement, fixed for the life of the loan.
+  /// The fee was deducted from what was paid out.
+  feeAmount        BigInt     @default(0)
+  latePenaltyBps   Int        @default(0)
+  penaltyGraceDays Int        @default(5)
   /// Bumped on each restructure. Instalments from older versions are kept for history.
   scheduleVersion  Int        @default(1)
   officerId        String?    @db.Uuid
@@ -483,6 +523,7 @@ model Loan {
   branch      Branch?      @relation(fields: [branchId], references: [id])
 
   instalments        ScheduleInstalment[]
+  penaltyCharges     PenaltyCharge[]
   ledgerEntries      LedgerEntry[]
   ledgerTransactions LedgerTransaction[]
   payments           Payment[]
@@ -517,12 +558,16 @@ model ScheduleInstalment {
   /// database transaction as the ledger entries that paid it.
   principalPaid   BigInt           @default(0)
   interestPaid    BigInt           @default(0)
+  /// Late penalties charged (less any waived), and how much of them is paid.
+  penaltyDue      BigInt           @default(0)
+  penaltyPaid     BigInt           @default(0)
   status          InstalmentStatus @default(PENDING)
   paidAt          DateTime?
   /// Set when a restructure replaces this instalment.
   supersededAt    DateTime?
 
-  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  loan           Loan            @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  penaltyCharges PenaltyCharge[]
 
   @@unique([loanId, scheduleVersion, number])
   @@index([dueDate, status])
@@ -581,9 +626,11 @@ model LedgerTransaction {
   reverses   LedgerTransaction? @relation("Reversal", fields: [reversesId], references: [id])
   reversedBy LedgerTransaction? @relation("Reversal")
 
-  entries      LedgerEntry[]
-  payment      Payment?
-  disbursement Disbursement?
+  entries       LedgerEntry[]
+  payment       Payment?
+  disbursement  Disbursement?
+  penaltyCharge PenaltyCharge? @relation("PenaltyChargeTransaction")
+  penaltyWaiver PenaltyCharge? @relation("PenaltyWaiverTransaction")
 
   @@index([loanId, effectiveOn])
 }
@@ -856,6 +903,7 @@ enum NotificationKind {
   CONTRACT
   PAYMENT
   SYSTEM
+  DOCUMENT
 }
 
 /// In-app notification for a staff member (userId) or a borrower (borrowerId).
@@ -982,11 +1030,16 @@ model OtpChallenge {
   phone      String
   codeHash   String
   attempts   Int       @default(0)
+  /// Requester IP, to cap how many codes one device can send to different numbers.
+  ip         String?
+  /// A code for a number with no account yet, i.e. someone signing up.
+  signup     Boolean   @default(false)
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
 
   @@index([phone, createdAt])
+  @@index([ip, signup, createdAt])
 }
 
 /// A borrower's sign-in session in the mobile app.
@@ -1065,4 +1118,68 @@ model AiNote {
 
   @@index([kind, borrowerId, createdAt])
   @@index([kind, loanId, createdAt])
+}
+
+// ───────────────────────── Fees, penalties and agreements ─────────────────
+
+/// One late penalty on one instalment. The nightly job creates these; the
+/// unique (instalment, sequence) pair means a re-run never charges twice.
+model PenaltyCharge {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  loanId              String    @db.Uuid
+  instalmentId        String    @db.Uuid
+  /// 1 for the first charge on this instalment, 2 for the one 30 days later, …
+  sequence            Int
+  chargedOn           DateTime  @db.Date
+  /// Overdue principal and interest the charge was worked out on.
+  base                BigInt
+  amount              BigInt
+  ledgerTransactionId String    @unique @db.Uuid
+  waivedAmount        BigInt    @default(0)
+  waivedAt            DateTime?
+  waivedById          String?   @db.Uuid
+  waiveReason         String?
+  waiverTransactionId String?   @unique @db.Uuid
+  createdAt           DateTime  @default(now())
+
+  loan              Loan               @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  instalment        ScheduleInstalment @relation(fields: [instalmentId], references: [id], onDelete: Cascade)
+  waivedBy          User?              @relation(fields: [waivedById], references: [id])
+  ledgerTransaction LedgerTransaction  @relation("PenaltyChargeTransaction", fields: [ledgerTransactionId], references: [id])
+  waiverTransaction LedgerTransaction? @relation("PenaltyWaiverTransaction", fields: [waiverTransactionId], references: [id])
+
+  @@unique([instalmentId, sequence])
+  @@index([loanId])
+}
+
+enum AgreementChannel {
+  /// Accepted by the borrower in the app.
+  APP
+  /// Signed on paper at a branch; an officer recorded it.
+  BRANCH
+}
+
+/// The loan agreement and Key Facts a borrower accepted, kept word for word
+/// with a hash, so what they agreed to can always be shown again unchanged.
+model LoanAgreement {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  applicationId   String           @unique @db.Uuid
+  borrowerId      String           @db.Uuid
+  templateVersion String
+  /// The figures in the Key Facts: amount, fee, rate, APR, penalty, totals.
+  terms           Json
+  /// The full text as shown, and its SHA-256.
+  body            String
+  bodyHash        String
+  channel         AgreementChannel
+  acceptedAt      DateTime         @default(now())
+  ip              String?
+  userAgent       String?
+  recordedById    String?          @db.Uuid
+
+  application Application @relation(fields: [applicationId], references: [id])
+  borrower    Borrower    @relation(fields: [borrowerId], references: [id])
+  recordedBy  User?       @relation(fields: [recordedById], references: [id])
+
+  @@index([borrowerId])
 }

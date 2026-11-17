@@ -1,6 +1,5 @@
 import { formatBps, formatDate } from '@kora/core';
 import {
-  ApplicationsIcon,
   BorrowersIcon,
   buttonClasses,
   Card,
@@ -15,11 +14,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Breadcrumb } from '@/components/list-tools';
 import { serverApi } from '@/lib/server-api';
-import type { BorrowerProfile } from '@/lib/types';
+import type { BorrowerProfile, Me } from '@/lib/types';
 import { SendSmsButton } from '@/components/send-sms-button';
 import { AiSummaryButton } from './ai-summary-button';
+import { DocumentsCard } from './documents-card';
 import { NoteForm } from './note-form';
 import { OfferButton } from './offer-button';
+import { OfficerControl } from './officer-control';
 
 export async function generateMetadata({
   params,
@@ -55,7 +56,10 @@ function Line({ label, children }: { label: string; children: React.ReactNode })
 
 export default async function BorrowerPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const res = await serverApi<BorrowerProfile>(`/borrowers/${encodeURIComponent(code)}`);
+  const [res, me] = await Promise.all([
+    serverApi<BorrowerProfile>(`/borrowers/${encodeURIComponent(code)}`),
+    serverApi<Me>('/auth/me'),
+  ]);
 
   if (!res.ok) {
     const missing = res.status === 404 || res.status === 400;
@@ -189,27 +193,10 @@ export default async function BorrowerPage({ params }: { params: Promise<{ code:
             </dl>
           </section>
 
-          <Card className="gap-3 p-[22px]">
-            <h2 className="m-0 font-display text-base font-semibold">KYC documents</h2>
-            {b.documents.length === 0 ? (
-              <p className="m-0 text-sm text-ink-muted">No documents on file yet.</p>
-            ) : null}
-            {b.documents.map((doc) => (
-              <div
-                key={doc.name}
-                className="flex items-center gap-3 border-b border-line-soft py-2"
-              >
-                <span className="flex size-9 flex-none items-center justify-center rounded-nav bg-ground text-forest">
-                  <ApplicationsIcon size={16} />
-                </span>
-                <div className="mr-auto flex min-w-0 flex-col">
-                  <span className="text-sm font-medium">{doc.name}</span>
-                  <span className="text-xs text-ink-muted">{doc.meta}</span>
-                </div>
-                <Pill tone={doc.tone}>{doc.status}</Pill>
-              </div>
-            ))}
-          </Card>
+          <DocumentsCard
+            borrower={b}
+            canReview={me.ok && ['LOAN_OFFICER', 'MANAGER', 'ADMIN'].includes(me.data.role)}
+          />
 
           <Card className="gap-3 p-[22px] text-sm">
             <h2 className="m-0 font-display text-base font-semibold">Contact &amp; business</h2>
@@ -229,6 +216,9 @@ export default async function BorrowerPage({ params }: { params: Promise<{ code:
               </Line>
               <Line label="Relationship officer">{b.contact.officerName ?? 'Unassigned'}</Line>
             </dl>
+            {me.ok ? (
+              <OfficerControl code={b.code} officerId={b.contact.officerId} me={me.data} />
+            ) : null}
           </Card>
         </div>
 

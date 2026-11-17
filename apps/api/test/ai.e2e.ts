@@ -113,6 +113,7 @@ async function liveLoan(borrowerCode: string, appCode: string, due: Date): Promi
   await as('officer')
     .post(`/applications/${appCode}/approve`, { overrideReason: 'test' })
     .expect(200);
+  await as('officer').post(`/applications/${appCode}/agreement`).expect(200);
   const res = await as('manager')
     .post(`/applications/${appCode}/disburse`, { channel: 'BANK_TRANSFER' })
     .expect(200);

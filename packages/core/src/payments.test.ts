@@ -27,7 +27,7 @@ describe('allocatePayment', () => {
   it('clears one instalment with an exact payment', () => {
     const result = allocatePayment(fresh(), 284_985n);
     expect(result.allocations).toEqual([
-      { number: 1, principal: 221_235n, interest: 63_750n, settles: true },
+      { number: 1, principal: 221_235n, interest: 63_750n, penalty: 0n, settles: true },
     ]);
     expect(result.unallocated).toBe(0n);
   });
@@ -35,13 +35,14 @@ describe('allocatePayment', () => {
   it('pays interest before principal on a part-payment', () => {
     const result = allocatePayment(fresh(), 80_000n);
     expect(result.allocations).toEqual([
-      { number: 1, principal: 16_250n, interest: 63_750n, settles: false },
+      { number: 1, principal: 16_250n, interest: 63_750n, penalty: 0n, settles: false },
     ]);
     const tiny = allocatePayment(fresh(), 50_000n);
     expect(tiny.allocations[0]).toEqual({
       number: 1,
       principal: 0n,
       interest: 50_000n,
+      penalty: 0n,
       settles: false,
     });
   });
@@ -55,6 +56,7 @@ describe('allocatePayment', () => {
       number: 1,
       principal: 204_985n,
       interest: 0n,
+      penalty: 0n,
       settles: true,
     });
     expect(result.allocations[1]!.number).toBe(2);
@@ -91,6 +93,36 @@ describe('allocatePayment', () => {
     expect(result.unallocated).toBe(500n);
     expect(result.principal).toBe(4_500_000n);
     expect(result.allocations.every((a) => a.settles)).toBe(true);
+  });
+
+  it('pays late penalties first, then interest, then principal', () => {
+    const rows = fresh();
+    rows[0]!.penaltyDue = 5_700n;
+    const part = allocatePayment(rows, 50_000n);
+    expect(part.allocations[0]).toEqual({
+      number: 1,
+      principal: 0n,
+      interest: 44_300n,
+      penalty: 5_700n,
+      settles: false,
+    });
+    const full = allocatePayment(rows, 284_985n + 5_700n);
+    expect(full.allocations).toHaveLength(1);
+    expect(full).toMatchObject({ penalty: 5_700n, interest: 63_750n, principal: 221_235n });
+    expect(full.allocations[0]!.settles).toBe(true);
+    expect(totalRemaining(rows)).toBe(schedule.totalPayable + 5_700n);
+  });
+
+  it('settles an instalment only when its penalties are paid too', () => {
+    const rows = fresh();
+    rows[0]!.principalPaid = rows[0]!.principalDue;
+    rows[0]!.interestPaid = rows[0]!.interestDue;
+    rows[0]!.penaltyDue = 5_700n;
+    rows[0]!.penaltyPaid = 1_000n;
+    const r = allocatePayment(rows, 4_700n);
+    expect(r.allocations).toEqual([
+      { number: 1, principal: 0n, interest: 0n, penalty: 4_700n, settles: true },
+    ]);
   });
 
   it('rejects zero and negative amounts', () => {

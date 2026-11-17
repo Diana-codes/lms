@@ -65,6 +65,7 @@ async function disbursedLoan(amount = '1200000'): Promise<string> {
     200,
   );
   await post(staff.officer, `/applications/${created.code}/approve`).expect(200);
+  await post(staff.officer, `/applications/${created.code}/agreement`).expect(200);
   const res = await post(staff.manager, `/applications/${created.code}/disburse`, {
     channel: 'BANK_TRANSFER',
   }).expect(200);
@@ -255,6 +256,14 @@ describe('disbursement', () => {
     const a = await newApplication('4500000');
     await post(staff.officer, `/applications/${a.code}/move`, { to: 'UNDER_REVIEW' }).expect(200);
     await post(staff.officer, `/applications/${a.code}/approve`).expect(200);
+
+    // No payout until the borrower has signed the agreement.
+    const unsigned = await post(staff.manager, `/applications/${a.code}/disburse`, {
+      channel: 'BANK_TRANSFER',
+    }).expect(409);
+    expect(unsigned.body.message).toMatch(/has not signed the loan agreement/);
+    await post(staff.officer, `/applications/${a.code}/agreement`).expect(200);
+    await post(staff.officer, `/applications/${a.code}/agreement`).expect(409);
 
     // Officers approve; managers release the money.
     await post(staff.officer, `/applications/${a.code}/disburse`, {
@@ -540,6 +549,7 @@ describe('borrowers', () => {
     const a = await newApplication('1200000', { name: 'Profile Person', income: 2_000_000n });
     await post(staff.officer, `/applications/${a.code}/move`, { to: 'UNDER_REVIEW' }).expect(200);
     await post(staff.officer, `/applications/${a.code}/approve`).expect(200);
+    await post(staff.officer, `/applications/${a.code}/agreement`).expect(200);
     const loanCode = (
       await post(staff.manager, `/applications/${a.code}/disburse`, { channel: 'CASH' }).expect(200)
     ).body.loanCode;

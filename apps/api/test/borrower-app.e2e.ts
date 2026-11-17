@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { addMonths, calcInstalment, kigaliDate } from '@kora/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AGREEMENT_VERSION } from '../src/agreements/template';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
@@ -78,6 +79,10 @@ async function borrowerWithLoan(
     .post(`/applications/${created.body.code}/approve`)
     .set('Cookie', staffCookies)
     .expect(200);
+  await http()
+    .post(`/applications/${created.body.code}/agreement`)
+    .set('Cookie', staffCookies)
+    .expect(200);
   const res = await http()
     .post(`/applications/${created.body.code}/disburse`)
     .set('Cookie', managerCookies)
@@ -140,16 +145,16 @@ afterAll(async () => {
 });
 
 describe('sign-in by phone', () => {
-  it('sends a code only to known numbers, but answers the same either way', async () => {
-    const unknown = await http()
-      .post('/app/auth/request-code')
-      .send({ phone: phone() })
-      .expect(200);
+  it('answers the same for known and new numbers', async () => {
+    const number = phone();
+    const unknown = await http().post('/app/auth/request-code').send({ phone: number }).expect(200);
     expect(unknown.body.sent).toBe(true);
     expect(unknown.body.phone).toMatch(/^\+250 78• ••• \d{3}$/);
-    expect(
-      await prisma.otpChallenge.count({ where: { phone: `+250${unknown.body.phone.slice(-3)}` } }),
-    ).toBe(0);
+    // A new number gets a code to sign up with (see register.e2e.ts).
+    const challenge = await prisma.otpChallenge.findFirstOrThrow({
+      where: { phone: `+250${number.slice(1)}` },
+    });
+    expect(challenge.signup).toBe(true);
     await http().post('/app/auth/request-code').send({ phone: '12345' }).expect(400);
   });
 
@@ -250,6 +255,70 @@ describe('home and payments', () => {
     expect(schedule.rows).toHaveLength(12);
   });
 
+  it('can pay from another MTN number, whose owner approves the prompt', async () => {
+    const number = phone();
+    const { loanCode } = await borrowerWithLoan(number);
+    const token = await signInBorrower(number);
+    const pay = (phoneNumber: string) =>
+      http().post(`/app/loans/${loanCode}/pay`).set(bearer(token)).send({ phone: phoneNumber });
+
+    const bad = await pay('0758 123 412').expect(400);
+    expect(bad.body.message).toBe('Enter a Rwandan mobile number, like 078 123 4567');
+    const airtel = await pay('0722 550 118').expect(400);
+    expect(airtel.body.message).toBe('MoMo payments need an MTN number starting 078 or 079');
+    expect(await prisma.payment.count({ where: { loan: { code: loanCode } } })).toBe(0);
+
+    const other = `079${randomInt(1_000_000, 9_999_999)}`;
+    const res = await pay(other).expect(202);
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: res.body.paymentId } });
+    expect(payment.payerPhone).toBe(`+250${other.slice(1)}`);
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'loan.payment.request', entityId: loanCode },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit.metadata).toMatchObject({ otherPayer: true });
+    // The number never appears in full in the audit trail.
+    expect(JSON.stringify(audit.metadata)).not.toContain(other.slice(1));
+    const status = await http()
+      .get(`/app/payments/${res.body.paymentId}`)
+      .set(bearer(token))
+      .expect(200);
+    expect(status.body.status).toBe('SUCCESSFUL');
+  });
+
+  it('shows the statement, insights and who to contact', async () => {
+    const number = phone();
+    const { loanCode } = await borrowerWithLoan(number);
+    const token = await signInBorrower(number);
+    const pay = await http()
+      .post(`/app/loans/${loanCode}/pay`)
+      .set(bearer(token))
+      .send({})
+      .expect(202);
+    await http().get(`/app/payments/${pay.body.paymentId}`).set(bearer(token)).expect(200);
+
+    const statement = (
+      await http().get(`/app/loans/${loanCode}/statement`).set(bearer(token)).expect(200)
+    ).body;
+    expect(statement.payments).toHaveLength(1);
+    expect(statement.payments[0]).toMatchObject({ channel: 'MTN MoMo', note: 'Instalment 1' });
+    expect(BigInt(statement.totalPaid) + BigInt(statement.leftToPay)).toBeGreaterThan(1_200_000n);
+
+    const insights = (await http().get('/app/insights').set(bearer(token)).expect(200)).body;
+    expect(insights).toMatchObject({
+      instalmentsPaid: 1,
+      paidOnTime: 1,
+      paidEarly: 1,
+      onTimeRatePct: 100,
+      overdueNow: 0,
+    });
+    expect(insights.months).toHaveLength(6);
+    expect(insights.months[5].amount).toBe(statement.payments[0].amount);
+
+    const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
+    expect(home.support).toHaveProperty('officerName');
+  });
+
   it('cannot see or pay another borrower’s loan', async () => {
     const mine = phone();
     const theirs = phone();
@@ -258,6 +327,7 @@ describe('home and payments', () => {
     const token = await signInBorrower(mine);
     await http().get(`/app/loans/${other.loanCode}/schedule`).set(bearer(token)).expect(404);
     await http().post(`/app/loans/${other.loanCode}/pay`).set(bearer(token)).send({}).expect(404);
+    await http().get(`/app/loans/${other.loanCode}/statement`).set(bearer(token)).expect(404);
   });
 });
 
@@ -330,6 +400,7 @@ describe('applying in the app', () => {
         nationalId,
         shareMomoHistory: true,
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
         agreedBureau: true,
         idPhotoKey: idUpload.body.key,
       })
@@ -380,6 +451,7 @@ describe('applying in the app', () => {
         termMonths: 6,
         purpose: 'Stock',
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
       })
       .expect(409);
     const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
@@ -398,6 +470,7 @@ describe('applying in the app', () => {
       termMonths: 6,
       purpose: 'Stock',
       agreedTerms: true,
+      agreementVersion: AGREEMENT_VERSION,
       nationalId,
     };
     await http()

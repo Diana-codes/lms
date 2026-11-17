@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   formatDate,
   formatMonthYear,
@@ -17,7 +22,9 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
+import { UploadsService } from '../borrower-app/uploads.service';
 import { escapeLike } from '../common/http';
+import { DocumentsService } from '../documents/documents.service';
 import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ACCOUNTS } from '../ledger/accounts';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,9 +52,14 @@ export class BorrowersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly uploads: UploadsService,
+    private readonly documents: DocumentsService,
   ) {}
 
-  async list(query: { q?: string; mine?: boolean; page: number }, user: AuthUser) {
+  async list(
+    query: { q?: string; mine?: boolean; unassigned?: boolean; page: number },
+    user: AuthUser,
+  ) {
     const where: Prisma.BorrowerWhereInput = {};
     // Prisma does not escape % and _ in `contains`, so do it here.
     const q = query.q?.trim() ? escapeLike(query.q.trim()) : '';
@@ -59,6 +71,8 @@ export class BorrowersService {
       ];
     }
     if (query.mine) where.officerId = user.id;
+    // New customers who signed up in the app wait here for an officer.
+    else if (query.unassigned) where.officerId = null;
 
     const [total, rows] = await Promise.all([
       this.prisma.borrower.count({ where }),
@@ -92,17 +106,18 @@ export class BorrowersService {
         score: b.creditScores[0]?.value ?? null,
         activeLoans: b.loans.length,
         officerName: short(b.officer),
+        source: b.source,
       })),
     };
   }
 
-  async profile(code: string) {
+  async profile(code: string, user?: AuthUser) {
     const b = await this.prisma.borrower.findUnique({
       where: { code },
       include: {
         business: true,
         officer: { select: { firstName: true, lastName: true } },
-        kycDocuments: { orderBy: { uploadedAt: 'asc' } },
+        kycDocuments: { where: { supersededAt: null }, orderBy: { uploadedAt: 'asc' } },
         creditScores: { orderBy: { createdAt: 'desc' }, take: 12 },
         notes: {
           orderBy: { createdAt: 'desc' },
@@ -119,7 +134,25 @@ export class BorrowersService {
       },
     });
     if (!b) throw new NotFoundException(`No borrower ${code}`);
+    // Which documents have a file the officer can actually open.
+    const onDisk = new Set(
+      (
+        await Promise.all(
+          b.kycDocuments.map(async (d) =>
+            (await this.uploads.locate(d.storageKey)) ? d.id : null,
+          ),
+        )
+      ).filter(Boolean),
+    );
     const today = kigaliDate();
+    // Which reviews this person may undo (a wrong click on Verify or Reject).
+    const undoable = new Set<string>();
+    if (user) {
+      for (const d of b.kycDocuments) {
+        if (d.status !== 'VERIFIED' && d.status !== 'REJECTED') continue;
+        if ((await this.documents.undoBlock(d, user)) == null) undoable.add(d.id);
+      }
+    }
 
     const owedRows = await this.prisma.$queryRaw<Array<{ owed: bigint }>>`
       SELECT COALESCE(SUM(CASE WHEN e."direction" = 'DEBIT' THEN e."amount" ELSE -e."amount" END), 0)::bigint AS owed
@@ -185,6 +218,7 @@ export class BorrowersService {
             tone: 'warning',
           },
     );
+    if (b.source === 'APP') tags.push({ label: 'Signed up in the app', tone: 'info' });
     if (loanCount > 1) tags.push({ label: 'Repeat borrower', tone: 'info' });
     if (b.riskLevel) {
       tags.push({
@@ -227,13 +261,26 @@ export class BorrowersService {
           expires >= today &&
           expires <= kigaliDate(new Date(Date.now() + 30 * 86_400_000));
         const expired = expires != null && expires < today;
+        const reviewedOn = doc.rejectedAt ?? doc.verifiedAt;
         return {
+          id: doc.id,
+          type: doc.type,
+          file: onDisk.has(doc.id)
+            ? doc.mimeType === 'application/pdf'
+              ? ('pdf' as const)
+              : ('image' as const)
+            : null,
+          reviewable: doc.status === 'PENDING',
+          canUndo: undoable.has(doc.id),
+          reason: doc.status === 'REJECTED' ? doc.rejectionReason : null,
           name: DOC_NAMES[doc.type],
           meta: expires
             ? `${expired ? 'Expired' : 'Expires'} ${formatDate(expires)}`
-            : doc.verifiedVia
-              ? `Verified via ${doc.verifiedVia} · ${formatMonthYear(kigaliDate(doc.verifiedAt ?? doc.uploadedAt))}`
-              : `Uploaded ${formatMonthYear(kigaliDate(doc.uploadedAt))}`,
+            : doc.status === 'REJECTED' && reviewedOn
+              ? `Rejected ${formatDate(kigaliDate(reviewedOn))}`
+              : doc.verifiedVia
+                ? `Verified via ${doc.verifiedVia} · ${formatMonthYear(kigaliDate(doc.verifiedAt ?? doc.uploadedAt))}`
+                : `Uploaded ${formatDate(kigaliDate(doc.uploadedAt))}${doc.mimeType ? (doc.mimeType === 'application/pdf' ? ' · PDF' : ' · Photo') : ''}`,
           status: expired
             ? 'Expired'
             : expiringSoon
@@ -258,7 +305,9 @@ export class BorrowersService {
         sector: b.business?.sector ?? null,
         monthlyRevenue: b.business?.avgMonthlyRevenue ?? b.monthlyIncome,
         officerName: short(b.officer),
+        officerId: b.officerId,
       },
+      source: b.source,
       // Stored model output. Shown as advice, with its reasons.
       aiSummary: note
         ? {
@@ -316,6 +365,73 @@ export class BorrowersService {
     };
   }
 
+  /**
+   * Give a customer a relationship officer. An officer can take a customer
+   * who has none (e.g. one who signed up in the app); managers can assign or
+   * move anyone. Open applications move with the customer.
+   */
+  async assignOfficer(
+    code: string,
+    officerId: string | undefined,
+    user: AuthUser,
+    meta: RequestMeta,
+  ) {
+    const b = await this.prisma.borrower.findUnique({
+      where: { code },
+      select: { id: true, officerId: true, branchId: true },
+    });
+    if (!b) throw new NotFoundException(`No borrower ${code}`);
+    const isManager = user.role === 'MANAGER' || user.role === 'ADMIN';
+    const targetId = officerId ?? user.id;
+    if (!isManager) {
+      if (targetId !== user.id) throw new ForbiddenException('Only a manager can assign others');
+      if (b.officerId && b.officerId !== user.id)
+        throw new ForbiddenException('This customer already has an officer. Ask a manager.');
+    }
+    const officer = await this.prisma.user.findFirst({
+      where: { id: targetId, isActive: true, role: { in: ['LOAN_OFFICER', 'MANAGER'] } },
+      select: { id: true, branchId: true, firstName: true, lastName: true },
+    });
+    if (!officer) throw new BadRequestException('Choose an active loan officer or manager');
+    if (b.officerId === officer.id) return { officerName: short(officer) };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.borrower.update({
+        where: { id: b.id },
+        data: { officerId: officer.id, branchId: b.branchId ?? officer.branchId },
+      });
+      await tx.application.updateMany({
+        where: {
+          borrowerId: b.id,
+          stage: { in: ['NEW', 'UNDER_REVIEW', 'CREDIT_CHECK', 'APPROVED'] },
+        },
+        data: { officerId: officer.id },
+      });
+      await this.audit.record(
+        {
+          action: 'borrower.officer.assign',
+          actorId: user.id,
+          entityType: 'Borrower',
+          entityId: code,
+          metadata: { from: b.officerId, to: officer.id },
+          ...meta,
+        },
+        tx,
+      );
+      if (officer.id !== user.id) {
+        await tx.notification.create({
+          data: {
+            userId: officer.id,
+            kind: 'SYSTEM',
+            title: `You are now the officer for ${code}`,
+            href: `/borrowers/${code}`,
+          },
+        });
+      }
+    });
+    return { officerName: short(officer) };
+  }
+
   async addNote(code: string, body: string, user: AuthUser, meta: RequestMeta) {
     const text = body.trim();
     if (!text) throw new BadRequestException('Write something first');
@@ -341,6 +457,6 @@ export class BorrowersService {
         tx,
       );
     });
-    return this.profile(code);
+    return this.profile(code, user);
   }
 }

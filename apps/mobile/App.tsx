@@ -2,21 +2,80 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-goog
 import { SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hasSession } from './src/lib/api';
+import type { Home as HomeData, RegistrationNeeded, Tab } from './src/lib/types';
 import { Apply } from './src/screens/Apply';
-import { Home } from './src/screens/Home';
-import { Notifications, ProfileScreen, Schedule } from './src/screens/More';
+import { DocumentsScreen } from './src/screens/Documents';
+import { Home, type HomeGo } from './src/screens/Home';
+import { Register } from './src/screens/Register';
 import { SignIn } from './src/screens/SignIn';
-import { c } from './src/ui/theme';
+import {
+  InsightsTab,
+  LoansTab,
+  NotificationsScreen,
+  ProfileTab,
+  StatementScreen,
+  SupportSheet,
+} from './src/screens/Tabs';
+import { tap, Toast } from './src/ui';
+import { HomeIcon, InsightsIcon, LoansIcon, ProfileIcon } from './src/ui/icons';
+import { c, font } from './src/ui/theme';
 
-type Screen = 'loading' | 'signin' | 'home' | 'apply' | 'schedule' | 'profile' | 'notifications';
+type Overlay = 'apply' | 'statement' | 'notifications' | 'documents' | null;
+
+const TABS: Array<[Tab, string, typeof HomeIcon]> = [
+  ['home', 'Home', HomeIcon],
+  ['loans', 'Loans', LoansIcon],
+  ['insights', 'Insights', InsightsIcon],
+  ['profile', 'Profile', ProfileIcon],
+];
+
+/** The bottom tab bar from the Home design. */
+function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      accessibilityRole="tablist"
+      style={[styles.tabBar, { paddingBottom: Math.max(14, insets.bottom) }]}
+    >
+      {TABS.map(([key, label, Icon]) => {
+        const on = tab === key;
+        return (
+          <Pressable
+            key={key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={label}
+            onPress={() => {
+              if (!on) tap();
+              onChange(key);
+            }}
+            style={styles.tabItem}
+          >
+            <Icon size={22} color={on ? c.forest : c['ink-muted']} />
+            <Text
+              style={{
+                fontSize: 11,
+                color: on ? c.forest : c['ink-muted'],
+                fontFamily: on ? font.semibold : font.body,
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 /**
- * The borrower app. A small hand-rolled stack: the few screens here do not
- * need a router. Session tokens live in the device's secure store.
+ * The borrower app: four tabs (Home, Loans, Insights, Profile) as in the
+ * approved Home design, with the apply flow, statement and notifications
+ * opening over them. Session tokens live in the device's secure store.
  */
 export default function App() {
   const [fontsReady] = useFonts({
@@ -25,101 +84,151 @@ export default function App() {
     Inter_600SemiBold,
     SpaceGrotesk_600SemiBold,
   });
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [loanCode, setLoanCode] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  // A new number that passed the SMS code and is filling in the sign-up form.
+  const [registration, setRegistration] = useState<RegistrationNeeded | null>(null);
+  const [signInNotice, setSignInNotice] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('home');
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [support, setSupport] = useState(false);
+  const [home, setHome] = useState<HomeData | null>(null);
+  const [homeKey, setHomeKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    hasSession().then((yes) => setScreen(yes ? 'home' : 'signin'));
+    hasSession().then(setSignedIn);
   }, []);
 
-  function flash(message: string) {
+  const flash = useCallback((message: string) => {
     if (timer.current) clearTimeout(timer.current);
     setToast(message);
     timer.current = setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const go = useCallback((to: HomeGo) => {
+    if (to === 'schedule') setTab('loans');
+    else if (to === 'support') setSupport(true);
+    else setOverlay(to);
+  }, []);
+
+  if (!fontsReady || signedIn == null)
+    return <View style={{ flex: 1, backgroundColor: c.forest }} />;
+
+  if (!signedIn) {
+    return (
+      <SafeAreaProvider>
+        {registration ? (
+          <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }}>
+            <StatusBar style="dark" />
+            <Register
+              registrationToken={registration.registrationToken}
+              phone={registration.phone}
+              onDone={() => {
+                setRegistration(null);
+                setSignInNotice(null);
+                setTab('home');
+                setSignedIn(true);
+                flash('Welcome to Kora Lend! Your account is open.');
+              }}
+              onCancel={(message) => {
+                setRegistration(null);
+                setSignInNotice(message ?? null);
+              }}
+            />
+          </SafeAreaView>
+        ) : (
+          <SafeAreaView style={{ flex: 1, backgroundColor: c.forest }} edges={['top']}>
+            <StatusBar style="light" />
+            <SignIn
+              notice={signInNotice}
+              onRegister={setRegistration}
+              onSignedIn={() => {
+                setSignInNotice(null);
+                setTab('home');
+                setSignedIn(true);
+              }}
+            />
+          </SafeAreaView>
+        )}
+      </SafeAreaProvider>
+    );
   }
 
-  if (!fontsReady || screen === 'loading')
-    return <View style={{ flex: 1, backgroundColor: c.forest }} />;
+  const loanCode = home?.loan?.code ?? null;
+  const close = () => {
+    setOverlay(null);
+    setHomeKey((k) => k + 1);
+  };
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: screen === 'signin' ? c.forest : c.ground }}
-        edges={['top', 'bottom']}
-      >
-        <StatusBar style={screen === 'signin' ? 'light' : 'dark'} />
-        {screen === 'signin' ? <SignIn onSignedIn={() => setScreen('home')} /> : null}
-        {screen === 'home' ? (
-          <Home
-            toast={flash}
-            go={(s) => {
-              if (s === 'schedule') {
-                // The home screen only offers this when there is an active loan.
-              }
-              setScreen(s);
-            }}
-          />
-        ) : null}
-        {screen === 'apply' ? (
-          <Apply
-            onDone={() => setScreen('home')}
-            onCancel={() => setScreen('home')}
-            toast={flash}
-          />
-        ) : null}
-        {screen === 'schedule' ? (
-          <ScheduleGate
-            loanCode={loanCode}
-            setLoanCode={setLoanCode}
-            onBack={() => setScreen('home')}
-          />
-        ) : null}
-        {screen === 'profile' ? (
-          <ProfileScreen onBack={() => setScreen('home')} onSignedOut={() => setScreen('signin')} />
-        ) : null}
-        {screen === 'notifications' ? <Notifications onBack={() => setScreen('home')} /> : null}
-        {toast ? (
-          <View style={styles.toast} accessibilityLiveRegion="polite" accessibilityRole="alert">
-            <Text style={{ color: c.surface, fontSize: 14 }}>{toast}</Text>
-          </View>
-        ) : null}
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top']}>
+        <StatusBar style="dark" />
+        {overlay === 'apply' ? (
+          <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+            <Apply
+              onDone={() => {
+                close();
+                setTab('home');
+              }}
+              onCancel={close}
+              toast={flash}
+            />
+          </SafeAreaView>
+        ) : overlay === 'statement' && loanCode ? (
+          <StatementScreen loanCode={loanCode} onBack={close} />
+        ) : overlay === 'notifications' ? (
+          <NotificationsScreen onBack={close} />
+        ) : overlay === 'documents' ? (
+          <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+            <DocumentsScreen onBack={close} toast={flash} />
+          </SafeAreaView>
+        ) : (
+          <>
+            <View style={{ flex: 1 }}>
+              {tab === 'home' ? (
+                <Home key={homeKey} go={go} toast={flash} onLoaded={setHome} />
+              ) : null}
+              {tab === 'loans' ? (
+                <LoansTab loanCode={loanCode} onApply={() => setOverlay('apply')} />
+              ) : null}
+              {tab === 'insights' ? <InsightsTab /> : null}
+              {tab === 'profile' ? (
+                <ProfileTab
+                  toast={flash}
+                  onDocuments={() => setOverlay('documents')}
+                  onSignedOut={() => {
+                    setHome(null);
+                    setSignedIn(false);
+                  }}
+                />
+              ) : null}
+            </View>
+            <TabBar
+              tab={tab}
+              onChange={(t) => {
+                setTab(t);
+                if (t === 'home') setHomeKey((k) => k + 1);
+              }}
+            />
+          </>
+        )}
+        <SupportSheet open={support} onClose={() => setSupport(false)} home={home} />
+        <Toast message={toast} />
       </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
-/** Finds the active loan before showing its schedule. */
-function ScheduleGate({
-  loanCode,
-  setLoanCode,
-  onBack,
-}: {
-  loanCode: string | null;
-  setLoanCode: (c: string) => void;
-  onBack: () => void;
-}) {
-  useEffect(() => {
-    if (loanCode) return;
-    import('./src/lib/api').then(({ api }) =>
-      api<{ loan: { code: string } | null }>('/app/home').then(
-        (h) => h.loan && setLoanCode(h.loan.code),
-      ),
-    );
-  }, [loanCode, setLoanCode]);
-  if (!loanCode) return <View style={{ flex: 1, backgroundColor: c.ground }} />;
-  return <Schedule loanCode={loanCode} onBack={onBack} />;
-}
-
 const styles = StyleSheet.create({
-  toast: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 28,
-    backgroundColor: c.ink,
-    borderRadius: 14,
-    padding: 14,
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: c.surface,
+    borderTopWidth: 1,
+    borderTopColor: c.line,
+    paddingTop: 8,
+    paddingHorizontal: 12,
   },
+  tabItem: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 6, minHeight: 48 },
 });

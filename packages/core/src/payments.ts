@@ -8,12 +8,16 @@ export interface InstalmentBalance {
   interestDue: Rwf;
   principalPaid: Rwf;
   interestPaid: Rwf;
+  /** Late penalties charged on this instalment, and how much of them is paid. */
+  penaltyDue?: Rwf;
+  penaltyPaid?: Rwf;
 }
 
 export interface InstalmentAllocation {
   number: number;
   principal: Rwf;
   interest: Rwf;
+  penalty: Rwf;
   /** True when this payment clears the instalment in full. */
   settles: boolean;
 }
@@ -22,48 +26,70 @@ export interface PaymentAllocation {
   allocations: InstalmentAllocation[];
   principal: Rwf;
   interest: Rwf;
+  penalty: Rwf;
   /** Money left over once every instalment is cleared. Zero for a valid payment. */
   unallocated: Rwf;
 }
 
-export function instalmentRemaining(i: InstalmentBalance): Rwf {
+/** Late penalties still owed on an instalment. */
+export function penaltyRemaining(i: InstalmentBalance): Rwf {
+  return (i.penaltyDue ?? 0n) - (i.penaltyPaid ?? 0n);
+}
+
+/** Principal and interest still owed: the base a late penalty is charged on. */
+export function scheduledRemaining(i: InstalmentBalance): Rwf {
   return i.principalDue - i.principalPaid + (i.interestDue - i.interestPaid);
+}
+
+/** Everything still owed on an instalment, late penalties included. */
+export function instalmentRemaining(i: InstalmentBalance): Rwf {
+  return scheduledRemaining(i) + penaltyRemaining(i);
 }
 
 /**
  * Spread a payment over a loan's instalments: oldest instalment first, and
- * within an instalment interest before principal. Pass the instalments in
- * schedule order. Nothing is rounded; every franc lands somewhere.
+ * within an instalment late penalties, then interest, then principal. Pass
+ * the instalments in schedule order. Nothing is rounded; every franc lands
+ * somewhere.
  */
 export function allocatePayment(instalments: InstalmentBalance[], amount: Rwf): PaymentAllocation {
   if (amount <= 0n) throw new RangeError('Payment amount must be positive');
   let left = amount;
   let principal = 0n;
   let interest = 0n;
+  let penalty = 0n;
   const allocations: InstalmentAllocation[] = [];
+  const take = (owed: Rwf) => {
+    const part = left < owed ? left : owed > 0n ? owed : 0n;
+    left -= part;
+    return part;
+  };
 
   for (const inst of instalments) {
     if (left === 0n) break;
+    const penaltyOwed = penaltyRemaining(inst);
     const interestOwed = inst.interestDue - inst.interestPaid;
     const principalOwed = inst.principalDue - inst.principalPaid;
-    if (interestOwed <= 0n && principalOwed <= 0n) continue;
+    if (penaltyOwed <= 0n && interestOwed <= 0n && principalOwed <= 0n) continue;
 
-    const toInterest = left < interestOwed ? left : interestOwed;
-    left -= toInterest;
-    const toPrincipal = left < principalOwed ? left : principalOwed;
-    left -= toPrincipal;
+    const toPenalty = take(penaltyOwed);
+    const toInterest = take(interestOwed);
+    const toPrincipal = take(principalOwed);
 
+    penalty += toPenalty;
     interest += toInterest;
     principal += toPrincipal;
     allocations.push({
       number: inst.number,
       principal: toPrincipal,
       interest: toInterest,
-      settles: toInterest === interestOwed && toPrincipal === principalOwed,
+      penalty: toPenalty,
+      settles:
+        toPenalty >= penaltyOwed && toInterest >= interestOwed && toPrincipal >= principalOwed,
     });
   }
 
-  return { allocations, principal, interest, unallocated: left };
+  return { allocations, principal, interest, penalty, unallocated: left };
 }
 
 /** Everything still owed on the schedule as it stands. */

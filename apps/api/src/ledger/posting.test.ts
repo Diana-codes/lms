@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   balancedLines,
   disbursementLines,
+  penaltyChargeLines,
+  penaltyWaiverLines,
   repaymentLines,
   UnbalancedPostingError,
 } from './posting';
@@ -11,6 +13,26 @@ describe('ledger postings', () => {
     expect(disbursementLines(4_500_000n, 'MOMO_FLOAT')).toEqual([
       { account: 'LOANS_PRINCIPAL', direction: 'DEBIT', amount: 4_500_000n },
       { account: 'MOMO_FLOAT', direction: 'CREDIT', amount: 4_500_000n },
+    ]);
+  });
+
+  it('a disbursement with a fee pays out less and books the fee as income', () => {
+    expect(disbursementLines(4_500_000n, 'MOMO_FLOAT', 67_500n)).toEqual([
+      { account: 'LOANS_PRINCIPAL', direction: 'DEBIT', amount: 4_500_000n },
+      { account: 'MOMO_FLOAT', direction: 'CREDIT', amount: 4_432_500n },
+      { account: 'FEE_INCOME', direction: 'CREDIT', amount: 67_500n },
+    ]);
+    expect(() => disbursementLines(100n, 'BANK', 100n)).toThrow(UnbalancedPostingError);
+  });
+
+  it('a penalty is owed and earned, and a waiver undoes it', () => {
+    expect(penaltyChargeLines(5_700n)).toEqual([
+      { account: 'FEES_RECEIVABLE', direction: 'DEBIT', amount: 5_700n },
+      { account: 'PENALTY_INCOME', direction: 'CREDIT', amount: 5_700n },
+    ]);
+    expect(penaltyWaiverLines(5_700n)).toEqual([
+      { account: 'PENALTY_INCOME', direction: 'DEBIT', amount: 5_700n },
+      { account: 'FEES_RECEIVABLE', direction: 'CREDIT', amount: 5_700n },
     ]);
   });
 

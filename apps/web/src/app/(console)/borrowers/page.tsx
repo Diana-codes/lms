@@ -30,9 +30,13 @@ export default async function BorrowersPage({
   const sp = await searchParams;
   const q = one(sp.q)?.trim() || undefined;
   const mine = one(sp.mine) === 'true' ? 'true' : undefined;
+  // "No officer" and "Assigned to me" exclude each other.
+  const unassigned = !mine && one(sp.unassigned) === 'true' ? 'true' : undefined;
   const page = Math.max(1, Number(one(sp.page)) || 1);
-  const res = await serverApi<Paged<BorrowerListItem>>(listHref('/borrowers', { q, mine, page }));
-  const anyFilter = Boolean(q || mine);
+  const res = await serverApi<Paged<BorrowerListItem>>(
+    listHref('/borrowers', { q, mine, unassigned, page }),
+  );
+  const anyFilter = Boolean(q || mine || unassigned);
 
   return (
     <>
@@ -49,7 +53,7 @@ export default async function BorrowersPage({
           action="/borrowers"
           q={q}
           placeholder="Search by name, business or borrower number"
-          keep={{ mine }}
+          keep={{ mine, unassigned }}
         />
         <Link
           href={listHref('/borrowers', { q, mine: mine ? undefined : 'true' })}
@@ -57,6 +61,13 @@ export default async function BorrowersPage({
           aria-current={mine ? 'true' : undefined}
         >
           Assigned to me
+        </Link>
+        <Link
+          href={listHref('/borrowers', { q, unassigned: unassigned ? undefined : 'true' })}
+          className={chipClasses(Boolean(unassigned))}
+          aria-current={unassigned ? 'true' : undefined}
+        >
+          No officer
         </Link>
         {anyFilter ? (
           <Link href="/borrowers" className="px-2.5 text-[13px] font-semibold">
@@ -76,7 +87,7 @@ export default async function BorrowersPage({
         >
           {anyFilter
             ? 'Try a different search, or clear the filters.'
-            : 'Borrowers are added with their first application.'}
+            : 'Borrowers are added with their first application, or sign up in the app.'}
         </EmptyState>
       ) : (
         <Card className="gap-3">
@@ -104,6 +115,7 @@ export default async function BorrowersPage({
                         </Link>
                         <span className="text-xs text-ink-muted">
                           {b.code}
+                          {b.source === 'APP' ? ' · Signed up in the app' : ''}
                           {b.businessName && b.businessName !== b.name
                             ? ` · ${b.businessName}`
                             : ''}
@@ -134,7 +146,9 @@ export default async function BorrowersPage({
                     {b.score ?? '—'}
                   </Td>
                   <Td numeric>{b.activeLoans}</Td>
-                  <Td className="text-ink-soft">{b.officerName ?? '—'}</Td>
+                  <Td className="text-ink-soft">
+                    {b.officerName ?? (b.source === 'APP' ? 'Needs an officer' : '—')}
+                  </Td>
                 </tr>
               ))}
             </tbody>
@@ -144,7 +158,7 @@ export default async function BorrowersPage({
             pages={res.data.pages}
             total={res.data.total}
             noun="borrower"
-            href={(p) => listHref('/borrowers', { q, mine, page: p })}
+            href={(p) => listHref('/borrowers', { q, mine, unassigned, page: p })}
           />
         </Card>
       )}
