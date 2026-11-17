@@ -31,7 +31,9 @@ export function BrandingForm({ settings }: { settings: CompanySettings }) {
 
   const colourError = (v: string) => (v && !HEX.test(v) ? 'Use a colour like #0E3B2E' : null);
   const logoError =
-    form.logoUrl && !form.logoUrl.startsWith('https://') ? 'Use an https:// address' : null;
+    form.logoUrl && !/^(https:\/\/|\/brand\/)/.test(form.logoUrl)
+      ? 'Use an https:// address'
+      : null;
   const invalid = !!(colourError(form.brandColor) || colourError(form.accentColor) || logoError);
 
   const brand = HEX.test(form.brandColor) ? form.brandColor : DEFAULT_BRAND;

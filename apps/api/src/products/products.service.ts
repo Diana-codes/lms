@@ -89,6 +89,60 @@ export class ProductsService {
     });
   }
 
+  /**
+   * The public loan catalogue for the company's website: what anyone may see
+   * before signing in. A worked example per product shows the instalment and
+   * the APR (the full cost, fees included) for a typical amount and term.
+   */
+  async catalogue() {
+    const products = await this.prisma.product.findMany({
+      where: { status: 'PUBLISHED' },
+      orderBy: { minAmount: 'asc' },
+    });
+    return products.map((p) => {
+      const terms = productTerms(p);
+      // A typical size: the geometric middle of the range (RWF 5M for 0.5–50M).
+      const amount = roundExample(
+        BigInt(Math.round(Math.sqrt(Number(p.minAmount) * Number(p.maxAmount)))),
+      );
+      const termMonths = Math.max(
+        p.minTermMonths,
+        Math.min(p.maxTermMonths, Math.round((p.minTermMonths + p.maxTermMonths) / 2)),
+      );
+      let example = null;
+      try {
+        const q = quoteFor({ amount, termMonths, terms, disbursedOn: kigaliDate() });
+        example = {
+          amount,
+          termMonths,
+          instalment: q.instalment,
+          instalmentCount: q.rows.length,
+          totalToRepay: q.totalRepayable,
+          aprBps: q.aprBps,
+        };
+      } catch {
+        // A product whose terms cannot be quoted is still listed, without the example.
+      }
+      return {
+        code: p.code,
+        name: p.name,
+        shortName: p.shortName,
+        kind: p.kind,
+        description: p.description,
+        minAmount: p.minAmount,
+        maxAmount: p.maxAmount,
+        minTermMonths: p.minTermMonths,
+        maxTermMonths: p.maxTermMonths,
+        rateBps: terms.rateBps,
+        ratePeriod: terms.ratePeriod,
+        interestMethod: terms.interestMethod,
+        frequency: terms.frequency,
+        requiredDocuments: p.requiredDocuments,
+        example,
+      };
+    });
+  }
+
   /** Every product, for the products screen. */
   async all() {
     const products = await this.prisma.product.findMany({
@@ -305,4 +359,12 @@ export class ProductsService {
       ...meta,
     });
   }
+}
+
+/** Example amounts read better in round figures: 2 significant digits (at least 50,000 RWF). */
+function roundExample(amount: bigint): bigint {
+  let step = 1n;
+  while (amount / step >= 100n) step *= 10n;
+  const r = ((amount + step / 2n) / step) * step;
+  return r < 50_000n ? 50_000n : r;
 }

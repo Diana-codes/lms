@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { portalApi } from '@/lib/portal/api';
+import { takeApplyProduct } from '@/lib/portal/apply-intent';
 import { usePortalI18n } from '@/lib/portal/i18n';
 import type { PortalApplyOptions, PortalQuote } from '@/lib/portal/types';
 import { PortalNav } from '../../portal-nav';
@@ -44,7 +45,9 @@ export default function PortalApplyPage() {
     portalApi<PortalApplyOptions>('/app/apply/options')
       .then((o) => {
         setOptions(o);
-        const product = o.products[0];
+        // A product chosen on the website comes first, if it is still offered.
+        const wanted = takeApplyProduct();
+        const product = o.products.find((p) => p.code === wanted) ?? o.products[0];
         if (!product) return;
         setProductCode(product.code);
         const max = o.preApprovedLimit ? BigInt(o.preApprovedLimit) : BigInt(product.maxAmount);

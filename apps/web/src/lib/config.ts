@@ -4,6 +4,9 @@ export const PRODUCT_NAME = 'Kora Lend';
 /** Server-side only: where the API lives. The browser uses /api instead. */
 export const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
+/** The lender's public website, linked from the sign-in pages. Optional. */
+export const SITE_URL = process.env.SITE_URL?.replace(/\/$/, '') || null;
+
 /** Companies are reached at <slug>.<APP_BASE_DOMAIN>, e.g. demo.localhost:3000. */
 export const APP_BASE_DOMAIN = (process.env.APP_BASE_DOMAIN ?? 'localhost').toLowerCase();
 

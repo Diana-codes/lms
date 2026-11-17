@@ -3,8 +3,10 @@
 import { formatRwf, translateApiMessage } from '@kora/core';
 import { Button, Money, Pill } from '@kora/ui';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { portalApi } from '@/lib/portal/api';
+import { pendingApplyProduct } from '@/lib/portal/apply-intent';
 import { usePortalI18n } from '@/lib/portal/i18n';
 import type { PortalHome } from '@/lib/portal/types';
 import { PortalNav } from '../../portal-nav';
@@ -15,6 +17,12 @@ export default function PortalHomePage() {
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Came from "Apply" on a product on the website: carry on to the form.
+  useEffect(() => {
+    if (pendingApplyProduct()) router.replace('/portal/apply');
+  }, [router]);
 
   const load = useCallback(async () => {
     try {

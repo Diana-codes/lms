@@ -32,6 +32,12 @@ const schema = z.object({
     .transform((v) => v.toLowerCase()),
   /** Development and tests only: the company for requests that name none. */
   DEFAULT_COMPANY_SLUG: optional,
+  /**
+   * Single-company mode: every request is for this company, in any
+   * environment. One lender on its own domain (Bridge to Finance today);
+   * leave empty to serve many companies by subdomain.
+   */
+  COMPANY_SLUG: optional,
   JWT_ACCESS_SECRET: base64Bytes(32, 'JWT_ACCESS_SECRET'),
   PII_ENCRYPTION_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, {
     message: 'PII_ENCRYPTION_KEY must be exactly 32 bytes, base64-encoded',

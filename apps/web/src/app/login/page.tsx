@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCompany, PRODUCT_NAME } from '@/lib/company';
+import { SITE_URL } from '@/lib/config';
 import { serverApi } from '@/lib/server-api';
 import type { Me } from '@/lib/types';
 import { LoginForm } from './login-form';
@@ -31,7 +32,11 @@ export default async function LoginPage({
       <section className="flex flex-[1_1_360px] flex-col justify-between gap-10 bg-forest p-8 text-white md:p-12">
         <div className="flex items-center gap-2.5">
           {company?.logoUrl ? (
-            <img src={company.logoUrl} alt="" className="size-8 rounded-[9px] object-contain" />
+            <img
+              src={company.logoUrl}
+              alt=""
+              className="size-8 rounded-[9px] bg-white object-contain p-0.5"
+            />
           ) : (
             <div
               aria-hidden="true"
@@ -57,6 +62,14 @@ export default async function LoginPage({
             <a href="/portal" className="text-lime underline-offset-2 hover:underline">
               Borrower portal
             </a>
+          ) : null}
+          {SITE_URL ? (
+            <>
+              {' · '}
+              <a href={SITE_URL} className="text-lime underline-offset-2 hover:underline">
+                Website
+              </a>
+            </>
           ) : null}
         </p>
       </section>

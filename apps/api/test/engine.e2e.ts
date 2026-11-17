@@ -223,6 +223,23 @@ describe('products', () => {
     expect(res.body.netDisbursed).toBe('966400'); // less 20,000 + 3,600 VAT + 10,000 insurance
     expect(res.body.aprBps).toBeGreaterThan(2400);
   });
+
+  it('lists published products for the public website, with no sign-in', async () => {
+    const res = await http().get('/products/catalogue').expect(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=60');
+    const mine = res.body.find((p: { code: string }) => p.code === PRODUCT);
+    expect(mine).toMatchObject({ name: expect.any(String), frequency: 'MONTHLY' });
+    expect(mine.example).toMatchObject({ instalment: expect.stringMatching(/^\d+$/) });
+    expect(mine.example.aprBps).toBeGreaterThan(0);
+    // Only what a visitor may see: no approval limits or internal settings.
+    expect(mine).not.toHaveProperty('secondApprovalAbove');
+    expect(mine).not.toHaveProperty('terms');
+    const statuses = await prisma.product.findMany({
+      where: { code: { in: res.body.map((p: { code: string }) => p.code) } },
+      select: { status: true },
+    });
+    expect(new Set(statuses.map((s) => s.status))).toEqual(new Set(['PUBLISHED']));
+  });
 });
 
 describe('disbursing under the engine', () => {
@@ -460,8 +477,7 @@ describe('interest accrual', () => {
     expect(rows.every((r) => r.interestAccrued === 0n)).toBe(true);
 
     // Cure: pay the overdue instalment so DPD returns to current, then accrue.
-    const overdue =
-      first.penaltyDue + first.feeDue + first.interestDue + first.principalDue;
+    const overdue = first.penaltyDue + first.feeDue + first.interestDue + first.principalDue;
     await pay(code, overdue).expect(200);
     const resumed = await runAsCompany(E2E_COMPANY_ID, () => jobs.accrueInterest(today));
     expect(resumed.resumed).toBeGreaterThanOrEqual(1);

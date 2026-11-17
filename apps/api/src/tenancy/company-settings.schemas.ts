@@ -7,11 +7,20 @@ export const optionalText = (max: number) => z.string().trim().max(max).nullable
 /** BNR 59/2023 institution type — drives DPD bands for classification. */
 export const creditClassProfile = z.enum(['COMPANY', 'COOPERATIVE']);
 
-/** A logo must be an https address, so the console never loads it over plain http. */
+/**
+ * A logo is an https address, so the console never loads it over plain http,
+ * or a file the console itself serves, such as /brand/logo.svg.
+ */
 export const logoUrl = z
-  .url()
+  .string()
+  .trim()
   .max(500)
-  .refine((v) => v.startsWith('https://'), 'Use an https:// address');
+  .refine(
+    (v) =>
+      /^\/brand\/[\w.-]+\.(svg|png|jpe?g|webp)$/.test(v) ||
+      (z.url().safeParse(v).success && v.startsWith('https://')),
+    'Use an https:// address',
+  );
 
 /** Provider settings: each value is set, or removed with null; absent ones stay as they are. */
 export const secretsSchema = z

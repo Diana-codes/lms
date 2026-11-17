@@ -58,6 +58,7 @@ const EN = {
   'nav.profile': 'Profile',
   'nav.label': 'Borrower',
   'portal.subtitle': 'Borrower portal',
+  'portal.website': 'Website',
 
   // ── sign-in ──
   'signin.taglineWeb': 'Check your loan, pay with MoMo, or apply — sign in with your phone.',
@@ -311,6 +312,7 @@ const RW: Record<MessageKey, string> = {
   'nav.profile': 'Konti',
   'nav.label': 'Umukiriya',
   'portal.subtitle': 'Urubuga rw’abakiriya',
+  'portal.website': 'Urubuga rwacu',
 
   'signin.taglineWeb':
     'Reba inguzanyo yawe, wishyure na MoMo, cyangwa usabe inguzanyo — injira ukoresheje telefone yawe.',

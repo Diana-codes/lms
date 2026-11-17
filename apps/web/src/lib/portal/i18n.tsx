@@ -21,6 +21,8 @@ import { hasPortalSession, PortalApiError, portalApi } from './api';
  * changing it saves it on their account so SMS follow the same choice.
  */
 const STORAGE_KEY = 'kl_borrower_language';
+/** A language named by a link from the website, until the borrower signs in. */
+const LINK_KEY = 'kl_borrower_language_link';
 
 interface PortalI18n {
   lang: BorrowerLanguage;
@@ -70,6 +72,20 @@ export function PortalLanguageProvider({
   const [lang, setLang] = useState<BorrowerLanguage>(initial);
 
   useEffect(() => {
+    // A link from the website can name the language (?lang=rw); it wins once.
+    const fromLink = new URLSearchParams(window.location.search).get('lang');
+    if (fromLink === 'rw' || fromLink === 'en') {
+      const next = borrowerLanguage(fromLink.toUpperCase());
+      setLang(next);
+      remember(next);
+      // Kept for this visit, so it is saved on the account once they sign in.
+      try {
+        sessionStorage.setItem(LINK_KEY, next);
+      } catch {
+        // storage blocked: the account's language applies after sign-in
+      }
+      return;
+    }
     const saved = remembered();
     if (saved) setLang(saved);
   }, []);
@@ -80,6 +96,23 @@ export function PortalLanguageProvider({
 
   const adopt = useCallback((value: string | null | undefined) => {
     if (!value) return;
+    let chosen: string | null = null;
+    try {
+      chosen = sessionStorage.getItem(LINK_KEY);
+      sessionStorage.removeItem(LINK_KEY);
+    } catch {
+      // no choice from a link
+    }
+    // The language picked on the website wins over the account's, and is saved on it.
+    if (chosen && borrowerLanguage(chosen) !== borrowerLanguage(value) && hasPortalSession()) {
+      const next = borrowerLanguage(chosen);
+      setLang(next);
+      remember(next);
+      portalApi('/app/profile/language', { method: 'POST', body: { language: next } }).catch(
+        () => undefined,
+      );
+      return;
+    }
     const next = borrowerLanguage(value);
     setLang(next);
     remember(next);

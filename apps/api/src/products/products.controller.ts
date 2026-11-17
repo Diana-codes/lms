@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post, Put, Req } from '@nestjs/common';
 import {
   COMPONENTS,
   FEE_TIMINGS,
@@ -15,7 +15,7 @@ import {
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth.types';
-import { CurrentUser, Roles } from '../auth/decorators';
+import { CurrentUser, Public, Roles } from '../auth/decorators';
 import { requestMeta } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import {
@@ -37,6 +37,14 @@ export class ProductsController {
   @Get()
   list() {
     return this.products.published();
+  }
+
+  /** The loan catalogue for the public website: published products only, no sign-in. */
+  @Public()
+  @Get('catalogue')
+  @Header('Cache-Control', 'public, max-age=60')
+  catalogue() {
+    return this.products.catalogue();
   }
 
   /** Every product with its terms, for the products screen. */

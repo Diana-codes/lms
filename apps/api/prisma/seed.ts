@@ -30,6 +30,7 @@ import {
   type LoanTerms,
   RW_DEFAULT_TERMS,
   type Schedule,
+  annualRateBps,
 } from '@kora/core';
 
 /** Seeded products: Rwanda defaults at the product's rate, with a 1.5% processing fee (+18% VAT). */
@@ -81,11 +82,21 @@ if (staffPassword.length < MIN_PASSWORD_LENGTH) {
 const prisma = new PrismaClient({
   adapter: new PrismaPg(new TenantPool({ connectionString: env.DATABASE_URL }, currentCompanyId)),
 });
-/** The sample data belongs to this company, reached at demo.<APP_BASE_DOMAIN>. */
+/**
+ * The sample data belongs to Bridge to Finance, reached at bf.<APP_BASE_DOMAIN>
+ * (or at any address in single-company mode, COMPANY_SLUG=bf).
+ */
 const DEMO_COMPANY = {
   id: '019a7a00-0000-7000-8000-00000000d3e0',
-  slug: 'demo',
-  name: 'Demo Lender',
+  slug: 'bf',
+  name: 'Bridge to Finance',
+  brandName: 'Bridge to Finance',
+};
+/** Bridge to Finance's colours and mark (apps/web/public/brand). */
+const DEMO_BRAND = {
+  brandColor: '#173C2E',
+  accentColor: '#A2E8B8',
+  logoUrl: '/brand/bf-mark-green.svg',
 };
 const PLATFORM_ADMIN_EMAIL = 'platform@koralend.test';
 const crypto = new PiiCrypto(env.PII_ENCRYPTION_KEY, env.PII_HASH_KEY);
@@ -226,7 +237,7 @@ interface ProductSeed {
 const PRODUCTS: ProductSeed[] = [
   {
     code: 'SME-WC',
-    name: 'SME working capital',
+    name: 'SME business loan',
     shortName: 'SME',
     kind: 'SME',
     rateBps: 1700,
@@ -242,8 +253,8 @@ const PRODUCTS: ProductSeed[] = [
   },
   {
     code: 'ASSET',
-    name: 'Asset finance',
-    shortName: 'Asset finance',
+    name: 'Asset financing',
+    shortName: 'Asset financing',
     kind: 'ASSET',
     rateBps: 1600,
     terms: [24, 36, 48],
@@ -290,8 +301,8 @@ const PRODUCTS: ProductSeed[] = [
   },
   {
     code: 'SALARY',
-    name: 'Salary advance',
-    shortName: 'Salary advance',
+    name: 'Salary loan',
+    shortName: 'Salary loan',
     kind: 'PERSONAL',
     rateBps: 1200,
     terms: [3, 4, 6],
@@ -306,6 +317,82 @@ const PRODUCTS: ProductSeed[] = [
   },
 ];
 const productByCode = new Map(PRODUCTS.map((p) => [p.code, p]));
+
+/** What each product is for, as the website and the apps show it. */
+const PRODUCT_DESCRIPTIONS: Record<string, string> = {
+  'SME-WC': 'Stock, equipment and working capital for traders and small businesses.',
+  ASSET: 'Buy a vehicle or equipment, with the asset itself as security.',
+  AGRI: 'Seeds, fertiliser and inputs for the season, repaid after harvest.',
+  PERSONAL: 'For school fees, a home repair or a family need.',
+  SALARY: 'For salaried employees, repaid from salary each month.',
+  'GRP-01': 'Members of a group of 5 to 20 guarantee each other, repaying weekly.',
+  'EMG-01': 'Quick cash for existing customers with a good record, over 1 to 3 months.',
+};
+
+/**
+ * Two more products from the Bridge to Finance catalogue (PRD Appendix A.1).
+ * They have no loan history in the sample data yet.
+ */
+const EXTRA_PRODUCTS: Array<{
+  code: string;
+  name: string;
+  shortName: string;
+  kind: ProductKind;
+  terms: LoanTerms;
+  minTerm: number;
+  maxTerm: number;
+  min: bigint;
+  max: bigint;
+  autoScore: number | null;
+  autoMax: bigint | null;
+  secondAbove: bigint;
+}> = [
+  {
+    code: 'GRP-01',
+    name: 'Group solidarity loan',
+    shortName: 'Group',
+    kind: 'SME',
+    terms: {
+      ...RW_DEFAULT_TERMS,
+      interestMethod: 'FLAT',
+      rateBps: 200,
+      ratePeriod: 'MONTH',
+      frequency: 'WEEKLY',
+      overpayment: 'PAY_AHEAD',
+      roundingUnit: 100,
+      fees: [{ ...RW_DEFAULT_TERMS.fees[0]!, value: 100 }],
+      penalty: { method: 'FIXED_PER_INSTALMENT', graceDays: 3, amount: 1000, bps: 0, capBps: null },
+    },
+    minTerm: 3,
+    maxTerm: 12,
+    min: 50_000n,
+    max: 1_000_000n,
+    autoScore: null,
+    autoMax: null,
+    secondAbove: 2_000_000n,
+  },
+  {
+    code: 'EMG-01',
+    name: 'Emergency loan',
+    shortName: 'Emergency',
+    kind: 'PERSONAL',
+    terms: {
+      ...RW_DEFAULT_TERMS,
+      rateBps: 300,
+      ratePeriod: 'MONTH',
+      roundingUnit: 100,
+      fees: [{ ...RW_DEFAULT_TERMS.fees[0]!, basis: 'FIXED', value: 5000 }],
+      penalty: { method: 'PERCENT_OF_OVERDUE', graceDays: 3, amount: 0, bps: 500, capBps: null },
+    },
+    minTerm: 1,
+    maxTerm: 3,
+    min: 50_000n,
+    max: 1_000_000n,
+    autoScore: 700,
+    autoMax: 500_000n,
+    secondAbove: 2_000_000n,
+  },
+];
 
 /** Targets from the Overview and Reports designs. */
 const TARGET = {
@@ -1994,6 +2081,7 @@ async function main(): Promise<void> {
     { ...DEMO_COMPANY, aiFeatures: true, autoApprove: true },
     { crypto, webhookToken: process.env.WEBHOOK_TOKEN?.trim() || undefined },
   );
+  await prisma.company.update({ where: { id: company.id }, data: DEMO_BRAND });
   // Provider keys that used to live in .env become the demo company's own secrets.
   const legacyKeys: Array<[SecretKey, string | undefined]> = [
     [SECRET.momoCollectionKey, process.env.MOMO_COLLECTION_SUBSCRIPTION_KEY],
@@ -2074,6 +2162,35 @@ async function seedCompany(passwordHash: string): Promise<void> {
         autoApproveMaxAmount: p.autoMax,
         secondApprovalAbove: p.secondAbove,
         requiredDocuments: REQUIRED_DOCS[p.kind],
+        description: PRODUCT_DESCRIPTIONS[p.code] ?? null,
+      },
+    });
+  }
+  for (const p of EXTRA_PRODUCTS) {
+    const limits = {
+      minAmount: p.min.toString(),
+      maxAmount: p.max.toString(),
+      minTermMonths: p.minTerm,
+      maxTermMonths: p.maxTerm,
+    };
+    await prisma.product.create({
+      data: {
+        code: p.code,
+        name: p.name,
+        shortName: p.shortName,
+        kind: p.kind,
+        annualRateBps: annualRateBps(p.terms),
+        minTermMonths: p.minTerm,
+        maxTermMonths: p.maxTerm,
+        minAmount: p.min,
+        maxAmount: p.max,
+        terms: p.terms as object,
+        versions: { create: { version: 1, terms: p.terms as object, limits } },
+        autoApproveMinScore: p.autoScore,
+        autoApproveMaxAmount: p.autoMax,
+        secondApprovalAbove: p.secondAbove,
+        requiredDocuments: REQUIRED_DOCS[p.kind],
+        description: PRODUCT_DESCRIPTIONS[p.code] ?? null,
       },
     });
   }
@@ -2193,7 +2310,7 @@ Portfolio as seeded:
   DPD buckets            ${buckets.CURRENT} / ${buckets.DPD_1_30} / ${buckets.DPD_31_90} / ${buckets.DPD_90_PLUS}   (design: 1021 / 84 / 25 / 12)
   LN-0418-2026           instalment ${formatRwf(aline.schedule.instalment)}, outstanding ${formatRwf(aline.outstanding)}
 
-Company: ${DEMO_COMPANY.name}, at http://${DEMO_COMPANY.slug}.${env.APP_BASE_DOMAIN}:3000
+Company: ${DEMO_COMPANY.name}, at http://localhost:3000 (COMPANY_SLUG or DEFAULT_COMPANY_SLUG=${DEMO_COMPANY.slug})
 
 Staff sign-ins (password: SEED_STAFF_PASSWORD in apps/api/.env):
 ${STAFF.map((s) => `  ${s.role.padEnd(18)} ${s.email}`).join('\n')}

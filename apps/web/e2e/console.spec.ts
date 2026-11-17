@@ -133,6 +133,7 @@ test.describe('console shell', () => {
     );
   });
 
+  // The seeded company is Bridge to Finance: its brand colour and accent come from company settings.
   test('uses the brand fonts and colours', async ({ page }) => {
     await signIn(page, STAFF.manager);
     const heading = page.getByRole('heading', { name: 'Portfolio overview' });
@@ -141,11 +142,11 @@ test.describe('console shell', () => {
     await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(244, 245, 241)');
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCSS(
       'background-color',
-      'rgb(14, 59, 46)',
+      'rgb(23, 60, 46)',
     );
     await expect(page.getByRole('link', { name: 'Overview' })).toHaveCSS(
       'background-color',
-      'rgb(198, 244, 50)',
+      'rgb(162, 232, 184)',
     );
   });
 

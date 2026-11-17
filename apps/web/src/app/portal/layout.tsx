@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { brandStyle, getCompany, PRODUCT_NAME } from '@/lib/company';
+import { SITE_URL } from '@/lib/config';
 import { PortalLanguageProvider, T } from '@/lib/portal/i18n';
 
 export const metadata: Metadata = { title: { default: 'Borrower', template: '%s · Borrower' } };
@@ -37,6 +38,14 @@ export default async function PortalRootLayout({ children }: { children: React.R
                 <T k="portal.subtitle" />
               </p>
             </div>
+            {SITE_URL ? (
+              <a
+                href={SITE_URL}
+                className="ml-auto shrink-0 text-xs font-semibold text-forest underline-offset-2 hover:underline"
+              >
+                <T k="portal.website" />
+              </a>
+            ) : null}
           </header>
           <div id="portal-main" className="flex flex-1 flex-col">
             {children}

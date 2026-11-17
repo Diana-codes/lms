@@ -69,7 +69,7 @@ test.describe('reports', () => {
     await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible();
     const summary = page.getByRole('region', { name: 'Summary' });
     await expect(summary.getByText('RWF 2.48B')).toBeVisible();
-    await expect(page.getByText('SME working capital', { exact: true })).toBeVisible();
+    await expect(page.getByText('SME business loan', { exact: true })).toBeVisible();
     // 312 seeded loans, plus any an earlier test in the same run disbursed.
     await expect(page.getByRole('row').filter({ hasText: 'Kevin N.' })).toContainText(
       /Kevin N\.31\d/,
