@@ -33,6 +33,7 @@ import { CHANNEL_ACCOUNT } from '../ledger/accounts';
 import { LedgerService } from '../ledger/ledger.service';
 import { ScoringService } from '../ai/scoring.service';
 import { MoneyService } from '../money/money.service';
+import { AgreementsService } from '../agreements/agreements.service';
 import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -58,6 +59,7 @@ const cardInclude = {
   decidedBy: { select: { id: true, firstName: true, lastName: true } },
   secondApprover: { select: { id: true, firstName: true, lastName: true } },
   creditScores: { orderBy: { createdAt: 'desc' as const }, take: 1 },
+  agreement: { select: { channel: true, acceptedAt: true, terms: true } },
   loan: {
     select: {
       code: true,
@@ -102,6 +104,9 @@ function toCard(app: ApplicationRow) {
     netDisbursed: quote.netDisbursed,
     totalFees: quote.totalFees,
     aprBps: quote.aprBps,
+    agreement: app.agreement
+      ? { channel: app.agreement.channel, acceptedAt: app.agreement.acceptedAt }
+      : null,
     score: score?.value ?? null,
     // Stored, advisory output. A person makes every decision.
     ai: score
@@ -177,6 +182,7 @@ export class ApplicationsService {
     private readonly money: MoneyService,
     private readonly scoring: ScoringService,
     private readonly documents: DocumentsService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   /** The Key Facts Statement for an application, as if paid out today. */
@@ -551,6 +557,8 @@ export class ApplicationsService {
     assertSeparateDisburser(app, user);
 
     const today = kigaliDate();
+    // No signed agreement, no payout; and the loan follows what was signed.
+    this.agreements.assertSignedMatches(app, today);
     const quote = applicationQuote(app, today);
 
     const loanCode = await this.prisma.$transaction(async (tx) => {
@@ -609,7 +617,12 @@ export class ApplicationsService {
           actorId: user.id,
           entityType: 'Loan',
           entityId: newCode,
-          metadata: { application: app.code, amount: app.amount, channel: input.channel },
+          metadata: {
+            application: app.code,
+            amount: app.amount,
+            fee: quote.totalFees,
+            channel: input.channel,
+          },
           ...meta,
         },
         tx,
@@ -644,8 +657,9 @@ export class ApplicationsService {
       if (failed) return { application: await this.get(code), ...failed };
       throw new ConflictException(`Already disbursed as ${app.loan.code}`);
     }
-
     const today = kigaliDate();
+    // No signed agreement, no payout; and the loan follows what was signed.
+    this.agreements.assertSignedMatches(app, today);
     const quote = applicationQuote(app, today);
     const referenceId = randomUUID();
 
@@ -691,7 +705,12 @@ export class ApplicationsService {
           actorId: user.id,
           entityType: 'Loan',
           entityId: newCode,
-          metadata: { application: app.code, amount: app.amount, channel: 'MTN_MOMO' },
+          metadata: {
+            application: app.code,
+            amount: app.amount,
+            fee: quote.totalFees,
+            channel: 'MTN_MOMO',
+          },
           ...meta,
         },
         tx,

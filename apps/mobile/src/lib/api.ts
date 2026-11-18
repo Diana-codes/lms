@@ -1,4 +1,4 @@
-import { File, UploadType } from 'expo-file-system';
+import { File, Paths, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 /**
@@ -159,6 +159,43 @@ export async function uploadFile<T>(
     throw new ApiError(res.status, messageOfText(res.status, res.body));
   return JSON.parse(res.body) as T;
 }
+
+/**
+ * Download a file the borrower is allowed to see (their loan agreement, a
+ * document they sent) and open it in the phone's viewer, where they can
+ * zoom, save or share it.
+ */
+export async function openFile(
+  path: string,
+  fileName: string,
+  mimeType = 'application/pdf',
+): Promise<void> {
+  const download = async () => {
+    const token = await SecureStore.getItemAsync(ACCESS);
+    return File.downloadFileAsync(`${API_URL}${path}`, new File(Paths.cache, fileName), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      idempotent: true,
+    });
+  };
+  let file: File;
+  try {
+    file = await download();
+  } catch {
+    // Most often an expired session: refresh once and try again.
+    if (!(await refresh())) throw new ApiError(401, 'Please sign in again.');
+    try {
+      file = await download();
+    } catch (err) {
+      console.warn(`Download of ${path} failed:`, err);
+      throw new ApiError(0, 'Could not download the file. Check your connection and try again.');
+    }
+  }
+  if (await File.canPreview(file)) await File.preview(file, { mimeType });
+  else throw new ApiError(0, 'This phone cannot open the file here. Ask your officer for a copy.');
+}
+
+/** A loan agreement or other PDF. */
+export const openPdf = (path: string, fileName: string) => openFile(path, fileName);
 
 export const errorMessage = (err: unknown) =>
   err instanceof ApiError ? err.message : 'Something went wrong. Try again.';

@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { addMonths, calcInstalment, kigaliDate, legacyTerms } from '@kora/core';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AGREEMENT_VERSION } from '../src/agreements/template';
 import { AppModule } from '../src/app.module';
 import { setupApp } from '../src/app.setup';
 import { hashPassword } from '../src/auth/password';
@@ -81,6 +82,10 @@ async function borrowerWithLoan(
     .post(`/applications/${created.body.code}/approve`)
     .set('Cookie', staffCookies)
     .expect(200);
+  await http()
+    .post(`/applications/${created.body.code}/agreement`)
+    .set('Cookie', staffCookies)
+    .expect(200);
   const res = await http()
     .post(`/applications/${created.body.code}/disburse`)
     .set('Cookie', managerCookies)
@@ -152,17 +157,17 @@ afterAll(async () => {
 });
 
 describe('sign-in by phone', () => {
-  it('sends a code only to known numbers, but answers the same either way', async () => {
-    const unknown = await http()
-      .post('/app/auth/request-code')
-      .send({ phone: phone() })
-      .expect(200);
+  it('answers the same for known and new numbers', async () => {
+    const number = phone();
+    const unknown = await http().post('/app/auth/request-code').send({ phone: number }).expect(200);
     expect(unknown.body.otpRequired).toBe(true);
     expect(unknown.body.sent).toBe(true);
     expect(unknown.body.phone).toMatch(/^\+250 78• ••• \d{3}$/);
-    expect(
-      await prisma.otpChallenge.count({ where: { phone: `+250${unknown.body.phone.slice(-3)}` } }),
-    ).toBe(0);
+    // A new number gets a code to sign up with (see register.e2e.ts).
+    const challenge = await prisma.otpChallenge.findFirstOrThrow({
+      where: { phone: `+250${number.slice(1)}` },
+    });
+    expect(challenge.signup).toBe(true);
     await http().post('/app/auth/request-code').send({ phone: '12345' }).expect(400);
   });
 
@@ -429,6 +434,7 @@ describe('applying in the app', () => {
         nationalId,
         shareMomoHistory: true,
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
         agreedBureau: true,
         idPhotoKey: idUpload.body.key,
       })
@@ -479,6 +485,7 @@ describe('applying in the app', () => {
         termMonths: 6,
         purpose: 'Stock',
         agreedTerms: true,
+        agreementVersion: AGREEMENT_VERSION,
       })
       .expect(409);
     const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
@@ -497,6 +504,7 @@ describe('applying in the app', () => {
       termMonths: 6,
       purpose: 'Stock',
       agreedTerms: true,
+      agreementVersion: AGREEMENT_VERSION,
       nationalId,
     };
     await http()
@@ -554,9 +562,7 @@ describe('Kinyarwanda for borrowers', () => {
     const number = phone();
     const { loanCode, borrowerCode } = await borrowerWithLoan(number);
     const token = await signInBorrower(number);
-    expect((await http().get('/app/home').set(bearer(token)).expect(200)).body.language).toBe(
-      'EN',
-    );
+    expect((await http().get('/app/home').set(bearer(token)).expect(200)).body.language).toBe('EN');
 
     await http()
       .post('/app/profile/language')

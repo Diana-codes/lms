@@ -299,6 +299,7 @@ export interface ApplicationCard {
   netDisbursed: string;
   totalFees: string;
   aprBps: number;
+  agreement: { channel: 'APP' | 'BRANCH'; acceptedAt: string } | null;
   score: number | null;
   ai: {
     tone: 'ok' | 'warn' | 'flag';
@@ -471,6 +472,13 @@ export interface LoanDetail {
     overpayment: LoanTerms['overpayment'];
     payoffInterest: LoanTerms['payoff']['interest'];
   };
+  agreement: {
+    applicationCode: string;
+    channel: 'APP' | 'BRANCH';
+    acceptedAt: string;
+    version: string;
+  } | null;
+  penaltiesOwed: string;
   figures: {
     outstandingPrincipal: string;
     totalRepaid: string;
@@ -536,6 +544,8 @@ export interface BorrowerListItem {
   score: number | null;
   activeLoans: number;
   officerName: string | null;
+  /** BRANCH: added by staff; APP: signed up in the borrower app. */
+  source: 'BRANCH' | 'APP';
 }
 
 export interface BorrowerProfile {
@@ -565,6 +575,8 @@ export interface BorrowerProfile {
     file: 'image' | 'pdf' | null;
     /** Still waiting for an officer to verify or reject it. */
     reviewable: boolean;
+    /** This person may put the review back to pending (a wrong click). */
+    canUndo: boolean;
     /** Why it was rejected, as the borrower was told. */
     reason: string | null;
   }>;
@@ -575,7 +587,9 @@ export interface BorrowerProfile {
     sector: string | null;
     monthlyRevenue: string | null;
     officerName: string | null;
+    officerId: string | null;
   };
+  source: 'BRANCH' | 'APP';
   aiSummary: {
     text: string;
     reasons: Array<{ kind: 'why' | 'watch'; text: string }>;

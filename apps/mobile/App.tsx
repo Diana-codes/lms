@@ -6,10 +6,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hasSession } from './src/lib/api';
-import type { Home as HomeData, Tab } from './src/lib/types';
+import type { Home as HomeData, RegistrationNeeded, Tab } from './src/lib/types';
 import { Apply } from './src/screens/Apply';
 import { DocumentsScreen } from './src/screens/Documents';
 import { Home, type HomeGo } from './src/screens/Home';
+import { Register } from './src/screens/Register';
 import { SignIn } from './src/screens/SignIn';
 import {
   InsightsTab,
@@ -84,6 +85,9 @@ export default function App() {
     SpaceGrotesk_600SemiBold,
   });
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  // A new number that passed the SMS code and is filling in the sign-up form.
+  const [registration, setRegistration] = useState<RegistrationNeeded | null>(null);
+  const [signInNotice, setSignInNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('home');
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [support, setSupport] = useState(false);
@@ -114,15 +118,39 @@ export default function App() {
   if (!signedIn) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={{ flex: 1, backgroundColor: c.forest }} edges={['top']}>
-          <StatusBar style="light" />
-          <SignIn
-            onSignedIn={() => {
-              setTab('home');
-              setSignedIn(true);
-            }}
-          />
-        </SafeAreaView>
+        {registration ? (
+          <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }}>
+            <StatusBar style="dark" />
+            <Register
+              registrationToken={registration.registrationToken}
+              phone={registration.phone}
+              onDone={() => {
+                setRegistration(null);
+                setSignInNotice(null);
+                setTab('home');
+                setSignedIn(true);
+                flash('Welcome to Kora Lend! Your account is open.');
+              }}
+              onCancel={(message) => {
+                setRegistration(null);
+                setSignInNotice(message ?? null);
+              }}
+            />
+          </SafeAreaView>
+        ) : (
+          <SafeAreaView style={{ flex: 1, backgroundColor: c.forest }} edges={['top']}>
+            <StatusBar style="light" />
+            <SignIn
+              notice={signInNotice}
+              onRegister={setRegistration}
+              onSignedIn={() => {
+                setSignInNotice(null);
+                setTab('home');
+                setSignedIn(true);
+              }}
+            />
+          </SafeAreaView>
+        )}
       </SafeAreaProvider>
     );
   }

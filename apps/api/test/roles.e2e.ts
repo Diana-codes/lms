@@ -50,6 +50,7 @@ async function approvedApplication(by: Agent) {
   const code = created.body.code as string;
   await post(by, `/applications/${code}/move`, { to: 'UNDER_REVIEW' }).expect(200);
   await post(staff.manager, `/applications/${code}/approve`).expect(200);
+  await post(staff.manager, `/applications/${code}/agreement`).expect(200);
   return code;
 }
 

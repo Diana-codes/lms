@@ -105,6 +105,16 @@ export type ActivityKind = 'payment' | 'system' | 'disbursement' | 'restructure'
 const short = (u: { firstName: string; lastName: string } | null | undefined) =>
   u ? shortStaffName(u.firstName, u.lastName) : null;
 
+/** Late penalties still owed on the given instalments; restructuring waits until they are cleared. */
+function assertNoPenaltiesOwed(instalments: Array<{ penaltyDue: bigint; penaltyPaid: bigint }>) {
+  const owed = instalments.reduce((sum, i) => sum + i.penaltyDue - i.penaltyPaid, 0n);
+  if (owed > 0n) {
+    throw new ConflictException(
+      `Collect or waive the ${formatRwf(owed)} in late penalties before restructuring`,
+    );
+  }
+}
+
 @Injectable()
 export class LoansService {
   constructor(
@@ -198,6 +208,67 @@ export class LoansService {
 
   /** The Key Facts Statement under the loan's own terms, dated the day it was paid out. */
   /** The loan's id from its code, or 404. */
+  /**
+   * A manager waives late charges still owed on a loan, oldest instalment
+   * first: all of them, or `amount`. Late charges are income only when paid,
+   * so nothing is reversed in the ledger; the waiver is in the audit log.
+   */
+  async waiveLateCharges(
+    code: string,
+    input: { reason: string; amount?: bigint },
+    user: AuthUser,
+    meta: RequestMeta,
+  ) {
+    const { id } = await this.idFor(code);
+    const waived = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Loan" WHERE "id" = ${id}::uuid FOR UPDATE`;
+      const loan = await tx.loan.findUniqueOrThrow({
+        where: { id },
+        include: {
+          instalments: {
+            where: { supersededAt: null },
+            orderBy: [{ scheduleVersion: 'asc' }, { number: 'asc' }],
+          },
+        },
+      });
+      if (loan.status !== 'ACTIVE')
+        throw new ConflictException('Late charges can only be waived on an active loan');
+      const owed = loan.instalments.reduce((s, i) => s + i.penaltyDue - i.penaltyPaid, 0n);
+      if (owed <= 0n) throw new ConflictException('There are no late charges to waive');
+      const target = input.amount ?? owed;
+      if (target <= 0n || target > owed)
+        throw new BadRequestException(`You can waive up to ${formatRwf(owed)}`);
+      let left = target;
+      const parts: Array<{ instalment: number; amount: bigint }> = [];
+      for (const i of loan.instalments) {
+        if (left === 0n) break;
+        const open = i.penaltyDue - i.penaltyPaid;
+        if (open <= 0n) continue;
+        const part = open < left ? open : left;
+        // The day counted to stays, so the nightly run never charges it again.
+        await tx.scheduleInstalment.update({
+          where: { id: i.id },
+          data: { penaltyDue: { decrement: part } },
+        });
+        parts.push({ instalment: i.number, amount: part });
+        left -= part;
+      }
+      await this.audit.record(
+        {
+          action: 'loan.late_charges.waive',
+          actorId: user.id,
+          entityType: 'Loan',
+          entityId: code,
+          metadata: { amount: target, owedBefore: owed, reason: input.reason, parts },
+          ...meta,
+        },
+        tx,
+      );
+      return target;
+    });
+    return { waived };
+  }
+
   async idFor(code: string): Promise<{ id: string }> {
     const loan = await this.prisma.loan.findFirst({ where: { code }, select: { id: true } });
     if (!loan) throw new NotFoundException(`No loan ${code}`);
@@ -277,6 +348,12 @@ export class LoansService {
           },
         },
         smsMessages: { orderBy: { createdAt: 'desc' }, take: 5 },
+        application: {
+          select: {
+            code: true,
+            agreement: { select: { channel: true, acceptedAt: true, templateVersion: true } },
+          },
+        },
         contactLogs: {
           orderBy: { occurredAt: 'desc' },
           take: 5,
@@ -462,6 +539,15 @@ export class LoansService {
         overpayment: terms.overpayment,
         payoffInterest: terms.payoff.interest,
       },
+      agreement: loan.application?.agreement
+        ? {
+            applicationCode: loan.application.code,
+            channel: loan.application.agreement.channel,
+            acceptedAt: loan.application.agreement.acceptedAt,
+            version: loan.application.agreement.templateVersion,
+          }
+        : null,
+      penaltiesOwed: loan.instalments.reduce((sum, i) => sum + i.penaltyDue - i.penaltyPaid, 0n),
       figures: {
         outstandingPrincipal: outstanding,
         totalRepaid,
@@ -608,6 +694,7 @@ export class LoansService {
     }
     const remainingMonths = loan.instalments.length;
     if (remainingMonths === 0) throw new ConflictException('There is nothing left to restructure');
+    assertNoPenaltiesOwed(loan.instalments);
 
     const outstanding = await this.ledger.outstandingPrincipal(loan.id);
     const base = {
@@ -705,6 +792,7 @@ export class LoansService {
           const paid = loan.instalments.filter((i) => i.status === 'PAID');
           if (unpaid.length === 0)
             throw new ConflictException('There is nothing left to restructure');
+          assertNoPenaltiesOwed(unpaid);
 
           let principal = await this.ledger.outstandingPrincipal(loan.id, tx);
           // Accrued interest on instalments being replaced joins the principal

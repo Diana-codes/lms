@@ -54,6 +54,8 @@ async function disburse(amount = 1_000_000n): Promise<string> {
     200,
   );
   await send(staff.officer, 'post', `/applications/${code}/approve`).expect(200);
+  // Signed at a branch: no payout without a signed agreement.
+  await send(staff.officer, 'post', `/applications/${code}/agreement`).expect(200);
   const res = await send(staff.manager, 'post', `/applications/${code}/disburse`, {
     channel: 'BANK_TRANSFER',
   }).expect(200);
@@ -153,7 +155,9 @@ describe('BNR 59/2023 classification and provisioning', () => {
     expect(report.body.profile).toBe('COMPANY');
     expect(BigInt(report.body.requiredProvision)).toBeGreaterThan(0n);
     expect(BigInt(report.body.allowanceHeld)).toBe(BigInt(report.body.requiredProvision));
-    expect(report.body.buckets.find((b: { creditClass: string }) => b.creditClass === 'WATCH')).toBeTruthy();
+    expect(
+      report.body.buckets.find((b: { creditClass: string }) => b.creditClass === 'WATCH'),
+    ).toBeTruthy();
 
     const csv = await get(staff.manager, '/reports/classification.csv').expect(200);
     expect(csv.text).toContain('BNR 59/2023');

@@ -88,6 +88,11 @@ export type ChecklistState =
   | 'WAIVED';
 
 export interface ChecklistDoc {
+  /** The stored document, so the borrower can view or remove the file. */
+  id?: string;
+  /** False when there is no file to show, e.g. verified with NIDA. */
+  hasFile?: boolean;
+  mimeType?: string | null;
   type: DocumentType;
   status: DocumentStatus;
   expiresOn?: IsoDate | null;
@@ -100,6 +105,14 @@ export interface ChecklistItem {
   required: boolean;
   /** Why it was rejected, for the borrower to fix. */
   reason: string | null;
+  /** The latest document of this type, if one was sent. */
+  documentId: string | null;
+  /** The borrower can open the file they sent. */
+  hasFile: boolean;
+  /** What kind of file it is, to open it the right way. */
+  fileType: 'photo' | 'pdf' | null;
+  /** Not reviewed yet, so the borrower may still remove it. */
+  canRemove: boolean;
 }
 
 export interface Checklist {
@@ -142,12 +155,27 @@ export function documentChecklist(input: {
   };
 
   const required = [...new Set(input.required)];
+  const fileOf = (type: DocumentType) => {
+    const doc = latest.get(type);
+    return {
+      documentId: doc?.id ?? null,
+      hasFile: Boolean(doc?.id && doc.hasFile !== false),
+      fileType:
+        doc?.id && doc.hasFile !== false
+          ? doc.mimeType === 'application/pdf'
+            ? ('pdf' as const)
+            : ('photo' as const)
+          : null,
+      canRemove: Boolean(doc?.id && doc.status === 'PENDING' && stateOf(type) === 'PENDING'),
+    };
+  };
   const items: ChecklistItem[] = required.map((type) => ({
     type,
     state: stateOf(type),
     required: true,
     reason:
       latest.get(type)?.status === 'REJECTED' ? (latest.get(type)?.rejectionReason ?? null) : null,
+    ...fileOf(type),
   }));
   // Anything else the borrower has sent shows too, after the required ones.
   for (const type of DOCUMENT_TYPES) {
@@ -158,6 +186,7 @@ export function documentChecklist(input: {
       state: stateOf(type),
       required: false,
       reason: doc.status === 'REJECTED' ? (doc.rejectionReason ?? null) : null,
+      ...fileOf(type),
     });
   }
 

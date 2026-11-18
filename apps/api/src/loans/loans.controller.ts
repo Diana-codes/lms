@@ -36,6 +36,11 @@ const paymentSchema = z.object({
   externalRef: z.string().trim().max(60).optional(),
   idempotencyKey: z.uuid(),
 });
+const waiveSchema = z.object({
+  reason: z.string().trim().min(5, 'Say why the late charges are waived').max(300),
+  /** Leave out to waive every late charge still owed. */
+  amount: rwfString.optional(),
+});
 const restructureSchema = z.object({
   type: z.enum(['EXTEND_TERM', 'PAYMENT_HOLIDAY']),
   newTermMonths: z.number().int().min(1).max(360).optional(),
@@ -247,6 +252,20 @@ export class LoansController {
     @Req() req: Request,
   ) {
     return this.writeOffs.decide(id, body.approve, user, requestMeta(req));
+  }
+
+  // Waiving income is a manager's decision, and it is audited.
+  @Roles('MANAGER', 'ADMIN')
+  @Post('loans/:code/late-charges/waive')
+  @HttpCode(200)
+  async waiveLateCharges(
+    @Param('code', codeParam) code: string,
+    @Body(new ZodPipe(waiveSchema)) body: z.infer<typeof waiveSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    await this.loans.waiveLateCharges(code, body, user, requestMeta(req));
+    return this.loans.detail(code);
   }
 
   @Roles(...PAYMENT_ROLES)

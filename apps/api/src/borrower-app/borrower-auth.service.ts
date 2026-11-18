@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Inject,
@@ -9,9 +10,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { maskPhone, normaliseRwPhone } from '@kora/core';
+import {
+  BUSINESS_SECTORS,
+  REGISTRATION_CONSENT_VERSION,
+  REGISTRATION_PRIVACY_POINTS,
+  certainlyUnderAge,
+  maskPhone,
+  nationalIdBirthYear,
+  normaliseRwPhone,
+} from '@kora/core';
 import { AuditService } from '../audit/audit.service';
 import type { RequestMeta } from '../auth/auth.service';
+import { nextBorrowerCode } from '../common/codes';
+import { PiiCrypto } from '../common/pii-crypto';
 import { ENV, type Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProvidersService } from '../providers/providers.service';
@@ -32,10 +43,36 @@ export interface BorrowerTokens {
   expiresIn: number;
 }
 
+/** The phone is proven but has no account yet: finish signing up with this token. */
+export interface RegistrationNeeded {
+  registrationToken: string;
+  phone: string;
+}
+
+interface RegistrationClaims {
+  phone: string;
+  typ: 'register';
+}
+
+export interface RegisterInput {
+  registrationToken: string;
+  fullName: string;
+  nationalId: string;
+  businessName?: string;
+  businessSector?: string;
+  branchCode: string;
+  agreedTerms: boolean;
+  agreedDataProcessing: boolean;
+  marketingSms: boolean;
+  consentVersion: string;
+}
+
 const OTP_TTL_MS = 5 * 60_000;
 const OTP_MAX_ATTEMPTS = 5;
 /** At most this many codes per phone per hour, to stop SMS being used to spam someone. */
 const OTP_PER_HOUR = 5;
+/** Time to fill in the sign-up form after the code is checked. */
+const REGISTRATION_TTL_SECONDS = 30 * 60;
 const sha256 = (v: string) => createHash('sha256').update(v).digest('base64url');
 
 /**
@@ -53,6 +90,7 @@ export class BorrowerAuthService {
     private readonly sms: SmsService,
     private readonly providers: ProvidersService,
     private readonly audit: AuditService,
+    private readonly crypto: PiiCrypto,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -103,31 +141,42 @@ export class BorrowerAuthService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    // A code is only sent to numbers we know, but the answer is the same either way.
-    if (borrower) {
-      const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-      await this.prisma.otpChallenge.create({
-        data: {
-          phone,
-          codeHash: sha256(`${phone}:${code}`),
-          expiresAt: new Date(Date.now() + OTP_TTL_MS),
-        },
+    // Known numbers get a sign-in code; new numbers a code to sign up with.
+    // The answer is the same either way, so it never reveals who is a customer.
+    if (!borrower && meta.ip) {
+      // Each sign-up code is an SMS to a stranger: cap how many one IP can trigger.
+      const fromIp = await this.prisma.otpChallenge.count({
+        where: { ip: meta.ip, signup: true, createdAt: { gte: new Date(Date.now() - 3_600_000) } },
       });
-      await this.sms.send({
-        toPhone: phone,
-        borrowerId: borrower.id,
-        template: 'otp',
-        language: borrower.preferredLanguage,
-        body: this.sms.render('otp', { code }, borrower.preferredLanguage),
-      });
-      // Local development only: with the SMS simulator nothing is texted, so show the code
-      // in the API log. Production never uses the simulator.
-      if (
-        this.env.NODE_ENV === 'development' &&
-        (await this.providers.sms()).name === 'simulator'
-      ) {
-        this.logger.warn(`Development sign-in code for ${maskPhone(phone)}: ${code}`);
+      if (fromIp >= this.env.SIGNUP_CODES_PER_IP_PER_HOUR) {
+        throw new HttpException(
+          'Too many codes requested. Try again in an hour.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       }
+    }
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    await this.prisma.otpChallenge.create({
+      data: {
+        phone,
+        codeHash: sha256(`${phone}:${code}`),
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+        ip: meta.ip ?? null,
+        signup: !borrower,
+      },
+    });
+    const language = borrower?.preferredLanguage;
+    await this.sms.send({
+      toPhone: phone,
+      borrowerId: borrower?.id,
+      template: 'otp',
+      language,
+      body: this.sms.render('otp', { code }, language),
+    });
+    // Local development only: with the SMS simulator nothing is texted, so show the code
+    // in the API log. Production never uses the simulator.
+    if (this.env.NODE_ENV === 'development' && (await this.providers.sms()).name === 'simulator') {
+      this.logger.warn(`Development sign-in code for ${maskPhone(phone)}: ${code}`);
     }
     await this.audit.record({
       action: 'borrower.otp.request',
@@ -138,7 +187,15 @@ export class BorrowerAuthService {
     return { otpRequired: true, sent: true, phone: maskPhone(phone) };
   }
 
-  async verifyCode(input: string, code: string, meta: RequestMeta): Promise<BorrowerTokens> {
+  /**
+   * Check the texted code. A customer gets a session; a new number gets a
+   * short-lived token to finish signing up with (it proves they own the phone).
+   */
+  async verifyCode(
+    input: string,
+    code: string,
+    meta: RequestMeta,
+  ): Promise<BorrowerTokens | RegistrationNeeded> {
     const phone = normaliseRwPhone(input);
     if (!phone || !/^\d{6}$/.test(code)) throw new UnauthorizedException('That code is not valid');
     const challenge = await this.prisma.otpChallenge.findFirst({
@@ -163,11 +220,26 @@ export class BorrowerAuthService {
       });
       throw new UnauthorizedException('That code is not valid');
     }
-    const borrower = await this.prisma.borrower.findFirstOrThrow({ where: { phone } });
     await this.prisma.otpChallenge.update({
       where: { id: challenge!.id },
       data: { consumedAt: new Date() },
     });
+    const borrower = await this.prisma.borrower.findFirst({ where: { phone } });
+    if (!borrower) {
+      await this.audit.record({
+        action: 'borrower.register.phone_verified',
+        actorType: 'BORROWER',
+        metadata: { phone: maskPhone(phone) },
+        ...meta,
+      });
+      const claims: RegistrationClaims = { phone, typ: 'register' };
+      return {
+        registrationToken: await this.jwt.signAsync(claims, {
+          expiresIn: REGISTRATION_TTL_SECONDS,
+        }),
+        phone: maskPhone(phone),
+      };
+    }
     await this.audit.record({
       action: 'borrower.login',
       actorType: 'BORROWER',
@@ -177,6 +249,152 @@ export class BorrowerAuthService {
       ...meta,
     });
     return this.startSession(borrower.id, meta);
+  }
+
+  /** What the sign-up form needs: branches to choose from, sectors and the privacy notice. */
+  async registrationOptions() {
+    const branches = await this.prisma.branch.findMany({
+      orderBy: { name: 'asc' },
+      select: { code: true, name: true, district: true },
+    });
+    return {
+      branches,
+      sectors: BUSINESS_SECTORS,
+      consentVersion: REGISTRATION_CONSENT_VERSION,
+      privacy: REGISTRATION_PRIVACY_POINTS,
+    };
+  }
+
+  /**
+   * Open an account for someone who proved their phone number. They start
+   * unverified with no officer: staff check their ID and take them on before
+   * any loan is approved.
+   */
+  async register(input: RegisterInput, meta: RequestMeta): Promise<BorrowerTokens> {
+    let phone: string;
+    try {
+      const claims = await this.jwt.verifyAsync<RegistrationClaims>(input.registrationToken);
+      if (claims.typ !== 'register') throw new Error('wrong token');
+      phone = claims.phone;
+    } catch {
+      throw new UnauthorizedException('Your sign-up has expired. Enter your number again.');
+    }
+    if (!input.agreedTerms || !input.agreedDataProcessing)
+      throw new BadRequestException('Please agree to the terms and the privacy notice');
+    if (input.consentVersion !== REGISTRATION_CONSENT_VERSION)
+      throw new ConflictException('The sign-up terms have changed. Please read them again.');
+    const year = new Date().getFullYear();
+    const birthYear = nationalIdBirthYear(input.nationalId, year);
+    if (birthYear == null) throw new BadRequestException('Check your national ID number');
+    if (certainlyUnderAge(birthYear, year))
+      throw new BadRequestException('You must be 18 or older to borrow from Kora Lend');
+    const branch = await this.prisma.branch.findFirst({ where: { code: input.branchCode } });
+    if (!branch) throw new BadRequestException('Choose a branch');
+
+    const idHash = this.crypto.lookupHash(input.nationalId);
+    const taken = await this.prisma.borrower.findFirst({
+      where: { nationalIdHash: idHash },
+      select: { id: true, code: true, branchId: true },
+    });
+    if (taken) {
+      // Either a returning customer on a new number or someone using another's ID.
+      // Tell staff either way; tell the person to visit a branch.
+      await this.audit.record({
+        action: 'borrower.register.duplicate_id',
+        actorType: 'BORROWER',
+        entityType: 'Borrower',
+        entityId: taken.code,
+        metadata: { phone: maskPhone(phone) },
+        ...meta,
+      });
+      await this.notifyManagers(
+        taken.branchId,
+        `Someone tried to sign up in the app with the ID number of ${taken.code}, from ${maskPhone(phone)}`,
+        `/borrowers/${taken.code}`,
+      );
+      throw new ConflictException(
+        'That ID number is already registered. If it is yours, please visit a branch.',
+      );
+    }
+
+    const borrower = await this.prisma.$transaction(async (tx) => {
+      if (await tx.borrower.findFirst({ where: { phone }, select: { id: true } }))
+        throw new ConflictException('This number already has an account. Sign in instead.');
+      const created = await tx.borrower.create({
+        data: {
+          code: await nextBorrowerCode(tx),
+          fullName: input.fullName,
+          phone,
+          nationalIdEnc: this.crypto.encrypt(input.nationalId),
+          nationalIdHash: idHash,
+          nationalIdLast3: input.nationalId.slice(-3),
+          branchId: branch.id,
+          source: 'APP',
+          kycStatus: 'PENDING',
+        },
+      });
+      if (input.businessName) {
+        await tx.business.create({
+          data: {
+            borrowerId: created.id,
+            name: input.businessName,
+            sector: input.businessSector ?? null,
+            borrowerRole: 'Owner',
+          },
+        });
+      }
+      const consent = {
+        borrowerId: created.id,
+        textVersion: input.consentVersion,
+        channel: 'APP' as const,
+        ip: meta.ip ?? null,
+      };
+      await tx.consent.createMany({
+        data: [
+          { ...consent, type: 'TERMS' },
+          { ...consent, type: 'DATA_PROCESSING' },
+          ...(input.marketingSms ? [{ ...consent, type: 'MARKETING_SMS' as const }] : []),
+        ],
+      });
+      await this.audit.record(
+        {
+          action: 'borrower.register',
+          actorType: 'BORROWER',
+          actorId: created.id,
+          entityType: 'Borrower',
+          entityId: created.code,
+          metadata: {
+            phone: maskPhone(phone),
+            branch: branch.code,
+            marketingSms: input.marketingSms,
+          },
+          ...meta,
+        },
+        tx,
+      );
+      return created;
+    });
+    await this.notifyManagers(
+      branch.id,
+      `${borrower.fullName} signed up in the app and needs an officer`,
+      `/borrowers/${borrower.code}`,
+    );
+    return this.startSession(borrower.id, meta);
+  }
+
+  /** Tell the branch's managers; if it has none, every console user sees it. */
+  private async notifyManagers(branchId: string | null, title: string, href: string) {
+    const managers = branchId
+      ? await this.prisma.user.findMany({
+          where: { branchId, role: 'MANAGER', isActive: true },
+          select: { id: true },
+        })
+      : [];
+    await this.prisma.notification.createMany({
+      data: managers.length
+        ? managers.map((m) => ({ userId: m.id, kind: 'SYSTEM' as const, title, href }))
+        : [{ kind: 'SYSTEM' as const, title, href }],
+    });
   }
 
   async refresh(refreshToken: string): Promise<BorrowerTokens> {

@@ -54,6 +54,8 @@ async function disburse(amount = 2_000_000n): Promise<string> {
     200,
   );
   await send(staff.officer, 'post', `/applications/${code}/approve`).expect(200);
+  // Signed at a branch: no payout without a signed agreement.
+  await send(staff.officer, 'post', `/applications/${code}/agreement`).expect(200);
   const res = await send(staff.manager, 'post', `/applications/${code}/disburse`, {
     channel: 'BANK_TRANSFER',
   }).expect(200);

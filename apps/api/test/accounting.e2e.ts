@@ -56,6 +56,7 @@ async function disbursedLoan(): Promise<string> {
   const code = created.body.code as string;
   await post(staff.officer, `/applications/${code}/move`, { to: 'UNDER_REVIEW' }).expect(200);
   await post(staff.manager, `/applications/${code}/approve`).expect(200);
+  await post(staff.officer, `/applications/${code}/agreement`).expect(200);
   const res = await post(staff.manager, `/applications/${code}/disburse`, {
     channel: 'BANK_TRANSFER',
   }).expect(200);

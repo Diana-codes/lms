@@ -37,6 +37,8 @@ import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ScoringService } from '../ai/scoring.service';
 import { loanTerms, productTerms, quoteFor } from '../products/terms';
 import { MoneyService } from '../money/money.service';
+import { AgreementsService } from '../agreements/agreements.service';
+import { AGREEMENT_VERSION } from '../agreements/template';
 import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
@@ -54,6 +56,8 @@ export interface ApplyInput {
   agreedTerms: boolean;
   agreedBureau: boolean;
   consentVersion: string;
+  /** The agreement version the borrower read and accepted. */
+  agreementVersion: string;
   idPhotoKey?: string;
   selfieKey?: string;
 }
@@ -74,6 +78,7 @@ export class BorrowerAppService {
     @Inject(ENV) private readonly env: Env,
     private readonly scoring: ScoringService,
     private readonly documents: DocumentsService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   /** Everything the home screen shows. */
@@ -226,6 +231,8 @@ export class BorrowerAppService {
         number: i.number,
         dueDate: utcDateToIso(i.dueDate),
         amount: i.principalDue + i.interestDue,
+        // Late penalties on this instalment, included in what is left to pay.
+        penalty: i.penaltyDue,
         remaining: instalmentRemaining(i),
         state: instalmentState(
           { ...i, dueDate: utcDateToIso(i.dueDate) },
@@ -355,6 +362,10 @@ export class BorrowerAppService {
       totalToRepay: q.totalRepayable,
       aprBps: q.aprBps,
       firstPayment: q.rows[0]!.dueDate,
+      // What the app's review step shows: fees, what lands in the wallet, and the full cost.
+      fee: q.totalFees,
+      youReceive: q.netDisbursed,
+      totalCost: q.totalInterest + q.totalFees,
     };
   }
 
@@ -362,6 +373,8 @@ export class BorrowerAppService {
   async apply(borrowerId: string, input: ApplyInput, meta: RequestMeta) {
     if (!input.agreedTerms)
       throw new BadRequestException('You need to agree to the loan terms to continue');
+    if (input.agreementVersion !== AGREEMENT_VERSION)
+      throw new ConflictException('The loan agreement has changed. Please read it again.');
     if (!PURPOSES.includes(input.purpose))
       throw new BadRequestException('Choose what the loan is for');
     const product = await this.prisma.product.findFirst({
@@ -510,22 +523,32 @@ export class BorrowerAppService {
           ip: meta.ip ?? null,
         });
       await tx.consent.createMany({ data: consents });
+      // The borrower accepted the Key Facts and agreement for exactly these terms.
+      await this.agreements.record(tx, { applicationId: app.id, channel: 'APP', meta });
       // Statements are waived by MoMo consent, so count documents after consents exist.
       await this.documents.syncApplication(b.id, tx);
       await tx.loanOffer.updateMany({
         where: { borrowerId: b.id, acceptedAt: null, dismissedAt: null },
         data: { acceptedAt: new Date() },
       });
-      if (b.officerId) {
-        await tx.notification.create({
-          data: {
-            userId: b.officerId,
-            kind: 'SYSTEM',
-            title: `${b.fullName} applied for ${formatRwf(input.amount)} in the app`,
-            href: `/applications?open=${app.code}`,
-          },
-        });
-      }
+      // To the customer's officer; a customer with none yet goes to the branch managers.
+      const recipients = b.officerId
+        ? [b.officerId]
+        : (
+            await tx.user.findMany({
+              where: { branchId: b.branchId ?? undefined, role: 'MANAGER', isActive: true },
+              select: { id: true },
+            })
+          ).map((u) => u.id);
+      const title = `${b.fullName} applied for ${formatRwf(input.amount)} in the app${
+        b.officerId ? '' : ' and needs an officer'
+      }`;
+      const href = `/applications?open=${app.code}`;
+      await tx.notification.createMany({
+        data: recipients.length
+          ? recipients.map((userId) => ({ userId, kind: 'SYSTEM' as const, title, href }))
+          : [{ kind: 'SYSTEM' as const, title, href }],
+      });
       await this.audit.record(
         {
           action: 'application.create',
@@ -700,7 +723,13 @@ export class BorrowerAppService {
       where: { id: borrowerId },
       include: {
         business: true,
-        loans: { orderBy: { createdAt: 'desc' }, include: { product: { select: { name: true } } } },
+        loans: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            product: { select: { name: true } },
+            application: { select: { agreement: { select: { id: true } } } },
+          },
+        },
         consents: { where: { revokedAt: null }, orderBy: { grantedAt: 'desc' } },
       },
     });
@@ -718,6 +747,7 @@ export class BorrowerAppService {
         principal: l.principal,
         status: l.status,
         disbursedOn: l.disbursedOn ? utcDateToIso(l.disbursedOn) : null,
+        hasAgreement: Boolean(l.application?.agreement),
       })),
       consents: b.consents.map((c) => ({ type: c.type, grantedAt: c.grantedAt })),
     };

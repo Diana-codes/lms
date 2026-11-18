@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import {
   BadRequestException,
   Body,
@@ -8,18 +9,21 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { BORROWER_LANGUAGES } from '@kora/core';
 import { z } from 'zod';
-import { DOCUMENT_TYPES, type DocumentType } from '@kora/core';
+import { BUSINESS_SECTORS, DOCUMENT_TYPES, isRwNationalId, type DocumentType } from '@kora/core';
 import { Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
+import { AgreementsService } from '../agreements/agreements.service';
 import { DocumentsService } from '../documents/documents.service';
 import { BorrowerAppService } from './borrower-app.service';
 import { BorrowerAuthService } from './borrower-auth.service';
@@ -31,6 +35,31 @@ const loanCode = new ZodPipe(z.string().regex(/^LN-\d{4}-\d{4}$/));
 
 const phoneSchema = z.object({ phone: z.string().trim().min(9).max(20) });
 const verifySchema = phoneSchema.extend({ code: z.string().regex(/^\d{6}$/) });
+const registerSchema = z.object({
+  registrationToken: z.string().min(1).max(2000),
+  fullName: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/\s+/g, ' '))
+    .pipe(
+      z
+        .string()
+        .min(3, 'Enter your full name')
+        .max(120)
+        .regex(/\S+\s+\S+/, 'Enter your first and last name'),
+    ),
+  nationalId: z
+    .string()
+    .transform((v) => v.replace(/\s/g, ''))
+    .refine(isRwNationalId, 'Enter the 16 digits of your national ID'),
+  businessName: z.string().trim().max(120).optional(),
+  businessSector: z.enum(BUSINESS_SECTORS).optional(),
+  branchCode: z.string().trim().min(1).max(20),
+  agreedTerms: z.boolean(),
+  agreedDataProcessing: z.boolean(),
+  marketingSms: z.boolean().default(false),
+  consentVersion: z.string().min(1).max(40),
+});
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 const paySchema = z.object({
   amount: rwfString.optional(),
@@ -58,6 +87,7 @@ const applySchema = z.object({
   agreedTerms: z.boolean(),
   agreedBureau: z.boolean().default(false),
   consentVersion: z.string().min(1).max(20).default('2026-01'),
+  agreementVersion: z.string().min(1).max(40),
   idPhotoKey: z.string().max(200).optional(),
   selfieKey: z.string().max(200).optional(),
 });
@@ -73,6 +103,7 @@ export class BorrowerAppController {
     private readonly app: BorrowerAppService,
     private readonly uploads: UploadsService,
     private readonly documents: DocumentsService,
+    private readonly agreements: AgreementsService,
   ) {}
 
   // ── sign-in ──
@@ -89,6 +120,22 @@ export class BorrowerAppController {
   @HttpCode(200)
   verify(@Body(new ZodPipe(verifySchema)) body: z.infer<typeof verifySchema>, @Req() req: Request) {
     return this.auth.verifyCode(body.phone, body.code, requestMeta(req));
+  }
+
+  @Get('auth/register')
+  registrationOptions() {
+    return this.auth.registrationOptions();
+  }
+
+  @Post('auth/register')
+  register(
+    @Body(new ZodPipe(registerSchema)) body: z.infer<typeof registerSchema>,
+    @Req() req: Request,
+  ) {
+    return this.auth.register(
+      { ...body, businessName: body.businessName || undefined },
+      requestMeta(req),
+    );
   }
 
   @Post('auth/refresh')
@@ -159,6 +206,32 @@ export class BorrowerAppController {
     return { ...figures, affordability };
   }
 
+  /** The Key Facts and full agreement for the loan being applied for. */
+  @UseGuards(BorrowerGuard)
+  @Get('apply/agreement')
+  agreement(
+    @Req() req: BorrowerRequest,
+    @Query(new ZodPipe(quoteSchema)) q: z.infer<typeof quoteSchema>,
+  ) {
+    return this.agreements.preview(req.borrower.borrowerId, q.productCode, q.amount, q.termMonths);
+  }
+
+  @UseGuards(BorrowerGuard)
+  @Get('loans/:code/agreement.pdf')
+  async agreementPdf(
+    @Req() req: BorrowerRequest,
+    @Param('code', loanCode) code: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { pdf, fileName } = await this.agreements.pdfForBorrower(req.borrower.borrowerId, code);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${fileName}"`,
+      'Cache-Control': 'no-store',
+    });
+    return new StreamableFile(pdf);
+  }
+
   @UseGuards(BorrowerGuard)
   @Post('apply/upload/:kind')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 } }))
@@ -181,6 +254,31 @@ export class BorrowerAppController {
   @Get('documents')
   documentList(@Req() req: BorrowerRequest) {
     return this.documents.checklist(req.borrower.borrowerId);
+  }
+
+  /** The borrower's own file, to check the photo or PDF they sent. */
+  @UseGuards(BorrowerGuard)
+  @Get('documents/:id/file')
+  async documentFile(
+    @Req() req: BorrowerRequest,
+    @Param('id', new ZodPipe(z.uuid())) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const f = await this.documents.borrowerFile(req.borrower.borrowerId, id);
+    res.set({
+      'Content-Type': f.mimeType,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    return new StreamableFile(createReadStream(f.path));
+  }
+
+  /** Take back a document nobody has reviewed yet. */
+  @UseGuards(BorrowerGuard)
+  @Post('documents/:id/remove')
+  @HttpCode(200)
+  removeDocument(@Req() req: BorrowerRequest, @Param('id', new ZodPipe(z.uuid())) id: string) {
+    return this.documents.withdraw(req.borrower.borrowerId, id, requestMeta(req));
   }
 
   @UseGuards(BorrowerGuard)

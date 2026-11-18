@@ -40,6 +40,8 @@ export function DocumentsCard({
   const [choice, setChoice] = useState<string | null>(null);
   const [custom, setCustom] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState<Doc | null>(null);
+  const [undoReason, setUndoReason] = useState('');
 
   const reason = choice === OTHER ? custom.trim() : (choice ?? '');
   const base = `/borrowers/${borrower.code}/documents`;
@@ -80,6 +82,25 @@ export function DocumentsCard({
     }
   }
 
+  async function undo() {
+    if (!undoing) return;
+    setBusy(undoing.id);
+    setError(null);
+    try {
+      await api(`${base}/${undoing.id}/undo`, {
+        method: 'POST',
+        body: { reason: undoReason.trim() },
+      });
+      toast(`${undoing.name} is back to pending.`);
+      setUndoing(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <Card className="gap-3 p-[22px]">
       <h2 className="m-0 font-display text-base font-semibold">KYC documents</h2>
@@ -104,7 +125,7 @@ export function DocumentsCard({
                 Asked for a new one: {doc.reason}
               </p>
             ) : null}
-            {canReview && (doc.file || doc.reviewable) ? (
+            {canReview && (doc.file || doc.reviewable || doc.canUndo) ? (
               <div className="flex flex-wrap gap-2 pl-12">
                 {doc.file ? (
                   <a
@@ -135,6 +156,19 @@ export function DocumentsCard({
                     aria-label={`Ask for a new ${doc.name}`}
                   >
                     Ask for a new one
+                  </Button>
+                ) : null}
+                {doc.canUndo ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setUndoing(doc);
+                      setUndoReason('');
+                      setError(null);
+                    }}
+                    aria-label={`Undo the review of ${doc.name}`}
+                  >
+                    Undo {doc.status === 'Rejected' ? 'rejection' : 'verification'}
                   </Button>
                 ) : null}
               </div>
@@ -192,6 +226,36 @@ export function DocumentsCard({
             placeholder="Write it as you would say it to them."
           />
         ) : null}
+        <FormError>{error}</FormError>
+      </Modal>
+
+      <Modal
+        open={undoing != null}
+        onClose={() => setUndoing(null)}
+        title={`Undo the ${undoing?.status === 'Rejected' ? 'rejection' : 'verification'} of ${undoing?.name ?? 'this document'}?`}
+        subtitle={
+          undoing?.status === 'Rejected'
+            ? `It goes back to pending and ${borrower.firstName} gets an SMS saying to ignore the earlier message.`
+            : `It goes back to pending. An ID or selfie check also sets ${borrower.firstName}’s identity back to not verified.`
+        }
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setUndoing(null)}>
+              Cancel
+            </Button>
+            <Button disabled={undoReason.trim().length < 5} loading={busy != null} onClick={undo}>
+              Undo review
+            </Button>
+          </>
+        }
+      >
+        <TextAreaField
+          label="Why? (kept in the audit log)"
+          placeholder="e.g. Clicked the wrong button"
+          value={undoReason}
+          maxLength={300}
+          onChange={(e) => setUndoReason(e.target.value)}
+        />
         <FormError>{error}</FormError>
       </Modal>
     </Card>

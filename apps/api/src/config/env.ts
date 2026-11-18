@@ -77,6 +77,11 @@ const schema = z.object({
   // ── Phase 3: borrower app ──
   BORROWER_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   BORROWER_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /**
+   * Sign-up codes one IP address may request per hour (codes to new numbers cost
+   * an SMS each). Mobile networks put many phones behind one IP, so not too low.
+   */
+  SIGNUP_CODES_PER_IP_PER_HOUR: z.coerce.number().int().positive().default(20),
   /** Where uploaded ID photos and selfies are kept. Use object storage in Rwanda for production. */
   UPLOAD_DIR: z.string().default('./uploads'),
 

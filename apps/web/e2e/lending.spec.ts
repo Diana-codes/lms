@@ -50,6 +50,22 @@ test.describe('from application to repayment', () => {
     await expect(dialog(page).getByText('Under review', { exact: true })).toBeVisible();
     await dialog(page).getByRole('button', { name: 'Approve', exact: true }).click();
     await expect(toast(page)).toContainText('approved');
+
+    // No payout until the borrower signs. The officer prints it, then records the signature.
+    await expect(
+      dialog(page).getByText('The loan can be paid out once the agreement is signed.'),
+    ).toBeVisible();
+    const agreement = dialog(page).getByRole('region', { name: 'Loan agreement' });
+    await expect(agreement.getByRole('link', { name: 'Print agreement' })).toHaveAttribute(
+      'href',
+      /^\/api\/applications\/APP-\d+\/agreement\.pdf$/,
+    );
+    await agreement.getByRole('button', { name: 'Mark as signed' }).click();
+    await dialog(page).getByRole('button', { name: 'Yes, they signed it' }).click();
+    await expect(toast(page)).toContainText('Signed agreement recorded');
+    await expect(agreement).toContainText('Signed at a branch');
+    await expect(agreement.getByRole('link', { name: 'View signed copy' })).toBeVisible();
+
     // Officers approve; they do not release money.
     await expect(dialog(page).getByText('A manager records the disbursement.')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -64,6 +80,8 @@ test.describe('from application to repayment', () => {
     await dialog(page).getByRole('button', { name: 'Record disbursement' }).click();
     await dialog(page).getByRole('button', { name: 'Bank transfer' }).click();
     await dialog(page).getByLabel('Collateral (optional)').fill('Salary assignment');
+    // The product's 1.5% processing fee plus 18% VAT (RWF 15,930) is taken from the payout.
+    await expect(dialog(page)).toContainText('Records that RWF 884,070 has been paid out');
     await dialog(page).getByRole('button', { name: 'Confirm disbursement' }).click();
     await expect(toast(page)).toContainText(/Loan LN-\d{4}-\d{4} created and disbursed/);
 

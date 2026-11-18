@@ -20,6 +20,7 @@ import { AiSummaryButton } from './ai-summary-button';
 import { DocumentsCard } from './documents-card';
 import { NoteForm } from './note-form';
 import { OfferButton } from './offer-button';
+import { OfficerControl } from './officer-control';
 
 export async function generateMetadata({
   params,
@@ -215,6 +216,9 @@ export default async function BorrowerPage({ params }: { params: Promise<{ code:
               </Line>
               <Line label="Relationship officer">{b.contact.officerName ?? 'Unassigned'}</Line>
             </dl>
+            {me.ok ? (
+              <OfficerControl code={b.code} officerId={b.contact.officerId} me={me.data} />
+            ) : null}
           </Card>
         </div>
 

@@ -12,6 +12,7 @@
  * All people, phone numbers and ID numbers here are made up.
  */
 import 'dotenv/config';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -22,12 +23,16 @@ import {
   daysBetween,
   daysPastDue,
   dpdBucket,
+  formatDate,
   formatRwf,
   formatRwfCompact,
   isoToUtcDate,
   type IsoDate,
   kigaliDate,
   type LoanTerms,
+  maskNationalId,
+  maskPhone,
+  REGISTRATION_CONSENT_VERSION,
   RW_DEFAULT_TERMS,
   type Schedule,
   annualRateBps,
@@ -64,6 +69,8 @@ import {
   type PostingLine,
   repaymentLines,
 } from '../src/ledger/posting';
+import { AGREEMENT_VERSION, agreementTerms, renderAgreement } from '../src/agreements/template';
+import { quoteFor, termsAtRate } from '../src/products/terms';
 import { sampleIdCardPng, samplePdf } from './sample-files';
 
 const env = loadEnv();
@@ -561,6 +568,7 @@ const rows = {
   consents: [] as Prisma.ConsentCreateManyInput[],
   notifications: [] as Prisma.NotificationCreateManyInput[],
   inflows: [] as Prisma.MomoInflowMonthCreateManyInput[],
+  agreements: [] as Prisma.LoanAgreementCreateManyInput[],
 };
 
 const ids = {
@@ -1834,6 +1842,87 @@ function seedMomoHistory(): void {
   }
 }
 
+/**
+ * Approved applications the designs mark "Signed" get a signed agreement, so
+ * they can be paid out; those marked "Contract sent" are still waiting.
+ */
+/**
+ * A customer who signed up in the borrower app yesterday and has no officer
+ * yet: shows the "No officer" filter and "Take this customer" in the console.
+ * Runs last so it does not change any other seeded data.
+ */
+function seedAppSignup(): void {
+  const id = addBorrower({
+    name: 'Grace Mukamana',
+    officer: 'KN', // cleared below
+    business: { name: 'Grace Tailoring', sector: 'Garments & tailoring', role: 'Owner' },
+    kyc: 'PENDING',
+    momo: false,
+    since: addDays(TODAY, -1),
+  });
+  const b = rows.borrowers[rows.borrowers.length - 1]!;
+  b.officerId = null;
+  b.source = 'APP';
+  for (const type of ['TERMS', 'DATA_PROCESSING'] as const) {
+    rows.consents.push({
+      id: uuid(),
+      borrowerId: id,
+      type,
+      textVersion: REGISTRATION_CONSENT_VERSION,
+      channel: 'APP',
+      grantedAt: at(addDays(TODAY, -1), 18),
+    });
+  }
+  rows.notifications.push({
+    id: uuid(),
+    userId: ids.staff.get('MGR'),
+    kind: 'SYSTEM',
+    title: `Grace Mukamana signed up in the app and needs an officer`,
+    href: `/borrowers/${b.code}`,
+    createdAt: new Date(NOW.getTime() - 15 * 3_600_000),
+  });
+}
+
+function seedAgreements(): void {
+  for (const app of rows.applications) {
+    if (app.stage !== 'APPROVED' || !app.statusNote?.startsWith('Signed')) continue;
+    const borrower = rows.borrowers.find((b) => b.id === app.borrowerId)!;
+    const product = PRODUCTS.find((p) => ids.product.get(p.code) === app.productId)!;
+    const quote = quoteFor({
+      amount: BigInt(app.amount),
+      termMonths: app.termMonths,
+      terms: termsAtRate(productTermsFor(product.rateBps), app.annualRateBps),
+      disbursedOn: TODAY,
+    });
+    const terms = agreementTerms(quote, app.termMonths, 1);
+    const acceptedAt = new Date((app.stageEnteredAt as Date).getTime() + 2 * 3_600_000);
+    const body = renderAgreement(terms, {
+      lender: DEMO_COMPANY.name,
+      borrowerName: borrower.fullName,
+      borrowerCode: borrower.code,
+      nationalId: borrower.nationalIdLast3
+        ? maskNationalId(`0000000000000${borrower.nationalIdLast3}`)
+        : null,
+      phone: maskPhone(borrower.phone),
+      applicationCode: app.code,
+      productName: product.name,
+      date: formatDate(kigaliDate(acceptedAt)),
+    });
+    rows.agreements.push({
+      id: uuid(),
+      applicationId: app.id!,
+      borrowerId: app.borrowerId,
+      templateVersion: AGREEMENT_VERSION,
+      terms: terms as unknown as Prisma.InputJsonValue,
+      body,
+      bodyHash: createHash('sha256').update(body).digest('hex'),
+      channel: 'BRANCH',
+      acceptedAt,
+      recordedById: app.officerId ?? null,
+    });
+  }
+}
+
 /** What each kind of product asks for (matches the documents migration). */
 const REQUIRED_DOCS: Record<ProductKind, KycDocumentType[]> = {
   SME: ['NATIONAL_ID', 'SELFIE', 'BUSINESS_REGISTRATION', 'FINANCIAL_STATEMENTS'],
@@ -2209,6 +2298,8 @@ async function seedCompany(passwordHash: string): Promise<void> {
   seedFiller();
   seedMomoHistory();
   await seedDemoDocuments();
+  seedAgreements();
+  seedAppSignup();
 
   // Capital paid in before the first loan went out: enough float to cover
   // every disbursement, plus a reserve at the bank.
@@ -2234,6 +2325,9 @@ async function seedCompany(passwordHash: string): Promise<void> {
   await insertMany('businesses', rows.businesses, (data) => prisma.business.createMany({ data }));
   await insertMany('applications', rows.applications, (data) =>
     prisma.application.createMany({ data }),
+  );
+  await insertMany('loan agreements', rows.agreements, (data) =>
+    prisma.loanAgreement.createMany({ data }),
   );
   await insertMany('credit scores', rows.scores, (data) => prisma.creditScore.createMany({ data }));
   await insertMany('loans', rows.loans, (data) => prisma.loan.createMany({ data }));

@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { api, errorMessage, uploadFile } from '../lib/api';
+import { api, errorMessage, openFile, uploadFile } from '../lib/api';
 import { preparePhoto, uploadErrorMessage } from '../lib/upload';
 import type { Documents, DocumentState } from '../lib/types';
 import { Button, DarkCard, ErrorText, Muted, Panel, Sheet, tap } from '../ui';
@@ -87,6 +88,49 @@ function Option({
   );
 }
 
+/** A small text button under a document: View, Retake, Remove. */
+function Action({
+  label,
+  hint,
+  danger,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  hint: string;
+  danger?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={hint}
+      disabled={disabled}
+      hitSlop={6}
+      onPress={() => {
+        tap();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.action,
+        danger && { borderColor: c['danger-bg'] },
+        (pressed || disabled) && { opacity: 0.6 },
+      ]}
+    >
+      <Text
+        style={{
+          fontSize: 13,
+          fontFamily: font.semibold,
+          color: danger ? c['danger-fg'] : c.forest,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 /**
  * The borrower's documents: what their application needs, what has been
  * received and checked, and why anything was sent back. Files can be a new
@@ -104,6 +148,7 @@ export function DocumentsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState<DocumentType | null>(null);
   const [busy, setBusy] = useState<DocumentType | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -181,7 +226,58 @@ export function DocumentsScreen({
     await send(type, () => preparePhoto(a, type.toLowerCase()));
   }
 
+  async function view(item: Documents['items'][number]) {
+    if (!item.documentId) return;
+    setOpening(item.documentId);
+    try {
+      const pdf = item.fileType === 'pdf';
+      await openFile(
+        `/app/documents/${item.documentId}/file`,
+        `${item.type.toLowerCase()}-${item.documentId.slice(0, 8)}.${pdf ? 'pdf' : 'jpg'}`,
+        pdf ? 'application/pdf' : 'image/jpeg',
+      );
+    } catch (err) {
+      toast(errorMessage(err));
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  function remove(item: Documents['items'][number]) {
+    const name = DOCUMENT_INFO[item.type].name;
+    Alert.alert(
+      `Remove your ${name}?`,
+      'Nobody has checked it yet. You can send a new one any time.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(item.type);
+            try {
+              setData(
+                await api<Documents>(`/app/documents/${item.documentId}/remove`, {
+                  method: 'POST',
+                }),
+              );
+              toast(`${name} removed.`);
+            } catch (err) {
+              toast(errorMessage(err));
+              void load();
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const info = adding ? DOCUMENT_INFO[adding] : null;
+  const replacing = adding
+    ? Boolean(data?.items.find((i) => i.type === adding && i.documentId && adding !== 'OTHER'))
+    : false;
   const done = data && data.needsAction === 0;
 
   return (
@@ -279,7 +375,7 @@ export function DocumentsScreen({
                             : item.state === 'WAIVED'
                               ? 'Covered by your shared MoMo history'
                               : item.state === 'PENDING'
-                                ? 'We have it. Tap to send a clearer one.'
+                                ? 'We have it and will check it soon.'
                                 : item.state === 'VERIFIED'
                                   ? 'Checked and verified'
                                   : doc.hint}
@@ -291,6 +387,41 @@ export function DocumentsScreen({
                         <Pill state={item.state} />
                       )}
                     </Pressable>
+                    {item.hasFile || (canSend && item.documentId) || item.canRemove ? (
+                      <View style={styles.actions}>
+                        {item.hasFile ? (
+                          <Action
+                            label={
+                              opening === item.documentId
+                                ? 'Opening…'
+                                : item.fileType === 'pdf'
+                                  ? 'View PDF'
+                                  : 'View photo'
+                            }
+                            hint={`View the ${doc.name} you sent`}
+                            disabled={opening != null}
+                            onPress={() => view(item)}
+                          />
+                        ) : null}
+                        {canSend && item.documentId ? (
+                          <Action
+                            label={doc.accepts === 'photo' ? 'Retake' : 'Replace'}
+                            hint={`Send a new ${doc.name} in place of this one`}
+                            disabled={busy != null}
+                            onPress={() => setAdding(item.type)}
+                          />
+                        ) : null}
+                        {item.canRemove ? (
+                          <Action
+                            label="Remove"
+                            hint={`Remove the ${doc.name} you sent`}
+                            danger
+                            disabled={busy != null}
+                            onPress={() => remove(item)}
+                          />
+                        ) : null}
+                      </View>
+                    ) : null}
                     {item.reason ? (
                       <View style={styles.reason}>
                         <AlertIcon size={16} color={c['danger-fg']} />
@@ -331,11 +462,15 @@ export function DocumentsScreen({
       <Sheet
         open={adding != null}
         onClose={() => setAdding(null)}
-        title={`Add ${info?.name ?? ''}`}
+        title={`${replacing ? 'Replace' : 'Add'} ${info?.name ?? ''}`}
       >
         {adding && info ? (
           <>
-            <Muted style={{ fontSize: 14, lineHeight: 20 }}>{info.hint}</Muted>
+            <Muted style={{ fontSize: 14, lineHeight: 20 }}>
+              {replacing
+                ? `The new file takes the place of the one you sent. ${info.hint}`
+                : info.hint}
+            </Muted>
             <View style={{ gap: 10 }}>
               <Option
                 icon={<CameraIcon size={20} color={c.forest} />}
@@ -382,6 +517,16 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     backgroundColor: c.ground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingLeft: 52 },
+  action: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: c.line,
     alignItems: 'center',
     justifyContent: 'center',
   },

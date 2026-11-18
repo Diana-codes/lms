@@ -58,6 +58,31 @@ test.describe('KYC documents', () => {
     await expect(rdb).toContainText('Pending');
   });
 
+  test('a rejection made by mistake can be undone, and the document is pending again', async ({
+    page,
+  }) => {
+    await signIn(page, STAFF.officer);
+    const docs = await openMoses(page);
+    const rdb = docs.getByRole('listitem').filter({ hasText: 'Business registration (RDB)' });
+    await rdb.getByRole('button', { name: 'Ask for a new Business registration (RDB)' }).click();
+    const ask = page.getByRole('dialog', { name: 'Ask for a new Business registration (RDB)' });
+    await ask.getByRole('button', { name: /Part of the document is cut off/ }).click();
+    await ask.getByRole('button', { name: 'Send request' }).click();
+    await expect(rdb).toContainText('Rejected');
+
+    await rdb
+      .getByRole('button', { name: 'Undo the review of Business registration (RDB)' })
+      .click();
+    const undo = page.getByRole('dialog', { name: /Undo the rejection/ });
+    await expect(undo).toContainText('ignore the earlier message');
+    await expect(undo.getByRole('button', { name: 'Undo review' })).toBeDisabled();
+    await undo.getByLabel(/Why\?/).fill('Clicked the wrong button');
+    await undo.getByRole('button', { name: 'Undo review' }).click();
+    await expect(page.getByText('is back to pending')).toBeVisible();
+    await expect(rdb).toContainText('Pending');
+    await expect(rdb.getByRole('button', { name: /Undo the review/ })).toHaveCount(0);
+  });
+
   test('collections agents see the list but cannot open identity papers', async ({ page }) => {
     await signIn(page, STAFF.collections);
     const docs = await openMoses(page);

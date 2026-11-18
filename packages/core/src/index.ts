@@ -14,3 +14,4 @@ export * from './cashflow';
 export * from './i18n';
 export * from './bureau';
 export * from './documents';
+export * from './registration';

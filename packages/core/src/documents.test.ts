@@ -4,6 +4,26 @@ import { DOCUMENT_INFO, DOCUMENT_TYPES, documentChecklist } from './documents';
 const today = '2026-11-17';
 
 describe('documentChecklist', () => {
+  it('points at the latest file, and only an unreviewed one can be removed', () => {
+    const c = documentChecklist({
+      required: ['NATIONAL_ID', 'SELFIE', 'PROOF_OF_ADDRESS'],
+      docs: [
+        { id: 'old', type: 'NATIONAL_ID', status: 'REJECTED', rejectionReason: 'Blurry' },
+        { id: 'new', type: 'NATIONAL_ID', status: 'PENDING' },
+        { id: 'ok', type: 'SELFIE', status: 'VERIFIED', mimeType: 'application/pdf' },
+        { id: 'nida', type: 'PROOF_OF_ADDRESS', status: 'VERIFIED', hasFile: false },
+      ],
+      today,
+    });
+    expect(c.items.map((i) => [i.documentId, i.hasFile, i.fileType, i.canRemove])).toEqual([
+      ['new', true, 'photo', true],
+      ['ok', true, 'pdf', false],
+      ['nida', false, null, false],
+    ]);
+    const missing = documentChecklist({ required: ['SELFIE'], docs: [], today });
+    expect(missing.items[0]).toMatchObject({ documentId: null, hasFile: false, canRemove: false });
+  });
+
   it('lists every required document as missing when nothing has been sent', () => {
     const c = documentChecklist({
       required: ['NATIONAL_ID', 'SELFIE', 'BUSINESS_REGISTRATION'],

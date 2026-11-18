@@ -1,4 +1,10 @@
-import { formatDate, formatRwf, formatRwfCompact, maskNationalId } from '@kora/core';
+import {
+  BUSINESS_SECTORS,
+  formatDate,
+  formatRwf,
+  formatRwfCompact,
+  maskNationalId,
+} from '@kora/core';
 import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
@@ -14,7 +20,7 @@ import {
 } from 'react-native';
 import { api, errorMessage, uploadFile } from '../lib/api';
 import { preparePhoto, uploadErrorMessage } from '../lib/upload';
-import type { ApplyOptions, Draft, Quote } from '../lib/types';
+import type { AgreementPreview, ApplyOptions, Draft, Quote } from '../lib/types';
 import {
   Button,
   Checkbox,
@@ -35,7 +41,7 @@ import {
 import { CameraIcon, CheckIcon, ChevronDownIcon, IdCardIcon, LockIcon } from '../ui/icons';
 import { c, font } from '../ui/theme';
 
-const SECTORS = ['Garments & tailoring', 'Retail shop', 'Agriculture', 'Transport', 'Other'];
+const SECTORS: readonly string[] = BUSINESS_SECTORS;
 const STEP = 100_000n;
 const CONSENT_VERSION = '2026-01';
 const groupDigits = (s: string) =>
@@ -70,7 +76,10 @@ export function Apply({
   const [step, setStep] = useState<1 | 2 | 3 | 'sent'>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [agreed, setAgreed] = useState(true);
+  // Accepting the agreement must be a deliberate tap, never pre-ticked.
+  const [agreed, setAgreed] = useState(false);
+  const [agreement, setAgreement] = useState<AgreementPreview | null>(null);
+  const [readOpen, setReadOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sectorOpen, setSectorOpen] = useState(false);
@@ -133,6 +142,22 @@ export function Apply({
     };
   }, [amount, term, code]);
 
+  // The Key Facts for exactly what is being applied for. New terms need a new tick.
+  useEffect(() => {
+    if (step !== 3 || amount == null || term == null || !code) return;
+    let live = true;
+    setAgreement(null);
+    setAgreed(false);
+    api<AgreementPreview>(
+      `/app/apply/agreement?productCode=${code}&amount=${amount}&termMonths=${term}`,
+    )
+      .then((a) => live && setAgreement(a))
+      .catch((err) => live && setError(errorMessage(err)));
+    return () => {
+      live = false;
+    };
+  }, [step, amount, term, code]);
+
   async function pick(kind: 'id' | 'selfie') {
     setBusy(kind);
     try {
@@ -186,6 +211,7 @@ export function Apply({
           agreedTerms: agreed,
           agreedBureau: agreed,
           consentVersion: CONSENT_VERSION,
+          agreementVersion: agreement?.version,
           idPhotoKey: draft.idPhotoKey ?? undefined,
           selfieKey: draft.selfieKey ?? undefined,
         },
@@ -370,6 +396,17 @@ export function Apply({
               value={quote ? formatRwf(BigInt(quote.totalToRepay)) : '…'}
             />
             <Row dark label="First payment" value={quote ? formatDate(quote.firstPayment) : '…'} />
+            <Row
+              dark
+              label="Fee, taken from the payout"
+              value={quote ? formatRwf(BigInt(quote.fee)) : '…'}
+            />
+            <Row
+              dark
+              label="You receive"
+              value={quote ? formatRwf(BigInt(quote.youReceive)) : '…'}
+              valueStyle={{ color: c.lime }}
+            />
           </DarkCard>
           {quote?.affordability && !quote.affordability.affordable ? (
             <View style={{ backgroundColor: c['warning-bg'], borderRadius: 14, padding: 14 }}>
@@ -690,13 +727,38 @@ export function Apply({
             <Text style={{ fontSize: 13, fontFamily: font.semibold, color: c.ink }}>Change</Text>
           </Pressable>
         </Panel>
+        <Panel style={{ gap: 10 }}>
+          <Text style={{ fontSize: 13, fontFamily: font.semibold, color: c.ink }}>Key Facts</Text>
+          {agreement ? (
+            agreement.keyFacts.map((f) => (
+              <View key={f.label} style={styles.fact}>
+                <Text style={styles.factLabel}>{f.label}</Text>
+                <Text style={styles.factValue}>{f.value}</Text>
+              </View>
+            ))
+          ) : (
+            <Muted>Loading the Key Facts…</Muted>
+          )}
+          <Button
+            label="Read the full agreement"
+            variant="outline"
+            height={46}
+            disabled={!agreement}
+            onPress={() => setReadOpen(true)}
+          />
+        </Panel>
         <Checkbox checked={agreed} onChange={setAgreed}>
           <Text
             style={{ fontSize: 13, lineHeight: 20, color: c['ink-soft'], fontFamily: font.body }}
           >
-            I agree to the{' '}
-            <Text style={{ fontFamily: font.semibold, color: c.forest }}>loan terms</Text> and allow
-            Kora Lend to check my credit record with the credit bureau.
+            I have read the Key Facts and agree to the{' '}
+            <Text
+              style={{ fontFamily: font.semibold, color: c.forest }}
+              onPress={() => agreement && setReadOpen(true)}
+            >
+              loan agreement
+            </Text>
+            , and I allow Kora Lend to check my credit record with the credit bureau.
           </Text>
         </Checkbox>
         <ErrorText>{error}</ErrorText>
@@ -705,12 +767,16 @@ export function Apply({
         <Button
           label="Submit application"
           variant="lime"
-          disabled={!agreed}
+          disabled={!agreed || !agreement}
           loading={busy === 'submit'}
           onPress={submit}
         />
         <Muted style={{ textAlign: 'center' }}>You’ll get a decision within 1 working day</Muted>
       </Footer>
+      <Sheet open={readOpen} onClose={() => setReadOpen(false)} title="Loan agreement">
+        {agreement ? <AgreementText body={agreement.body} /> : null}
+        <Button label="Close" variant="dark" height={48} onPress={() => setReadOpen(false)} />
+      </Sheet>
       <Sheet
         open={walletOpen}
         onClose={() => setWalletOpen(false)}
@@ -751,7 +817,81 @@ export function Apply({
   );
 }
 
+/** The agreement text, laid out the way the PDF lays it out. */
+function AgreementText({ body }: { body: string }) {
+  return (
+    <View style={{ gap: 8 }}>
+      {body.split('\n').map((raw, i) => {
+        const line = raw.trimEnd();
+        if (!line) return null;
+        if (line.startsWith('# '))
+          return (
+            <Text key={i} style={{ fontFamily: font.display, fontSize: 20, color: c.forest }}>
+              {line.slice(2)}
+            </Text>
+          );
+        if (line.startsWith('## '))
+          return (
+            <Text
+              key={i}
+              accessibilityRole="header"
+              style={{ fontFamily: font.semibold, fontSize: 15, color: c.forest, marginTop: 8 }}
+            >
+              {line.slice(3)}
+            </Text>
+          );
+        if (line.startsWith('| ')) {
+          const [label, value] = line.slice(2).split(' | ');
+          return (
+            <View key={i} style={styles.fact}>
+              <Text style={styles.factLabel}>{label}</Text>
+              <Text style={styles.factValue}>{value}</Text>
+            </View>
+          );
+        }
+        const draft = line.startsWith('DRAFT');
+        return (
+          <Text
+            key={i}
+            style={{
+              fontSize: 14,
+              lineHeight: 21,
+              color: draft ? c['danger-fg'] : c['ink-soft'],
+              fontFamily: draft ? font.semibold : font.body,
+            }}
+          >
+            {line}
+          </Text>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  fact: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: c.divider,
+  },
+  factLabel: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: c['ink-muted'],
+    fontFamily: font.body,
+  },
+  factValue: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: c.ink,
+    fontFamily: font.semibold,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
   screen: { flex: 1, backgroundColor: c.ground },
   body: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 16, gap: 20 },
   footer: {

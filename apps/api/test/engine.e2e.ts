@@ -98,6 +98,8 @@ async function disburse(
     200,
   );
   await send(staff.officer, 'post', `/applications/${code}/approve`).expect(200);
+  // Signed at a branch: no payout without a signed agreement.
+  await send(staff.officer, 'post', `/applications/${code}/agreement`).expect(200);
   const res = await send(staff.manager, 'post', `/applications/${code}/disburse`, {
     channel: 'BANK_TRANSFER',
   }).expect(200);
@@ -351,6 +353,47 @@ describe('servicing under the engine', () => {
     // 590 of spread fee: 90 of it is VAT (1,080 / 7,080), 500 is income.
     expect(by(ACCOUNTS.VAT_PAYABLE.code, 'CREDIT')).toBe(90n);
     expect(by(ACCOUNTS.FEE_INCOME.code, 'CREDIT')).toBe(500n);
+  });
+
+  it('lets a manager waive late charges, with a reason, and never charges them again', async () => {
+    const { loan: code } = await disburse(1_200_000n);
+    const loan = await prisma.loan.findFirstOrThrow({
+      where: { code },
+      include: { instalments: { orderBy: { number: 'asc' } } },
+    });
+    const first = loan.instalments[0]!;
+    await prisma.scheduleInstalment.update({
+      where: { id: first.id },
+      data: { dueDate: isoToUtcDate(addDays(today, -13)) },
+    });
+    const jobs = app.get(JobsService);
+    await runAsCompany(E2E_COMPANY_ID, () => jobs.chargeLateFees(today));
+    const charged = await prisma.scheduleInstalment.findUniqueOrThrow({ where: { id: first.id } });
+    expect(charged.penaltyDue).toBeGreaterThan(0n);
+    const url = `/loans/${code}/late-charges/waive`;
+
+    await send(staff.officer, 'post', url, { reason: 'Hospital stay' }).expect(403);
+    await send(staff.manager, 'post', url, { reason: 'no' }).expect(400);
+    await send(staff.manager, 'post', url, {
+      reason: 'Hospital stay',
+      amount: String(charged.penaltyDue + 1n),
+    }).expect(400);
+    // Part, then the rest.
+    await send(staff.manager, 'post', url, { reason: 'Hospital stay', amount: '100' }).expect(200);
+    const res = await send(staff.manager, 'post', url, { reason: 'Hospital stay' }).expect(200);
+    expect(res.body.penaltiesOwed).toBe('0');
+    const after = await prisma.scheduleInstalment.findUniqueOrThrow({ where: { id: first.id } });
+    expect(after.penaltyDue).toBe(0n);
+    await send(staff.manager, 'post', url, { reason: 'Hospital stay' }).expect(409);
+
+    // The nightly run does not charge the waived days again.
+    await runAsCompany(E2E_COMPANY_ID, () => jobs.chargeLateFees(today));
+    const again = await prisma.scheduleInstalment.findUniqueOrThrow({ where: { id: first.id } });
+    expect(again.penaltyDue).toBe(0n);
+    const log = await prisma.auditLog.findMany({
+      where: { action: 'loan.late_charges.waive', entityId: code },
+    });
+    expect(log).toHaveLength(2);
   });
 
   it('paying early clears the next instalment, not principal', async () => {
