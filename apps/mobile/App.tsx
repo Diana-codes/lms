@@ -3,7 +3,7 @@ import { SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hasSession } from './src/lib/api';
 import type { Home as HomeData, RegistrationNeeded, Tab } from './src/lib/types';
@@ -25,6 +25,17 @@ import { HomeIcon, InsightsIcon, LoansIcon, ProfileIcon } from './src/ui/icons';
 import { c, font } from './src/ui/theme';
 
 type Overlay = 'apply' | 'statement' | 'notifications' | 'documents' | null;
+
+/**
+ * Web build only: the website's "Apply" buttons open /app?product=CODE. The
+ * product is remembered for this visit, so after signing in (or signing up)
+ * the borrower goes straight to applying for it.
+ */
+function productFromLink(): string | null {
+  if (typeof window === 'undefined' || !window.location?.search) return null;
+  const code = new URLSearchParams(window.location.search).get('product');
+  return code && /^[A-Za-z0-9-]{2,40}$/.test(code) ? code : null;
+}
 
 const TABS: Array<[Tab, string, typeof HomeIcon]> = [
   ['home', 'Home', HomeIcon],
@@ -73,6 +84,19 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
 }
 
 /**
+ * In a browser the app keeps a phone-width column, centred, so it looks the
+ * same as on a phone instead of stretching across a wide screen.
+ */
+function Frame({ children }: { children: React.ReactNode }) {
+  if (Platform.OS !== 'web') return <>{children}</>;
+  return (
+    <View style={styles.webOuter}>
+      <View style={styles.webColumn}>{children}</View>
+    </View>
+  );
+}
+
+/**
  * The borrower app: four tabs (Home, Loans, Insights, Profile) as in the
  * approved Home design, with the apply flow, statement and notifications
  * opening over them. Session tokens live in the device's secure store.
@@ -95,6 +119,10 @@ export default function App() {
   const [homeKey, setHomeKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The product picked on the website, until the borrower applies for it.
+  const [wanted, setWanted] = useState<string | null>(productFromLink);
+  // Just signed up: documents first, then choosing a loan.
+  const [onboarding, setOnboarding] = useState(false);
 
   useEffect(() => {
     hasSession().then(setSignedIn);
@@ -117,41 +145,47 @@ export default function App() {
 
   if (!signedIn) {
     return (
-      <SafeAreaProvider>
-        {registration ? (
-          <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }}>
-            <StatusBar style="dark" />
-            <Register
-              registrationToken={registration.registrationToken}
-              phone={registration.phone}
-              onDone={() => {
-                setRegistration(null);
-                setSignInNotice(null);
-                setTab('home');
-                setSignedIn(true);
-                flash('Welcome to Kora Lend! Your account is open.');
-              }}
-              onCancel={(message) => {
-                setRegistration(null);
-                setSignInNotice(message ?? null);
-              }}
-            />
-          </SafeAreaView>
-        ) : (
-          <SafeAreaView style={{ flex: 1, backgroundColor: c.forest }} edges={['top']}>
-            <StatusBar style="light" />
-            <SignIn
-              notice={signInNotice}
-              onRegister={setRegistration}
-              onSignedIn={() => {
-                setSignInNotice(null);
-                setTab('home');
-                setSignedIn(true);
-              }}
-            />
-          </SafeAreaView>
-        )}
-      </SafeAreaProvider>
+      <Frame>
+        <SafeAreaProvider>
+          {registration ? (
+            <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }}>
+              <StatusBar style="dark" />
+              <Register
+                registrationToken={registration.registrationToken}
+                phone={registration.phone}
+                onDone={() => {
+                  setRegistration(null);
+                  setSignInNotice(null);
+                  setTab('home');
+                  setSignedIn(true);
+                  // Next: the documents everyone needs, then the loan they want.
+                  setOnboarding(true);
+                  setOverlay('documents');
+                  flash('Welcome to Bridge to Finance! Your account is open.');
+                }}
+                onCancel={(message) => {
+                  setRegistration(null);
+                  setSignInNotice(message ?? null);
+                }}
+              />
+            </SafeAreaView>
+          ) : (
+            <SafeAreaView style={{ flex: 1, backgroundColor: c.forest }} edges={['top']}>
+              <StatusBar style="light" />
+              <SignIn
+                notice={signInNotice}
+                onRegister={setRegistration}
+                onSignedIn={() => {
+                  setSignInNotice(null);
+                  setTab('home');
+                  setSignedIn(true);
+                  if (wanted) setOverlay('apply');
+                }}
+              />
+            </SafeAreaView>
+          )}
+        </SafeAreaProvider>
+      </Frame>
     );
   }
 
@@ -162,66 +196,99 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top']}>
-        <StatusBar style="dark" />
-        {overlay === 'apply' ? (
-          <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
-            <Apply
-              onDone={() => {
-                close();
-                setTab('home');
-              }}
-              onCancel={close}
-              toast={flash}
-            />
-          </SafeAreaView>
-        ) : overlay === 'statement' && loanCode ? (
-          <StatementScreen loanCode={loanCode} onBack={close} />
-        ) : overlay === 'notifications' ? (
-          <NotificationsScreen onBack={close} />
-        ) : overlay === 'documents' ? (
-          <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
-            <DocumentsScreen onBack={close} toast={flash} />
-          </SafeAreaView>
-        ) : (
-          <>
-            <View style={{ flex: 1 }}>
-              {tab === 'home' ? (
-                <Home key={homeKey} go={go} toast={flash} onLoaded={setHome} />
-              ) : null}
-              {tab === 'loans' ? (
-                <LoansTab loanCode={loanCode} onApply={() => setOverlay('apply')} />
-              ) : null}
-              {tab === 'insights' ? <InsightsTab /> : null}
-              {tab === 'profile' ? (
-                <ProfileTab
-                  toast={flash}
-                  onDocuments={() => setOverlay('documents')}
-                  onSignedOut={() => {
-                    setHome(null);
-                    setSignedIn(false);
-                  }}
-                />
-              ) : null}
-            </View>
-            <TabBar
-              tab={tab}
-              onChange={(t) => {
-                setTab(t);
-                if (t === 'home') setHomeKey((k) => k + 1);
-              }}
-            />
-          </>
-        )}
-        <SupportSheet open={support} onClose={() => setSupport(false)} home={home} />
-        <Toast message={toast} />
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <Frame>
+      <SafeAreaProvider>
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.ground }} edges={['top']}>
+          <StatusBar style="dark" />
+          {overlay === 'apply' ? (
+            <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+              <Apply
+                initialProduct={wanted}
+                onDone={() => {
+                  setWanted(null);
+                  close();
+                  setTab('home');
+                }}
+                onCancel={() => {
+                  setWanted(null);
+                  close();
+                }}
+                toast={flash}
+              />
+            </SafeAreaView>
+          ) : overlay === 'statement' && loanCode ? (
+            <StatementScreen loanCode={loanCode} onBack={close} />
+          ) : overlay === 'notifications' ? (
+            <NotificationsScreen onBack={close} />
+          ) : overlay === 'documents' ? (
+            <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+              <DocumentsScreen
+                onBack={() => {
+                  setOnboarding(false);
+                  close();
+                }}
+                toast={flash}
+                {...(onboarding
+                  ? {
+                      continueLabel: 'Next: choose your loan',
+                      onContinue: () => {
+                        setOnboarding(false);
+                        setOverlay('apply');
+                      },
+                    }
+                  : {})}
+              />
+            </SafeAreaView>
+          ) : (
+            <>
+              <View style={{ flex: 1 }}>
+                {tab === 'home' ? (
+                  <Home key={homeKey} go={go} toast={flash} onLoaded={setHome} />
+                ) : null}
+                {tab === 'loans' ? (
+                  <LoansTab loanCode={loanCode} onApply={() => setOverlay('apply')} />
+                ) : null}
+                {tab === 'insights' ? <InsightsTab /> : null}
+                {tab === 'profile' ? (
+                  <ProfileTab
+                    toast={flash}
+                    onDocuments={() => setOverlay('documents')}
+                    onSignedOut={() => {
+                      setHome(null);
+                      setSignedIn(false);
+                    }}
+                  />
+                ) : null}
+              </View>
+              <TabBar
+                tab={tab}
+                onChange={(t) => {
+                  setTab(t);
+                  if (t === 'home') setHomeKey((k) => k + 1);
+                }}
+              />
+            </>
+          )}
+          <SupportSheet open={support} onClose={() => setSupport(false)} home={home} />
+          <Toast message={toast} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </Frame>
   );
 }
 
 const styles = StyleSheet.create({
+  webOuter: { flex: 1, backgroundColor: '#E6E9E1', alignItems: 'center' },
+  webColumn: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 480,
+    overflow: 'hidden',
+    backgroundColor: c.ground,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: c.line,
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: c.surface,

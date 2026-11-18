@@ -7,8 +7,8 @@ import { api, ApiError } from '@/lib/api';
 import type { CompanySettings } from '@/lib/types';
 
 /** The console's own colours, used when a company sets none. */
-const DEFAULT_BRAND = '#0E3B2E';
-const DEFAULT_ACCENT = '#C6F432';
+const DEFAULT_BRAND = '#173C2E';
+const DEFAULT_ACCENT = '#A2E8B8';
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const orNull = (v: string) => (v.trim() === '' ? null : v.trim());
@@ -29,7 +29,7 @@ export function BrandingForm({ settings }: { settings: CompanySettings }) {
   const set = (key: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const colourError = (v: string) => (v && !HEX.test(v) ? 'Use a colour like #0E3B2E' : null);
+  const colourError = (v: string) => (v && !HEX.test(v) ? 'Use a colour like #173C2E' : null);
   const logoError =
     form.logoUrl && !/^(https:\/\/|\/brand\/)/.test(form.logoUrl)
       ? 'Use an https:// address'

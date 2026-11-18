@@ -101,10 +101,13 @@ export function Button({
 /** The round back button and three-step progress bar at the top of the apply flow. */
 export function StepHeader({
   step,
+  of = 3,
   title,
   onBack,
 }: {
-  step: 1 | 2 | 3;
+  step: number;
+  /** How many steps the flow has. */
+  of?: number;
   title: string;
   onBack: () => void;
 }) {
@@ -115,10 +118,10 @@ export function StepHeader({
       </RoundButton>
       <View style={{ flex: 1, gap: 6 }}>
         <Text style={{ fontSize: 12, color: c['ink-muted'], fontFamily: font.body }}>
-          Step {step} of 3 · {title}
+          Step {step} of {of} · {title}
         </Text>
         <View style={{ flexDirection: 'row', gap: 4 }}>
-          {[1, 2, 3].map((i) => (
+          {Array.from({ length: of }, (_, k) => k + 1).map((i) => (
             <View
               key={i}
               style={{

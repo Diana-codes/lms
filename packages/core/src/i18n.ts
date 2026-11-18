@@ -621,7 +621,7 @@ const API_MESSAGES_RW: Record<string, string> = {
   [EN['error.generic']]: RW['error.generic'],
   [EN['error.server']]: RW['error.server'],
   [EN['error.offline']]: RW['error.offline'],
-  'Could not reach Kora Lend. Check your connection and try again.': RW['error.offline'],
+  'Could not reach Bridge to Finance. Check your connection and try again.': RW['error.offline'],
 };
 
 export function translateApiMessage(lang: BorrowerLanguage, message: string): string {

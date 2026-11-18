@@ -38,7 +38,7 @@ export function TwoFactorSetup({
   onDone,
 }: {
   base: AuthBase;
-  /** The name the authenticator app will show, e.g. "Kora Lend". */
+  /** The name the authenticator app will show, e.g. "Bridge to Finance". */
   appIssuer: string;
   onDone: () => void;
 }) {

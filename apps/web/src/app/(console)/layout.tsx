@@ -30,6 +30,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         me={me.data}
         openApplications={open.ok ? open.data.open : null}
         brand={company?.displayName ?? PRODUCT_NAME}
+        logoUrl={company?.logoUrl}
       />
       <main
         id="main"

@@ -726,7 +726,7 @@ export class ApplicationsService {
         amount: quote.netDisbursed,
         phone,
         externalId: loanCode,
-        message: `Kora Lend loan ${loanCode}`,
+        message: `Bridge to Finance loan ${loanCode}`,
       });
       await this.prisma.disbursement.update({
         where: { id: disbursementId },
@@ -786,7 +786,7 @@ export class ApplicationsService {
         amount: loan.netDisbursed ?? loan.principal,
         phone: loan.borrower.phone,
         externalId: loan.code,
-        message: `Kora Lend loan ${loan.code}`,
+        message: `Bridge to Finance loan ${loan.code}`,
       });
       await this.prisma.disbursement.update({ where: { id: d.id }, data: { status: 'SENT' } });
     } catch (err) {

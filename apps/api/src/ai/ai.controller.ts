@@ -59,7 +59,7 @@ export class AiController {
     return this.ai.ask(body.question, user, requestMeta(req));
   }
 
-  @Roles('MANAGER', 'ADMIN', 'AUDITOR')
+  @Roles('MANAGER', 'ADMIN', 'AUDITOR', 'ACCOUNTANT')
   @Get('fairness')
   fairness() {
     return this.ai.fairness();

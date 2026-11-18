@@ -50,7 +50,7 @@ export default async function StatementPage({ params }: { params: Promise<{ code
       <article className="flex flex-col gap-6 min-w-0 rounded-card border border-line bg-surface p-5 text-sm md:p-8 print:border-0 print:p-0">
         <header className="flex flex-wrap items-start gap-4">
           <div className="mr-auto flex flex-col gap-1">
-            <span className="font-display text-lg font-semibold text-forest">Kora Lend</span>
+            <span className="font-display text-lg font-semibold text-forest">Bridge to Finance</span>
             <h1 className="m-0 font-display text-[26px] leading-tight font-semibold">
               Loan statement
             </h1>

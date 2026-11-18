@@ -234,7 +234,7 @@ export class PlatformAuthService {
       where: { id: adminId },
       data: { totpSecretEnc: this.crypto.encrypt(secret), totpLastStep: null },
     });
-    return { secret, otpauthUrl: totpUri(secret, admin.email, 'Kora Lend platform') };
+    return { secret, otpauthUrl: totpUri(secret, admin.email, 'BF Loan Management System platform') };
   }
 
   /** Finish setup by proving the authenticator app produces valid codes. */

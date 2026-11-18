@@ -14,7 +14,7 @@ import {
  * Runs before every console page and every /api call.
  *
  * /api calls are forwarded to the API with the company named by the address
- * the console was opened at (bf.koralend.rw → "bf"), replacing anything the
+ * the console was opened at (multi-company only), replacing anything the
  * browser sent. The API checks that the session belongs to that company.
  *
  * admin.<domain> is the platform admin console and serves nothing else;
@@ -52,8 +52,13 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
-  // Borrower portal uses its own Bearer tokens in the browser, not staff cookies.
-  if (pathname === '/login' || pathname === '/portal' || pathname.startsWith('/portal/')) {
+  // The borrower web app is the same app as on phones (apps/mobile), at /app.
+  // Older /portal links (the website's Apply button, SMS) open it.
+  if (pathname === '/portal' || pathname.startsWith('/portal/')) {
+    return NextResponse.redirect(new URL(`/app${search}`, request.url));
+  }
+  // The borrower app uses its own Bearer tokens in the browser, not staff cookies.
+  if (pathname === '/login' || pathname === '/app' || pathname.startsWith('/app/')) {
     return NextResponse.next();
   }
   if (request.cookies.has(ACCESS_COOKIE)) return NextResponse.next();

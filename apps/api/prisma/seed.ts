@@ -105,7 +105,7 @@ const DEMO_BRAND = {
   accentColor: '#A2E8B8',
   logoUrl: '/brand/bf-mark-green.svg',
 };
-const PLATFORM_ADMIN_EMAIL = 'platform@koralend.test';
+const PLATFORM_ADMIN_EMAIL = 'platform@bf.test';
 const crypto = new PiiCrypto(env.PII_ENCRYPTION_KEY, env.PII_HASH_KEY);
 
 // ── time ────────────────────────────────────────────────────────────────
@@ -160,60 +160,60 @@ function uuid(): string {
 type OfficerKey = 'KN' | 'JM' | 'AM' | 'DR';
 
 const STAFF = [
-  { key: 'ADMIN', email: 'admin@koralend.test', first: 'Alice', last: 'Uwimana', role: 'ADMIN' },
-  { key: 'MGR', email: 'manager@koralend.test', first: 'Claire', last: 'Mutesi', role: 'MANAGER' },
+  { key: 'ADMIN', email: 'admin@bf.test', first: 'Alice', last: 'Uwimana', role: 'ADMIN' },
+  { key: 'MGR', email: 'manager@bf.test', first: 'Claire', last: 'Mutesi', role: 'MANAGER' },
   {
     key: 'KN',
-    email: 'kevin@koralend.test',
+    email: 'kevin@bf.test',
     first: 'Kevin',
     last: 'Nkurunziza',
     role: 'LOAN_OFFICER',
   },
   {
     key: 'JM',
-    email: 'jeanne@koralend.test',
+    email: 'jeanne@bf.test',
     first: 'Jeanne',
     last: 'Mukamana',
     role: 'LOAN_OFFICER',
   },
   {
     key: 'AM',
-    email: 'aimable@koralend.test',
+    email: 'aimable@bf.test',
     first: 'Aimable',
     last: 'Munyaneza',
     role: 'LOAN_OFFICER',
   },
   {
     key: 'DR',
-    email: 'diane@koralend.test',
+    email: 'diane@bf.test',
     first: 'Diane',
     last: 'Rutayisire',
     role: 'LOAN_OFFICER',
   },
   {
     key: 'COL',
-    email: 'collections@koralend.test',
+    email: 'collections@bf.test',
     first: 'Eric',
     last: 'Bizimana',
     role: 'COLLECTIONS_AGENT',
   },
   {
     key: 'CA',
-    email: 'analyst@koralend.test',
+    email: 'analyst@bf.test',
     first: 'Grace',
     last: 'Ingabire',
     role: 'CREDIT_ANALYST',
   },
   {
     key: 'ACC',
-    email: 'accountant@koralend.test',
+    email: 'accountant@bf.test',
     first: 'Patrick',
     last: 'Habimana',
     role: 'ACCOUNTANT',
   },
   {
     key: 'AUD',
-    email: 'auditor@koralend.test',
+    email: 'auditor@bf.test',
     first: 'Sandrine',
     last: 'Umutoni',
     role: 'AUDITOR',
@@ -1201,7 +1201,7 @@ function seedAline(): void {
     borrowerId: id,
     loanId: loan.id,
     toPhone: aline.phone,
-    body: 'Kora Lend: your instalment of RWF 284,985 is due on 4 Nov. Pay with MoMo Pay [YOUR CODE].',
+    body: 'Bridge to Finance: your instalment of RWF 284,985 is due on 4 Nov. Pay with MoMo Pay [YOUR CODE].',
     template: 'reminder.due_soon',
     status: 'DELIVERED',
     providerMessageId: 'seed-sms-0001',
@@ -1743,7 +1743,7 @@ function seedCollections(): void {
           borrowerId,
           loanId: loan.id,
           toPhone: borrower.phone,
-          body: 'Kora Lend: your payment is overdue. Pay with MoMo Pay [YOUR CODE] or call us to talk about it.',
+          body: 'Bridge to Finance: your payment is overdue. Pay with MoMo Pay [YOUR CODE] or call us to talk about it.',
           template: 'reminder.overdue',
           status: 'DELIVERED',
           providerMessageId: `seed-sms-${String(++smsSeq).padStart(4, '0')}`,
@@ -1952,7 +1952,7 @@ async function seedDemoDocuments(): Promise<void> {
         `Company: ${name} Trading Ltd`,
         'Company code: 000000000 (sample)',
         'Registered: 14 March 2023, Kigali',
-        'This is a made-up document for the Kora Lend development seed.',
+        'This is a made-up document for the Bridge to Finance development seed.',
       ]),
     ],
   ];
@@ -2147,7 +2147,7 @@ async function insertMany<T>(
 
 async function main(): Promise<void> {
   console.log(
-    `Seeding Kora Lend as of ${TODAY}${SHIFT ? ` (designs shifted by ${SHIFT} days)` : ''}\n`,
+    `Seeding Bridge to Finance as of ${TODAY}${SHIFT ? ` (designs shifted by ${SHIFT} days)` : ''}\n`,
   );
 
   // TRUNCATE is the one way to clear the append-only tables, and only this

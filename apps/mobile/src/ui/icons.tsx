@@ -5,7 +5,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 type IconProps = { size?: number; color?: string; strokeWidth?: number };
 
 function make(children: ReactNode, defaultStroke = 2) {
-  return function Icon({ size = 22, color = '#0E3B2E', strokeWidth = defaultStroke }: IconProps) {
+  return function Icon({ size = 22, color = '#173C2E', strokeWidth = defaultStroke }: IconProps) {
     return (
       <Svg
         width={size}

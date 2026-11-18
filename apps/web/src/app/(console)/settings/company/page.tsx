@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import { ProviderKeysForm } from '@/components/company/provider-keys-form';
 import { WebhookSecret } from '@/components/company/webhook-secret';
 import { PageHeader } from '@/components/page-header';
-import { PRODUCT_NAME } from '@/lib/company';
 import { serverApi } from '@/lib/server-api';
 import type { CompanySettings, Me } from '@/lib/types';
 import { AuthFeaturesForm } from './auth-features-form';
@@ -24,7 +23,7 @@ export default async function CompanySettingsPage() {
 
   return (
     <>
-      <PageHeader eyebrow={`${s.slug} · ${s.currency} · ${s.timezone}`} title="Company settings" />
+      <PageHeader eyebrow={`${s.currency} · ${s.timezone}`} title="Company settings" />
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <BrandingForm settings={s} />
@@ -33,9 +32,9 @@ export default async function CompanySettingsPage() {
           <ContactForm settings={s} />
           <ClassificationForm settings={s} />
           <Card>
-            <CardTitle>Set by {PRODUCT_NAME}</CardTitle>
+            <CardTitle>Set at installation</CardTitle>
             <p className="m-0 text-sm text-ink-muted">
-              To change these, contact {PRODUCT_NAME} support.
+              To change these, ask the team that runs the system.
             </p>
             <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
               <dt className="text-ink-muted">Name</dt>
@@ -67,7 +66,7 @@ export default async function CompanySettingsPage() {
           <ProviderKeysForm
             endpoint="/company/settings"
             configured={s.secrets}
-            intro="Your own MTN MoMo and Africa's Talking accounts: disbursements, repayments and messages to borrowers go through them. Values are stored encrypted and never shown again. Staff sign-in codes are sent by the platform, not this account."
+            intro="Your own MTN MoMo and Africa's Talking accounts: disbursements, repayments and messages to borrowers go through them. Values are stored encrypted and never shown again. Staff sign-in codes are sent by the system's own SMS account."
           />
           <WebhookSecret endpoint="/company/settings" configured={s.webhookConfigured} />
         </div>

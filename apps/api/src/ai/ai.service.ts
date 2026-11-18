@@ -190,7 +190,7 @@ export class AiService implements OnModuleDestroy {
         schema: SummarySchema,
         effort: 'low',
         system:
-          'You write short credit profiles for loan officers at Kora Lend, a lender in Rwanda. Use only the facts given. Amounts are Rwandan francs: write them as "RWF 1.6M" or "RWF 380,000". Be plain and specific. Do not recommend approving or declining; officers decide. Refer to the borrower as "the borrower" or "they".',
+          'You write short credit profiles for loan officers at Bridge to Finance, a lender in Rwanda. Use only the facts given. Amounts are Rwandan francs: write them as "RWF 1.6M" or "RWF 380,000". Be plain and specific. Do not recommend approving or declining; officers decide. Refer to the borrower as "the borrower" or "they".',
         user: `Write the profile from these facts:\n${JSON.stringify(facts)}`,
       });
     } catch (err) {
@@ -312,7 +312,7 @@ export class AiService implements OnModuleDestroy {
         schema: ApproachSchema,
         effort: 'low',
         system:
-          'You advise a collections agent at Kora Lend, a lender in Rwanda, on one overdue account. Base every point on the contact history and payments given; if there is little history, say so. Suggest a respectful, practical approach: a time to call, and an offer such as a short payment plan or a reminder. Never suggest threats, shaming, contacting family or employers, or anything a regulator would object to. Write the SMS in natural, polite Kinyarwanda, greeting the borrower by the name given, stating the overdue amount in RWF and the loan number, and how to pay. A native speaker will check the SMS before it is sent.',
+          'You advise a collections agent at Bridge to Finance, a lender in Rwanda, on one overdue account. Base every point on the contact history and payments given; if there is little history, say so. Suggest a respectful, practical approach: a time to call, and an offer such as a short payment plan or a reminder. Never suggest threats, shaming, contacting family or employers, or anything a regulator would object to. Write the SMS in natural, polite Kinyarwanda, greeting the borrower by the name given, stating the overdue amount in RWF and the loan number, and how to pay. A native speaker will check the SMS before it is sent.',
         user: `Account facts:\n${JSON.stringify(facts)}`,
       });
     } catch (err) {

@@ -1,12 +1,28 @@
 {
   "expo": {
-    "name": "Kora Lend",
-    "slug": "kora-lend",
+    "name": "Bridge to Finance",
+    "slug": "bridge-to-finance",
     "version": "0.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F4F5F1",
-    "android": { "package": "rw.koralend.borrower" },
-    "ios": { "bundleIdentifier": "rw.koralend.borrower" }
+    "android": {
+      "package": "rw.bridgetofinance.borrower"
+    },
+    "ios": {
+      "bundleIdentifier": "rw.bridgetofinance.borrower"
+    },
+    "web": {
+      "name": "Bridge to Finance",
+      "shortName": "BF",
+      "themeColor": "#173C2E",
+      "backgroundColor": "#F4F5F1",
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "experiments": {
+      "baseUrl": "/app"
+    }
   }
 }

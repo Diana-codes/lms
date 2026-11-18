@@ -67,6 +67,12 @@ const mimeOfKey = (key: string) =>
 
 const PURPOSES = ['Stock', 'Equipment', 'Expand shop', 'School fees', 'Other'];
 
+/** The terms the app offers for a product: the usual ones within its range, or its shortest. */
+function termChoices(min: number, max: number): number[] {
+  const usual = [1, 2, 3, 6, 9, 12, 18, 24, 36, 48].filter((t) => t >= min && t <= max);
+  return usual.length ? usual : [min];
+}
+
 @Injectable()
 export class BorrowerAppService {
   constructor(
@@ -323,7 +329,7 @@ export class BorrowerAppService {
         annualRateBps: p.annualRateBps,
         minAmount: p.minAmount,
         maxAmount: p.maxAmount,
-        terms: [6, 12, 18, 24, 36].filter((t) => t >= p.minTermMonths && t <= p.maxTermMonths),
+        terms: termChoices(p.minTermMonths, p.maxTermMonths),
       })),
       preApprovedLimit: b.preApprovedLimit,
       purposes: PURPOSES,

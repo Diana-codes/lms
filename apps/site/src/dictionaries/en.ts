@@ -290,9 +290,9 @@ const en = {
   login: {
     title: 'Log in',
     subtitle: 'Choose how you want to sign in.',
-    customer: 'Customer portal',
-    customerText: 'Manage your applications, loans and repayments.',
-    staff: 'Staff portal',
+    customer: 'Customers: sign in or sign up',
+    customerText: 'Open an account, send your documents, apply, and follow your loan and repayments.',
+    staff: 'Staff: loan management system',
     staffText: 'For Bridge to Finance employees.',
     soon: 'Coming soon',
     back: 'Back to home',

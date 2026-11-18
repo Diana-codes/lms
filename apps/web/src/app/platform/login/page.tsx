@@ -15,7 +15,7 @@ export default async function PlatformLoginPage() {
       <div className="flex w-full max-w-[400px] flex-col gap-6">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-semibold tracking-wide text-ink-muted uppercase">
-            Orin Tech House
+            Platform administration
           </span>
           <span className="font-display text-xl font-semibold">{PRODUCT_NAME} platform</span>
         </div>

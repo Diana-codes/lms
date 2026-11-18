@@ -19,8 +19,8 @@ export type CompanyRequest = Request & { company?: CompanyContext };
 /**
  * Opens the company context for a request. The company comes from the
  * x-company header, then the Host subdomain, then (development and tests
- * only) DEFAULT_COMPANY_SLUG. In single-company mode (COMPANY_SLUG) every
- * request is for that one company, whatever the address. The auth guards then check that the signed-in
+ * only) DEFAULT_COMPANY_SLUG, when MULTI_COMPANY is on. Normally it is off:
+ * the system belongs to one company and every request is for it. The auth guards then check that the signed-in
  * user belongs to that same company. Platform routes run with no company.
  */
 @Injectable()
@@ -49,14 +49,19 @@ export class CompanyMiddleware implements NestMiddleware {
   }
 
   private async resolve(req: Request, context: CompanyContext): Promise<void> {
+    // One company (the default): no platform admin, and every request is for it.
+    if (!this.env.MULTI_COMPANY && req.path.startsWith('/platform')) {
+      throw new NotFoundException('Not found');
+    }
     // Platform administration and provider webhooks find their own way.
     if (req.path.startsWith('/platform') || req.path.startsWith('/webhooks')) return;
 
     const header = req.headers[COMPANY_HEADER];
     const named = typeof header === 'string' ? header.trim().toLowerCase() : undefined;
-    const slug =
-      this.env.COMPANY_SLUG ??
-      (named || this.companies.slugFromHost(req.headers.host) || this.env.DEFAULT_COMPANY_SLUG);
+    const slug = !this.env.MULTI_COMPANY
+      ? (this.env.COMPANY_SLUG ?? this.env.DEFAULT_COMPANY_SLUG ?? 'bf')
+      : (this.env.COMPANY_SLUG ??
+        (named || this.companies.slugFromHost(req.headers.host) || this.env.DEFAULT_COMPANY_SLUG));
     if (!slug) return; // A signed-in token may still name the company (see the guards).
     if (!SLUG_PATTERN.test(slug)) throw new NotFoundException('Unknown company');
 

@@ -108,7 +108,7 @@ export class MoneyService {
         amount,
         phone: payer,
         externalId: loan.code,
-        message: `Kora Lend repayment for ${loan.code}`,
+        message: `Bridge to Finance repayment for ${loan.code}`,
       });
     } catch (err) {
       await this.prisma.payment.update({

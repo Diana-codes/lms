@@ -19,6 +19,10 @@ export interface SidebarLinkProps {
 
 export interface SidebarProps {
   brand?: string;
+  /** The lender's logo; the brand's first letter is shown without one. */
+  logoUrl?: string | null;
+  /** A line under the brand, e.g. "Loan management system". */
+  tagline?: string;
   items: SidebarItem[];
   /** Pass the router's link (next/link) so navigation stays client-side. */
   LinkComponent?: ComponentType<SidebarLinkProps> | 'a';
@@ -32,7 +36,9 @@ export interface SidebarProps {
  * screens it moves to the top of the page instead of squeezing the content.
  */
 export function Sidebar({
-  brand = 'Kora Lend',
+  brand = 'Bridge to Finance',
+  logoUrl,
+  tagline,
   items,
   LinkComponent = 'a',
   footer,
@@ -48,13 +54,26 @@ export function Sidebar({
       )}
     >
       <div className="flex items-center gap-2.5 px-2">
-        <div
-          aria-hidden="true"
-          className="flex size-8 items-center justify-center rounded-[9px] bg-lime font-display font-bold text-forest"
-        >
-          {brand.charAt(0)}
-        </div>
-        <span className="font-display text-lg font-semibold text-white">{brand}</span>
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt=""
+            className="size-8 shrink-0 rounded-[9px] bg-white object-contain p-0.5"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-lime font-display font-bold text-forest"
+          >
+            {brand.charAt(0)}
+          </div>
+        )}
+        <span className="flex min-w-0 flex-col">
+          <span className="font-display text-lg leading-tight font-semibold text-white">
+            {brand}
+          </span>
+          {tagline ? <span className="text-xs text-forest-fg">{tagline}</span> : null}
+        </span>
       </div>
       <div className="flex flex-col gap-1">
         {items.map((item) => (

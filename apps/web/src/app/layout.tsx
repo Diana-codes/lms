@@ -10,8 +10,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const company = await getCompany();
   const name = company?.displayName ?? PRODUCT_NAME;
   return {
-    title: { default: name, template: `%s · ${name}` },
-    description: 'Loan management for lenders in Rwanda.',
+    title: { default: `${name} · Loan management`, template: `%s · ${name}` },
+    description: 'Bridge to Finance loan management system.',
     robots: { index: false, follow: false },
   };
 }
@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export async function generateViewport(): Promise<Viewport> {
   const company = await getCompany();
   return {
-    themeColor: company?.brandColor ?? '#0E3B2E',
+    themeColor: company?.brandColor ?? '#173C2E',
     width: 'device-width',
     initialScale: 1,
   };

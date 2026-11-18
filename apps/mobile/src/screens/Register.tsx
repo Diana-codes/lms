@@ -263,13 +263,13 @@ export function Register({
             <View style={{ gap: 10 }}>
               <Checkbox checked={agreedData} onChange={setAgreedData}>
                 <Text style={styles.small}>
-                  I agree that Kora Lend can use my data as described above.
+                  I agree that Bridge to Finance can use my data as described above.
                 </Text>
               </Checkbox>
               <Checkbox checked={agreedTerms} onChange={setAgreedTerms}>
                 <Text style={styles.small}>
-                  The details I gave are true and the ID number is my own. I understand Kora Lend
-                  will check them.
+                  The details I gave are true and the ID number is my own. I understand Bridge to
+                  Finance will check them.
                 </Text>
               </Checkbox>
               <Checkbox checked={marketingSms} onChange={setMarketingSms}>

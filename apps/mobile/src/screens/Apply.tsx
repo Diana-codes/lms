@@ -6,7 +6,6 @@ import {
   maskNationalId,
 } from '@kora/core';
 import Slider from '@react-native-community/slider';
-import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -18,8 +17,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { api, errorMessage, uploadFile } from '../lib/api';
-import { preparePhoto, uploadErrorMessage } from '../lib/upload';
+import { api, errorMessage } from '../lib/api';
+import { DocumentsScreen } from './Documents';
 import type { AgreementPreview, ApplyOptions, Draft, Quote } from '../lib/types';
 import {
   Button,
@@ -38,7 +37,7 @@ import {
   Toggle,
   tap,
 } from '../ui';
-import { CameraIcon, CheckIcon, ChevronDownIcon, IdCardIcon, LockIcon } from '../ui/icons';
+import { CheckIcon, ChevronDownIcon, LockIcon } from '../ui/icons';
 import { c, font } from '../ui/theme';
 
 const SECTORS: readonly string[] = BUSINESS_SECTORS;
@@ -67,13 +66,16 @@ export function Apply({
   onDone,
   onCancel,
   toast,
+  initialProduct,
 }: {
   onDone: () => void;
   onCancel: () => void;
   toast: (m: string) => void;
+  /** A product chosen before the flow opened, e.g. on the website. */
+  initialProduct?: string | null;
 }) {
   const [options, setOptions] = useState<ApplyOptions | null>(null);
-  const [step, setStep] = useState<1 | 2 | 3 | 'sent'>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 'sent'>(1);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   // Accepting the agreement must be a deliberate tap, never pre-ticked.
@@ -83,6 +85,7 @@ export function Apply({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sectorOpen, setSectorOpen] = useState(false);
+  const [productOpen, setProductOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
   const [result, setResult] = useState<{ code: string; status: string; expected: string } | null>(
     null,
@@ -92,7 +95,10 @@ export function Apply({
     api<ApplyOptions>('/app/apply/options')
       .then((o) => {
         setOptions(o);
-        const product = o.products.find((p) => p.kind === 'SME') ?? o.products[0]!;
+        const product =
+          o.products.find((p) => p.code === initialProduct) ??
+          o.products.find((p) => p.kind === 'SME') ??
+          o.products[0]!;
         const limit = o.preApprovedLimit ? BigInt(o.preApprovedLimit) : BigInt(product.maxAmount);
         const start = (limit / 2n / STEP) * STEP;
         setDraft({
@@ -111,7 +117,7 @@ export function Apply({
         });
       })
       .catch((err) => setError(errorMessage(err)));
-  }, []);
+  }, [initialProduct]);
 
   const product = useMemo(
     () => options?.products.find((p) => p.code === draft?.productCode) ?? null,
@@ -144,7 +150,7 @@ export function Apply({
 
   // The Key Facts for exactly what is being applied for. New terms need a new tick.
   useEffect(() => {
-    if (step !== 3 || amount == null || term == null || !code) return;
+    if (step !== 4 || amount == null || term == null || !code) return;
     let live = true;
     setAgreement(null);
     setAgreed(false);
@@ -157,39 +163,6 @@ export function Apply({
       live = false;
     };
   }, [step, amount, term, code]);
-
-  async function pick(kind: 'id' | 'selfie') {
-    setBusy(kind);
-    try {
-      const perm =
-        kind === 'selfie'
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        toast(
-          kind === 'selfie'
-            ? 'Allow camera access to take a selfie.'
-            : 'Allow photo access to add your ID.',
-        );
-        return;
-      }
-      const picked =
-        kind === 'selfie'
-          ? await ImagePicker.launchCameraAsync({
-              cameraType: ImagePicker.CameraType.front,
-              quality: 0.7,
-            })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-      if (picked.canceled) return;
-      const photo = await preparePhoto(picked.assets[0]!, kind);
-      const r = await uploadFile<{ key: string }>(`/app/apply/upload/${kind}`, photo);
-      setDraft((d) => d && { ...d, [kind === 'id' ? 'idPhotoKey' : 'selfieKey']: r.key });
-    } catch (err) {
-      toast(uploadErrorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function submit() {
     if (!draft) return;
@@ -306,8 +279,21 @@ export function Apply({
   if (step === 1) {
     return (
       <View style={styles.screen}>
-        <StepHeader step={1} title="Loan details" onBack={onCancel} />
+        <StepHeader step={1} of={4} title="Loan details" onBack={onCancel} />
         <ScrollView contentContainerStyle={styles.body}>
+          <Field label="Type of loan">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Type of loan: ${product.name}`}
+              onPress={() => setProductOpen(true)}
+              style={[styles.input, { flexDirection: 'row', alignItems: 'center' }]}
+            >
+              <Text style={{ flex: 1, fontSize: 15, color: c.ink, fontFamily: font.medium }}>
+                {product.name}
+              </Text>
+              <ChevronDownIcon size={18} color={c['ink-muted']} />
+            </Pressable>
+          </Field>
           <ScreenTitle>How much do you need?</ScreenTitle>
           <Panel radius={22} style={{ padding: 20 }}>
             <Text style={{ fontSize: 13, color: c['ink-muted'], fontFamily: font.body }}>
@@ -430,6 +416,34 @@ export function Apply({
             No fees to apply · Decision within 1 working day
           </Muted>
         </Footer>
+        <Sheet open={productOpen} onClose={() => setProductOpen(false)} title="Type of loan">
+          <View style={{ gap: 8 }}>
+            {options?.products.map((p) => (
+              <Choice
+                key={p.code}
+                label={`${p.name} · ${(p.annualRateBps / 100).toFixed(0)}% p.a.`}
+                selected={p.code === draft.productCode}
+                onPress={() => {
+                  // Start the new product at an amount and term it allows.
+                  const lo = BigInt(p.minAmount);
+                  const hi = BigInt(p.maxAmount);
+                  const keep = draft.amount < lo ? lo : draft.amount > hi ? hi : draft.amount;
+                  setDraft({
+                    ...draft,
+                    productCode: p.code,
+                    amount: keep,
+                    termMonths: p.terms.includes(draft.termMonths)
+                      ? draft.termMonths
+                      : p.terms.includes(12)
+                        ? 12
+                        : p.terms[0]!,
+                  });
+                  setProductOpen(false);
+                }}
+              />
+            ))}
+          </View>
+        </Sheet>
       </View>
     );
   }
@@ -441,7 +455,7 @@ export function Apply({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.screen}
       >
-        <StepHeader step={2} title="Your details" onBack={() => setStep(1)} />
+        <StepHeader step={2} of={4} title="Your details" onBack={() => setStep(1)} />
         <ScrollView
           contentContainerStyle={[styles.body, { gap: 18 }]}
           keyboardShouldPersistTaps="handled"
@@ -553,33 +567,6 @@ export function Apply({
                 />
               )}
             </Field>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              {(
-                [
-                  ['id', draft.idPhotoKey, IdCardIcon, 'ID front · added', 'Add ID front'],
-                  ['selfie', draft.selfieKey, CameraIcon, 'Selfie · added', 'Take a selfie'],
-                ] as const
-              ).map(([kind, done, Icon, doneLabel, label]) => (
-                <Pressable
-                  key={kind}
-                  accessibilityRole="button"
-                  onPress={() => pick(kind)}
-                  disabled={busy === kind}
-                  style={[styles.photo, done ? styles.photoDone : styles.photoEmpty]}
-                >
-                  <Icon size={22} color={done ? c['success-fg'] : c['ink-soft']} />
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: done ? c['success-fg'] : c['ink-soft'],
-                      fontFamily: font.body,
-                    }}
-                  >
-                    {busy === kind ? 'Uploading…' : done ? doneLabel : label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
           </Panel>
           <Panel style={{ gap: 10 }}>
             <Text style={{ fontSize: 13, fontFamily: font.semibold, color: c.ink }}>
@@ -602,7 +589,7 @@ export function Apply({
           </Panel>
         </ScrollView>
         <Footer>
-          <Button label="Review application" onPress={() => setStep(3)} />
+          <Button label="Continue to documents" onPress={() => setStep(3)} />
           <View
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
           >
@@ -629,10 +616,26 @@ export function Apply({
     );
   }
 
-  // ── Step 3: review and submit ──
+  // ── Step 3: the documents this product needs ──
+  if (step === 3) {
+    return (
+      <View style={styles.screen}>
+        <DocumentsScreen
+          productCode={draft.productCode}
+          toast={toast}
+          onBack={() => setStep(2)}
+          header={<StepHeader step={3} of={4} title="Documents" onBack={() => setStep(2)} />}
+          onContinue={() => setStep(4)}
+          continueLabel="Review application"
+        />
+      </View>
+    );
+  }
+
+  // ── Step 4: review and submit ──
   return (
     <View style={styles.screen}>
-      <StepHeader step={3} title="Review & submit" onBack={() => setStep(2)} />
+      <StepHeader step={4} of={4} title="Review & submit" onBack={() => setStep(3)} />
       <ScrollView contentContainerStyle={[styles.body, { gap: 16 }]}>
         <ScreenTitle>Check everything looks right</ScreenTitle>
         <DarkCard style={{ gap: 12 }}>
@@ -706,7 +709,7 @@ export function Apply({
                 ? 'Verified'
                 : draft.nationalId
                   ? maskNationalId(draft.nationalId)
-                  : 'Not given'
+                  : (options?.prefill.nationalIdMasked ?? 'Not given')
             }
             valueStyle={kycVerified ? { color: c['positive-fg'] } : undefined}
           />
@@ -758,7 +761,7 @@ export function Apply({
             >
               loan agreement
             </Text>
-            , and I allow Kora Lend to check my credit record with the credit bureau.
+            , and I allow Bridge to Finance to check my credit record with the credit bureau.
           </Text>
         </Checkbox>
         <ErrorText>{error}</ErrorText>

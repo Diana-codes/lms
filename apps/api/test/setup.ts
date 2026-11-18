@@ -10,7 +10,10 @@ if (process.env.APP_DATABASE_URL)
   process.env.APP_DATABASE_URL = testDatabaseUrl(process.env.APP_DATABASE_URL);
 if (process.env.REPORTING_DATABASE_URL)
   process.env.REPORTING_DATABASE_URL = testDatabaseUrl(process.env.REPORTING_DATABASE_URL);
-// Requests that name no company act for the test company.
+// The tests keep the multi-company code checked; requests that name no company
+// act for the test company.
+process.env.MULTI_COMPANY = 'true';
+delete process.env.COMPANY_SLUG;
 process.env.DEFAULT_COMPANY_SLUG = E2E_COMPANY_SLUG;
 // Tests always run on the local simulators and never call Claude, whatever .env holds.
 delete process.env.MOMO_COLLECTION_SUBSCRIPTION_KEY;

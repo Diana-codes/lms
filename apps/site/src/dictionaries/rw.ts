@@ -303,9 +303,9 @@ const rw: Dictionary = {
   login: {
     title: 'Injira',
     subtitle: 'Hitamo uko ushaka kwinjira.',
-    customer: "Urubuga rw'abakiriya",
-    customerText: "Cunga ubusabe bwawe, inguzanyo n'ibyo wishyura.",
-    staff: "Urubuga rw'abakozi",
+    customer: 'Abakiriya: injira cyangwa wiyandikishe',
+    customerText: "Fungura konti, wohereze inyandiko, usabe inguzanyo, kandi ukurikirane ibyo wishyura.",
+    staff: "Abakozi: sisitemu yo gucunga inguzanyo",
     staffText: 'Ku bakozi ba Bridge to Finance.',
     soon: 'Biraza vuba',
     back: 'Subira ahabanza',

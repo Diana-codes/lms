@@ -237,7 +237,7 @@ export function ApplicationDialog({
 
       {awaitingSecond ? (
         <p className="m-0 rounded-control bg-info-bg px-3.5 py-2.5 text-sm text-info-fg">
-          First approval by {card.firstApprovalBy!.name}. This amount needs a second approval from a
+          First approval by {card.firstApprovalBy!.name.replace(/\.$/, '')}. This amount needs a second approval from a
           manager.
         </p>
       ) : card.needsSecondApproval &&

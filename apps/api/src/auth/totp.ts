@@ -81,7 +81,7 @@ export function verifyTotp(
 }
 
 /** The otpauth:// URI an authenticator app reads from a QR code. */
-export function totpUri(secret: string, account: string, issuer = 'Kora Lend'): string {
+export function totpUri(secret: string, account: string, issuer = 'Bridge to Finance'): string {
   const label = encodeURIComponent(`${issuer}:${account}`);
   const params = new URLSearchParams({
     secret,

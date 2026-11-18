@@ -14,7 +14,13 @@ const config: NextConfig = {
   // The browser only ever talks to this origin. /api/* is forwarded to the
   // API, so session cookies are first-party and there is no CORS to manage.
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${API_URL}/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${API_URL}/:path*` },
+      // The borrower app's web build (apps/mobile, exported by `pnpm build`): its
+      // files are served from public/app, and every other /app address opens it.
+      { source: '/app', destination: '/app/index.html' },
+      { source: '/app/:path*', destination: '/app/index.html' },
+    ];
   },
 
   async headers() {

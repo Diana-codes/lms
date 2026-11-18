@@ -8,7 +8,6 @@ import {
   Avatar,
   BorrowersIcon,
   CollectionsIcon,
-  KitIcon,
   LoansIcon,
   OverviewIcon,
   ProductsIcon,
@@ -80,11 +79,13 @@ export function ConsoleNav({
   me,
   openApplications,
   brand,
+  logoUrl,
 }: {
   me: Me;
   openApplications: number | null;
   /** The lender's name, shown at the top of the sidebar. */
   brand: string;
+  logoUrl?: string | null;
 }) {
   const pathname = usePathname();
   const [leaving, setLeaving] = useState(false);
@@ -111,19 +112,14 @@ export function ConsoleNav({
   return (
     <Sidebar
       brand={brand}
+      logoUrl={logoUrl}
+      tagline="Loan management system"
       items={items}
       LinkComponent={Link}
       footer={
         <>
           <div className="flex flex-col gap-1">
-            <Link
-              href="/kit"
-              className={footerLink}
-              aria-current={isActive('/kit') ? 'page' : undefined}
-            >
-              <KitIcon />
-              UI kit
-            </Link>
+            {/* The UI kit (/kit) is a developer page: kept, but out of the menu. */}
             {me.role === 'ADMIN' ? (
               <Link
                 href="/settings/company"

@@ -45,22 +45,24 @@ export default async function LoginPage({
               {name.charAt(0)}
             </div>
           )}
-          <span className="font-display text-lg font-semibold">{name}</span>
+          <span className="flex flex-col">
+            <span className="font-display text-lg leading-tight font-semibold">{name}</span>
+            <span className="text-xs text-forest-muted">Loan management system</span>
+          </span>
         </div>
         <div className="flex max-w-md flex-col gap-4">
           <p className="m-0 font-display text-[32px] leading-tight font-semibold tracking-[-0.02em]">
-            Lending, collections and reporting in one console.
+            Lending, collections and reporting in one place.
           </p>
           <p className="m-0 text-sm text-forest-muted">
-            For loan officers, collections agents and managers.
+            For loan officers, credit analysts, collections, accounts, auditors and managers.
           </p>
         </div>
         <p className="m-0 text-xs text-forest-muted">
-          Staff access only. Sign-ins are logged.
-          {company ? ` Runs on ${PRODUCT_NAME}.` : null}{' '}
+          Staff access only. Sign-ins are logged.{' '}
           {company ? (
-            <a href="/portal" className="text-lime underline-offset-2 hover:underline">
-              Borrower portal
+            <a href="/app" className="text-lime underline-offset-2 hover:underline">
+              Customer app
             </a>
           ) : null}
           {SITE_URL ? (
@@ -87,7 +89,8 @@ function UnknownCompany() {
       <div className="flex max-w-md flex-col gap-3 text-center">
         <h1 className="m-0 font-display text-2xl font-semibold">This address is not in use</h1>
         <p className="m-0 text-sm text-ink-muted">
-          Check the link your lender gave you. Each lender on {PRODUCT_NAME} has its own address.
+          The loan management system is not reachable at this address. Check the link and try
+          again.
         </p>
       </div>
     </main>

@@ -31,6 +31,12 @@ import { BorrowerGuard, type BorrowerPrincipal } from './borrower.guard';
 import { UPLOAD_MAX_BYTES, UploadsService } from './uploads.service';
 
 type BorrowerRequest = Request & { borrower: BorrowerPrincipal };
+/** A product code in a query string, e.g. ?product=SME-WC. */
+const productParam = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9-]{2,40}$/)
+  .optional();
 const loanCode = new ZodPipe(z.string().regex(/^LN-\d{4}-\d{4}$/));
 
 const phoneSchema = z.object({ phone: z.string().trim().min(9).max(20) });
@@ -252,8 +258,12 @@ export class BorrowerAppController {
   // ── documents ──
   @UseGuards(BorrowerGuard)
   @Get('documents')
-  documentList(@Req() req: BorrowerRequest) {
-    return this.documents.checklist(req.borrower.borrowerId);
+  documentList(
+    @Req() req: BorrowerRequest,
+    // While applying: the product chosen, so its documents can be sent first.
+    @Query('product', new ZodPipe(productParam)) product?: string,
+  ) {
+    return this.documents.checklist(req.borrower.borrowerId, undefined, product);
   }
 
   /** The borrower's own file, to check the photo or PDF they sent. */
@@ -277,8 +287,12 @@ export class BorrowerAppController {
   @UseGuards(BorrowerGuard)
   @Post('documents/:id/remove')
   @HttpCode(200)
-  removeDocument(@Req() req: BorrowerRequest, @Param('id', new ZodPipe(z.uuid())) id: string) {
-    return this.documents.withdraw(req.borrower.borrowerId, id, requestMeta(req));
+  removeDocument(
+    @Req() req: BorrowerRequest,
+    @Param('id', new ZodPipe(z.uuid())) id: string,
+    @Query('product', new ZodPipe(productParam)) product?: string,
+  ) {
+    return this.documents.withdraw(req.borrower.borrowerId, id, requestMeta(req), product);
   }
 
   @UseGuards(BorrowerGuard)
@@ -288,8 +302,9 @@ export class BorrowerAppController {
     @Req() req: BorrowerRequest,
     @Param('type', new ZodPipe(z.enum(DOCUMENT_TYPES))) type: DocumentType,
     @UploadedFile() file: { mimetype: string; size: number; buffer: Buffer } | undefined,
+    @Query('product', new ZodPipe(productParam)) product?: string,
   ) {
-    return this.documents.upload(req.borrower.borrowerId, type, file, requestMeta(req));
+    return this.documents.upload(req.borrower.borrowerId, type, file, requestMeta(req), product);
   }
 
   @UseGuards(BorrowerGuard)

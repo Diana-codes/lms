@@ -51,8 +51,15 @@ export class DocumentsService {
     private readonly sms: SmsService,
   ) {}
 
-  /** The borrower's documents against what their open application (or the baseline) needs. */
-  async checklist(borrowerId: string, db: Db = this.prisma): Promise<BorrowerChecklist> {
+  /**
+   * The borrower's documents against what their open application needs; or,
+   * while they are applying, what `productCode` needs; else the baseline.
+   */
+  async checklist(
+    borrowerId: string,
+    db: Db = this.prisma,
+    productCode?: string,
+  ): Promise<BorrowerChecklist> {
     const b = await db.borrower.findUniqueOrThrow({
       where: { id: borrowerId },
       select: {
@@ -68,8 +75,15 @@ export class DocumentsService {
       },
     });
     const app = b.applications[0];
+    const applyingFor =
+      !app && productCode
+        ? await db.product.findFirst({
+            where: { code: productCode, status: 'PUBLISHED' },
+            select: { name: true, requiredDocuments: true },
+          })
+        : null;
     const checklist = documentChecklist({
-      required: app?.product.requiredDocuments ?? BASELINE,
+      required: app?.product.requiredDocuments ?? applyingFor?.requiredDocuments ?? BASELINE,
       docs: b.kycDocuments.map((d) => ({
         id: d.id,
         hasFile: d.storageKey != null,
@@ -86,7 +100,7 @@ export class DocumentsService {
     return {
       ...checklist,
       applicationCode: app?.code ?? null,
-      productName: app?.product.name ?? null,
+      productName: app?.product.name ?? applyingFor?.name ?? null,
     };
   }
 
@@ -112,6 +126,7 @@ export class DocumentsService {
     type: DocumentType,
     file: UploadedFileLike | undefined,
     meta: RequestMeta,
+    productCode?: string,
   ): Promise<BorrowerChecklist> {
     if (!file) throw new BadRequestException('Attach a photo or a PDF');
     const current = await this.prisma.kycDocument.findFirst({
@@ -177,7 +192,7 @@ export class DocumentsService {
       return created;
     });
     this.logger.log(`Document ${doc.id} (${type}) uploaded`);
-    return this.checklist(borrowerId);
+    return this.checklist(borrowerId, this.prisma, productCode);
   }
 
   /** The borrower's own file, so they can check what they sent. */
@@ -195,7 +210,12 @@ export class DocumentsService {
    * wrong photo. The row and file stay for the record; it just leaves the
    * checklist and the officer's queue.
    */
-  async withdraw(borrowerId: string, id: string, meta: RequestMeta): Promise<BorrowerChecklist> {
+  async withdraw(
+    borrowerId: string,
+    id: string,
+    meta: RequestMeta,
+    productCode?: string,
+  ): Promise<BorrowerChecklist> {
     const doc = await this.prisma.kycDocument.findFirst({ where: { id, borrowerId } });
     if (!doc || doc.supersededAt) throw new NotFoundException('This document has already gone');
     if (doc.status !== 'PENDING')
@@ -226,7 +246,7 @@ export class DocumentsService {
         tx,
       );
     });
-    return this.checklist(borrowerId);
+    return this.checklist(borrowerId, this.prisma, productCode);
   }
 
   /** Files from the apply flow: only keys this borrower's own uploads produced are accepted. */
@@ -357,7 +377,7 @@ export class DocumentsService {
           toPhone: doc.borrower.phone,
           borrowerId: doc.borrowerId,
           sentById: user.id,
-          body: `Kora Lend: we could not accept your ${name}. ${decision.reason} Please upload it again in the Kora Lend app.`,
+          body: `Bridge to Finance: we could not accept your ${name}. ${decision.reason} Please upload it again in the Bridge to Finance app.`,
         });
       } catch (err) {
         this.logger.warn(`Rejection SMS for document ${doc.id} failed: ${(err as Error).message}`);
@@ -481,7 +501,7 @@ export class DocumentsService {
           toPhone: doc.borrower.phone,
           borrowerId: doc.borrowerId,
           sentById: user.id,
-          body: `Kora Lend: please ignore our last message about your ${name}. We are checking it again and will let you know.`,
+          body: `Bridge to Finance: please ignore our last message about your ${name}. We are checking it again and will let you know.`,
         });
       } catch (err) {
         this.logger.warn(`Undo SMS for document ${doc.id} failed: ${(err as Error).message}`);

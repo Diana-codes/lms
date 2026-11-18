@@ -33,11 +33,17 @@ const schema = z.object({
   /** Development and tests only: the company for requests that name none. */
   DEFAULT_COMPANY_SLUG: optional,
   /**
-   * Single-company mode: every request is for this company, in any
-   * environment. One lender on its own domain (Bridge to Finance today);
-   * leave empty to serve many companies by subdomain.
+   * The one company this system serves (Bridge to Finance: "bf"). Every
+   * request is for it, whatever the address. Defaults to DEFAULT_COMPANY_SLUG,
+   * then "bf".
    */
   COMPANY_SLUG: optional,
+  /**
+   * Multi-company hosting (companies by subdomain, and the platform admin at
+   * admin.<domain>). Off: the system belongs to one company and the platform
+   * admin is switched off. The tests turn it on to keep that code checked.
+   */
+  MULTI_COMPANY: flag('false'),
   JWT_ACCESS_SECRET: base64Bytes(32, 'JWT_ACCESS_SECRET'),
   PII_ENCRYPTION_KEY: z.string().refine((v) => Buffer.from(v, 'base64').length === 32, {
     message: 'PII_ENCRYPTION_KEY must be exactly 32 bytes, base64-encoded',

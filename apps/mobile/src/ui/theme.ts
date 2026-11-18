@@ -10,7 +10,7 @@ export const c = {
   momoText: '#6B4A00',
   switchOff: '#C9CEC5',
   dashed: '#A7ADA3',
-  limeSoft: 'rgba(198,244,50,0.16)',
+  limeSoft: 'rgba(162,232,184,0.18)',
   whiteSoft: 'rgba(255,255,255,0.14)',
 };
 export const r = {

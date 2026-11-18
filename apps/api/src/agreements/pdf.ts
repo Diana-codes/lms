@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 
-const FOREST = '#0E3B2E';
+const FOREST = '#173C2E';
 const INK = '#121614';
 const MUTED = '#5B635E';
 const LINE = '#E1E4DD';

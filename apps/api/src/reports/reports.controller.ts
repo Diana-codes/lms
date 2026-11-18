@@ -40,7 +40,7 @@ export class ReportsController {
     const r = await this.reports.classification(asOf);
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="kora-lend-classification-${r.asOf}.csv"`,
+      `attachment; filename="bf-classification-${r.asOf}.csv"`,
     );
     const esc = (v: string | number | bigint) => {
       const s = String(v);
@@ -79,7 +79,7 @@ export class ReportsController {
     @Query('period', periodQuery) period: Period,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.setHeader('Content-Disposition', `attachment; filename="kora-lend-report-${period}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="bf-report-${period}.csv"`);
     return this.reports.csv(period);
   }
 }

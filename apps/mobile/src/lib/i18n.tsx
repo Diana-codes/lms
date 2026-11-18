@@ -9,7 +9,7 @@ import {
   translate,
   translateApiMessage,
 } from '@kora/core';
-import * as SecureStore from 'expo-secure-store';
+import { storage } from './storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { c, font, r } from '../ui/theme';
@@ -22,7 +22,7 @@ import { api, ApiError, hasSession } from './api';
  */
 const STORAGE_KEY = 'kl_language';
 /** The lender this build of the app belongs to. */
-export const LENDER_NAME = process.env.EXPO_PUBLIC_LENDER_NAME ?? 'Kora Lend';
+export const LENDER_NAME = process.env.EXPO_PUBLIC_LENDER_NAME ?? 'Bridge to Finance';
 
 interface AppI18n {
   lang: BorrowerLanguage;
@@ -41,14 +41,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<BorrowerLanguage>('EN');
 
   useEffect(() => {
-    SecureStore.getItemAsync(STORAGE_KEY)
+    storage
+      .get(STORAGE_KEY)
       .then((v) => v && setLang(borrowerLanguage(v)))
       .catch(() => undefined);
   }, []);
 
   const keep = useCallback((next: BorrowerLanguage) => {
     setLang(next);
-    SecureStore.setItemAsync(STORAGE_KEY, next).catch(() => undefined);
+    storage.set(STORAGE_KEY, next).catch(() => undefined);
   }, []);
 
   const adopt = useCallback(

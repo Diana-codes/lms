@@ -14,9 +14,9 @@ const OUTBOX = process.env.SMS_OUTBOX_FILE
   : '';
 
 export const STAFF = {
-  manager: 'manager@koralend.test',
-  officer: 'kevin@koralend.test',
-  collections: 'collections@koralend.test',
+  manager: 'manager@bf.test',
+  officer: 'kevin@bf.test',
+  collections: 'collections@bf.test',
 };
 
 /** The code in the newest text the simulator sent after `since` (ms). */

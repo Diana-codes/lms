@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { api, clearTokens, errorMessage, openPdf } from '../lib/api';
+import { api, clearTokens, errorMessage } from '../lib/api';
+import { openPdf } from '../lib/transfer';
 import type { Home, Insights, Profile, Schedule, Statement } from '../lib/types';
 import { Button, DarkCard, Muted, Panel, Row, RoundButton, Sheet, Toggle } from '../ui';
 import {
@@ -554,7 +555,7 @@ export function ProfileTab({
               />
             </View>
             <Muted>
-              Kora Lend keeps your data in Rwanda and only uses it to manage your loans.
+              Bridge to Finance keeps your data in Rwanda and only uses it to manage your loans.
             </Muted>
           </Panel>
           <Pressable
@@ -701,7 +702,7 @@ export function SupportSheet({
       <Muted style={{ fontSize: 14, lineHeight: 20 }}>
         {home?.support.officerName
           ? `Your loan officer is ${home.support.officerName}${home.support.branch ? `, at ${home.support.branch}` : ''}. They can help with payments, a new loan or changing your plan.`
-          : 'Visit your nearest Kora Lend branch and we will help with payments, a new loan or changing your plan.'}
+          : 'Visit your nearest Bridge to Finance branch and we will help with payments, a new loan or changing your plan.'}
       </Muted>
       {SUPPORT_PHONE ? (
         <Pressable
@@ -716,7 +717,7 @@ export function SupportSheet({
         </Pressable>
       ) : null}
       <Muted>
-        Never share your MoMo PIN or sign-in code with anyone, including Kora Lend staff.
+        Never share your MoMo PIN or sign-in code with anyone, including Bridge to Finance staff.
       </Muted>
       <Button label="Close" variant="ghost" height={44} onPress={onClose} />
     </Sheet>

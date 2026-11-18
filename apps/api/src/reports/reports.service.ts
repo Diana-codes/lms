@@ -78,7 +78,7 @@ export function reportToCsv(r: ReportCsvInput): string {
   };
   const pct = (bps: number | null) => (bps == null ? '' : (bps / 100).toFixed(2));
   const lines = [
-    `Kora Lend report,${esc(r.period)},as of ${r.asOf}`,
+    `Bridge to Finance report,${esc(r.period)},as of ${r.asOf}`,
     '',
     'Month end,Outstanding principal (RWF),Active loans,Average loan (RWF),PAR 30 (%),Yield (% a year)',
     ...r.series.map((m) =>

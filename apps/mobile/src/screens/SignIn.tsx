@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } fro
 import { api, errorMessage, saveTokens, type Tokens } from '../lib/api';
 import type { RegistrationNeeded } from '../lib/types';
 import { Button, ErrorText, Muted } from '../ui';
+import { BfMark } from '../ui/BfMark';
 import { c, font } from '../ui/theme';
 
 export function SignIn({
@@ -26,11 +27,16 @@ export function SignIn({
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ phone: string }>('/app/auth/request-code', {
-        method: 'POST',
-        body: { phone },
-        auth: false,
-      });
+      const r = await api<{ phone: string; otpRequired?: boolean } & Partial<Tokens>>(
+        '/app/auth/request-code',
+        { method: 'POST', body: { phone }, auth: false },
+      );
+      // The lender has sign-in codes off: a known number is signed in straight away.
+      if (r.otpRequired === false && r.accessToken && r.refreshToken) {
+        await saveTokens({ accessToken: r.accessToken, refreshToken: r.refreshToken });
+        onSignedIn();
+        return;
+      }
       setMasked(r.phone);
     } catch (err) {
       setError(errorMessage(err));
@@ -67,12 +73,12 @@ export function SignIn({
     >
       <View style={styles.hero}>
         <View style={styles.logo}>
-          <Text style={{ color: c.forest, fontFamily: font.display, fontSize: 24 }}>K</Text>
+          <BfMark size={40} />
         </View>
         <Text
           style={{ color: c.surface, fontFamily: font.display, fontSize: 32, letterSpacing: -0.6 }}
         >
-          Kora Lend
+          Bridge to Finance
         </Text>
         <Text
           style={{ color: c['forest-muted'], fontSize: 15, lineHeight: 22, fontFamily: font.body }}
@@ -149,8 +155,8 @@ export function SignIn({
           />
         ) : (
           <Muted style={{ textAlign: 'center' }}>
-            New to Kora Lend? Use the same steps: after the code we will ask a few details to open
-            your account.
+            New to Bridge to Finance? Use the same steps: after the code we will ask a few details
+            to open your account.
           </Muted>
         )}
       </View>
@@ -165,7 +171,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 16,
-    backgroundColor: c.lime,
+    backgroundColor: c.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,

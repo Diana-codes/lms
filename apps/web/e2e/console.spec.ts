@@ -106,7 +106,7 @@ test.describe('console shell', () => {
 
   test('the UI kit renders and its controls respond', async ({ page }) => {
     await signIn(page, STAFF.manager);
-    await page.getByRole('link', { name: 'UI kit' }).click();
+    await page.goto('/kit');
     await expect(page.getByRole('heading', { name: 'UI kit', level: 1 })).toBeVisible();
 
     await page.getByRole('button', { name: 'Show a toast' }).click();

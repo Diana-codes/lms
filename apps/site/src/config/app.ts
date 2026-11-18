@@ -3,14 +3,15 @@ import { cacheLife } from 'next/cache';
 import { featuredProducts, type ProductKey } from './products';
 
 /**
- * Where the loan system lives. The website links to its borrower portal and
+ * Where the loan system lives. The website links to its customer app and
  * staff sign-in, and reads the published products from its API.
  */
 export const APP_URL = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_URL = (process.env.API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 
+/** The customer app (the same app as on phones, in the browser): sign up, apply, pay. */
 export const portalUrl = (lang: string, product?: string) =>
-  `${APP_URL}/portal?lang=${lang}${product ? `&product=${encodeURIComponent(product)}` : ''}`;
+  `${APP_URL}/app?lang=${lang}${product ? `&product=${encodeURIComponent(product)}` : ''}`;
 export const staffLoginUrl = () => `${APP_URL}/login`;
 
 export type Frequency = 'WEEKLY' | 'FORTNIGHTLY' | 'MONTHLY';

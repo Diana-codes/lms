@@ -183,7 +183,9 @@ describe('sign-in by phone', () => {
     expect(res.body.otpRequired).toBe(false);
     expect(res.body.accessToken).toBeTruthy();
     await http().get('/app/home').set(bearer(res.body.accessToken)).expect(200);
-    await http().post('/app/auth/request-code').send({ phone: phone() }).expect(400);
+    // A new number still gets a code, to sign up with.
+    const fresh = await http().post('/app/auth/request-code').send({ phone: phone() }).expect(200);
+    expect(fresh.body.otpRequired).toBe(true);
     // Put OTP back on for the remaining tests.
     await prisma.company.update({
       where: { id: E2E_COMPANY_ID },
@@ -376,7 +378,7 @@ describe('applying in the app', () => {
     expect(options.preApprovedLimit).toBe('3000000');
     expect(options.purposes).toContain('Equipment');
     const product = options.products.find((p: { code: string }) => p.code === PRODUCT);
-    expect(product.terms).toEqual([6, 12, 18, 24]);
+    expect(product.terms).toEqual([6, 9, 12, 18, 24]);
 
     const quote = (
       await http()

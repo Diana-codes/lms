@@ -1,10 +1,10 @@
 import { DOCUMENT_INFO, type DocumentType } from '@kora/core';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { type ReactNode, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,10 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { api, errorMessage, openFile, uploadFile } from '../lib/api';
+import { api, errorMessage } from '../lib/api';
+import { openFile, uploadFile } from '../lib/transfer';
 import { preparePhoto, uploadErrorMessage } from '../lib/upload';
 import type { Documents, DocumentState } from '../lib/types';
 import { Button, DarkCard, ErrorText, Muted, Panel, Sheet, tap } from '../ui';
+import { confirm } from '../ui/confirm';
 import {
   AlertIcon,
   CameraIcon,
@@ -139,10 +141,22 @@ function Action({
 export function DocumentsScreen({
   onBack,
   toast,
+  productCode,
+  onContinue,
+  continueLabel = 'Continue',
+  header,
 }: {
   onBack: () => void;
   toast: (m: string) => void;
+  /** While applying: show what this product needs, before the application exists. */
+  productCode?: string;
+  /** Shown as a button under the list, e.g. to go on to the next step. */
+  onContinue?: () => void;
+  continueLabel?: string;
+  /** Replaces the back bar, e.g. with the apply flow's step header. */
+  header?: React.ReactNode;
 }) {
+  const query = productCode ? `?product=${encodeURIComponent(productCode)}` : '';
   const [data, setData] = useState<Documents | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,12 +166,12 @@ export function DocumentsScreen({
 
   const load = useCallback(async () => {
     try {
-      setData(await api<Documents>('/app/documents'));
+      setData(await api<Documents>(`/app/documents${query}`));
       setError(null);
     } catch (err) {
       setError(errorMessage(err));
     }
-  }, []);
+  }, [query]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -171,7 +185,7 @@ export function DocumentsScreen({
         toast('That PDF is over 8 MB. Try taking a photo of the document instead.');
         return;
       }
-      setData(await uploadFile<Documents>(`/app/documents/${type}`, ready));
+      setData(await uploadFile<Documents>(`/app/documents/${type}${query}`, ready));
       toast(`${DOCUMENT_INFO[type].name} sent. We will check it and let you know.`);
     } catch (err) {
       toast(uploadErrorMessage(err));
@@ -199,10 +213,13 @@ export function DocumentsScreen({
       });
       return;
     }
+    // In a browser the pickers are plain file inputs: no permission to ask for.
     const perm =
-      how === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      Platform.OS === 'web'
+        ? { granted: true }
+        : how === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       toast(
         how === 'camera'
@@ -243,35 +260,29 @@ export function DocumentsScreen({
     }
   }
 
-  function remove(item: Documents['items'][number]) {
+  async function remove(item: Documents['items'][number]) {
     const name = DOCUMENT_INFO[item.type].name;
-    Alert.alert(
+    const sure = await confirm(
       `Remove your ${name}?`,
       'Nobody has checked it yet. You can send a new one any time.',
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(item.type);
-            try {
-              setData(
-                await api<Documents>(`/app/documents/${item.documentId}/remove`, {
-                  method: 'POST',
-                }),
-              );
-              toast(`${name} removed.`);
-            } catch (err) {
-              toast(errorMessage(err));
-              void load();
-            } finally {
-              setBusy(null);
-            }
-          },
-        },
-      ],
+      'Remove',
+      'Keep it',
     );
+    if (!sure) return;
+    setBusy(item.type);
+    try {
+      setData(
+        await api<Documents>(`/app/documents/${item.documentId}/remove${query}`, {
+          method: 'POST',
+        }),
+      );
+      toast(`${name} removed.`);
+    } catch (err) {
+      toast(errorMessage(err));
+      void load();
+    } finally {
+      setBusy(null);
+    }
   }
 
   const info = adding ? DOCUMENT_INFO[adding] : null;
@@ -282,7 +293,7 @@ export function DocumentsScreen({
 
   return (
     <View style={{ flex: 1 }}>
-      <BackBar title="Documents" onBack={onBack} />
+      {header ?? <BackBar title="Documents" onBack={onBack} />}
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -305,7 +316,9 @@ export function DocumentsScreen({
               <Text style={{ fontSize: 13, color: c['forest-muted'], fontFamily: font.body }}>
                 {data.applicationCode
                   ? `For ${data.applicationCode} · ${data.productName}`
-                  : 'To keep your account verified'}
+                  : data.productName
+                    ? `What ${data.productName} needs`
+                    : 'To keep your account verified'}
               </Text>
               <Text style={{ fontFamily: font.display, fontSize: 24, color: c.surface }}>
                 {done
@@ -452,12 +465,22 @@ export function DocumentsScreen({
               </Text>
             </Pressable>
             <Muted style={{ textAlign: 'center' }}>
-              Photos or PDFs up to 8 MB. Your documents are stored in Rwanda and only seen by Kora
-              Lend staff checking your application.
+              Photos or PDFs up to 8 MB. Your documents are stored in Rwanda and only seen by Bridge
+              to Finance staff checking your application.
             </Muted>
           </>
         ) : null}
       </ScrollView>
+      {onContinue ? (
+        <View style={styles.continueBar}>
+          <Button label={continueLabel} onPress={onContinue} disabled={busy != null} />
+          {data && data.needsAction > 0 ? (
+            <Muted style={{ textAlign: 'center' }}>
+              You can also send missing documents later, from Profile → Documents.
+            </Muted>
+          ) : null}
+        </View>
+      ) : null}
 
       <Sheet
         open={adding != null}
@@ -504,6 +527,15 @@ export function DocumentsScreen({
 }
 
 const styles = StyleSheet.create({
+  continueBar: {
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: c.line,
+    backgroundColor: c.surface,
+  },
   content: { padding: 20, gap: 16, paddingBottom: 40 },
   track: {
     height: 8,

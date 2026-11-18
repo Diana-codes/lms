@@ -110,12 +110,8 @@ export class BorrowerAuthService {
     });
 
     // Company has borrower OTP off: known phones sign in with the number alone.
-    if (!companyFeatures().borrowerOtp) {
-      if (!borrower) {
-        throw new BadRequestException(
-          'We do not have an account for that number. Ask your lender to register you first.',
-        );
-      }
+    // New numbers still get a code: signing up must prove the phone is theirs.
+    if (!companyFeatures().borrowerOtp && borrower) {
       await this.audit.record({
         action: 'borrower.login',
         actorType: 'BORROWER',
@@ -287,7 +283,7 @@ export class BorrowerAuthService {
     const birthYear = nationalIdBirthYear(input.nationalId, year);
     if (birthYear == null) throw new BadRequestException('Check your national ID number');
     if (certainlyUnderAge(birthYear, year))
-      throw new BadRequestException('You must be 18 or older to borrow from Kora Lend');
+      throw new BadRequestException('You must be 18 or older to borrow from Bridge to Finance');
     const branch = await this.prisma.branch.findFirst({ where: { code: input.branchCode } });
     if (!branch) throw new BadRequestException('Choose a branch');
 
