@@ -24,6 +24,7 @@ import type { RequestMeta } from '../auth/auth.service';
 import type { AuthUser } from '../auth/auth.types';
 import { UploadsService } from '../borrower-app/uploads.service';
 import { escapeLike } from '../common/http';
+import { IdentityService } from '../identity/identity.service';
 import { DocumentsService } from '../documents/documents.service';
 import type { KycDocumentType, Prisma } from '../generated/prisma/client';
 import { ACCOUNTS } from '../ledger/accounts';
@@ -54,6 +55,7 @@ export class BorrowersService {
     private readonly audit: AuditService,
     private readonly uploads: UploadsService,
     private readonly documents: DocumentsService,
+    private readonly identity: IdentityService,
   ) {}
 
   async list(
@@ -254,6 +256,8 @@ export class BorrowersService {
         b.monthlyIncome && b.monthlyIncome > 0n
           ? ratioBps(activeInstalments, b.monthlyIncome)
           : null,
+      // The automatic read of their national ID, compared with what they told us.
+      identityCheck: await this.identity.latest(b.id),
       documents: b.kycDocuments.map((doc) => {
         const expires = doc.expiresOn ? utcDateToIso(doc.expiresOn) : null;
         const expiringSoon =

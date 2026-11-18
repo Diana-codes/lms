@@ -141,6 +141,7 @@ model Company {
   bureauSubmissions  BureauSubmission[]
   bureauChecks       BureauCheck[]
   loanAgreements     LoanAgreement[]
+  identityChecks     IdentityCheck[]
 }
 
 /// One day's BNR 59/2023 classification totals (Art. 34 portfolio report).
@@ -435,21 +436,22 @@ model Borrower {
   officer User?   @relation("BorrowerOfficer", fields: [officerId], references: [id])
   branch  Branch? @relation(fields: [branchId], references: [id])
 
-  business      Business?
-  kycDocuments  KycDocument[]
-  agreements    LoanAgreement[]
-  consents      Consent[]
-  applications  Application[]
-  creditScores  CreditScore[]
-  loans         Loan[]
-  payments      Payment[]
-  contactLogs   ContactLog[]
-  notes         Note[]
-  notifications Notification[]
-  smsMessages   SmsMessage[]
-  sessions      BorrowerSession[]
-  offers        LoanOffer[]
-  momoInflows   MomoInflowMonth[]
+  business       Business?
+  kycDocuments   KycDocument[]
+  identityChecks IdentityCheck[]
+  agreements     LoanAgreement[]
+  consents       Consent[]
+  applications   Application[]
+  creditScores   CreditScore[]
+  loans          Loan[]
+  payments       Payment[]
+  contactLogs    ContactLog[]
+  notes          Note[]
+  notifications  Notification[]
+  smsMessages    SmsMessage[]
+  sessions       BorrowerSession[]
+  offers         LoanOffer[]
+  momoInflows    MomoInflowMonth[]
 
   @@unique([companyId, code])
   @@unique([companyId, phone])
@@ -1797,7 +1799,10 @@ model CashflowDocument {
   /// Payslip figures (gross, deductions, net, employer, period), digits as strings.
   payslip       Json?
   error         String?
-  uploadedById  String            @db.Uuid
+  /// Staff who uploaded it; null when the borrower sent it in the app.
+  uploadedById  String?           @db.Uuid
+  /// The borrower's KYC document it came from, when sent in the app.
+  kycDocumentId String?           @db.Uuid
   createdAt     DateTime          @default(now())
 
   @@index([applicationId])
@@ -1822,7 +1827,8 @@ model CashflowAnalysis {
   error           String?
   /// The AI average monthly income, kept for pilot comparisons.
   aiAverageIncome BigInt?
-  createdById     String         @db.Uuid
+  /// Null when the system ran it on documents the borrower sent.
+  createdById     String?        @db.Uuid
   createdAt       DateTime       @default(now())
   /// The analyst's own figure. The AI never sets verified income.
   confirmedIncome BigInt?
@@ -1997,5 +2003,42 @@ model LoanAgreement {
   recordedBy  User?       @relation(fields: [recordedById], references: [id])
 
   @@index([borrowerId])
+  @@index([companyId])
+}
+
+enum IdentityCheckStatus {
+  /// The ID was read and compared.
+  CHECKED
+  /// The photo could not be read as a Rwandan national ID.
+  UNREADABLE
+  /// Not run: AI reading is off (no key, or switched off for the company).
+  SKIPPED
+}
+
+/// Advisory check of a borrower's national ID photo: what it says against
+/// what they told us. Never approves or declines; staff decide.
+model IdentityCheck {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  companyId     String              @default(dbgenerated("current_company_id()")) @db.Uuid
+  company       Company             @relation(fields: [companyId], references: [id])
+  borrowerId    String              @db.Uuid
+  borrower      Borrower            @relation(fields: [borrowerId], references: [id])
+  kycDocumentId String              @db.Uuid
+  status        IdentityCheckStatus
+  /// Name and date of birth as printed; the ID number only as its last 3 digits.
+  nameOnId      String?
+  idLast3       String?
+  dateOfBirth   String?
+  /// MATCH, PARTIAL, MISMATCH or UNKNOWN, against the name they gave.
+  nameMatch     String              @default("UNKNOWN")
+  /// The number on the card is the one they gave (compared by hash). Null: not compared.
+  idNumberMatch Boolean?
+  /// Problems to look at, e.g. [{"code":"NAME_MISMATCH","message":"…"}].
+  flags         Json                @default("[]")
+  modelVersion  String?
+  error         String?
+  createdAt     DateTime            @default(now())
+
+  @@index([borrowerId, createdAt])
   @@index([companyId])
 }

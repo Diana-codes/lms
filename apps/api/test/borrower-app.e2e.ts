@@ -456,6 +456,7 @@ describe('applying in the app', () => {
       statedMonthlyIncome: 1_650_000n,
     });
     expect(application.consents.map((c) => c.type).sort()).toEqual([
+      'CASHFLOW_ANALYSIS',
       'CREDIT_BUREAU',
       'DATA_PROCESSING',
       'MOMO_HISTORY',
@@ -493,6 +494,24 @@ describe('applying in the app', () => {
       .expect(409);
     const home = (await http().get('/app/home').set(bearer(token)).expect(200)).body;
     expect(home.application.code).toBe(res.body.code);
+    // The automatic checks run after the answer. Without AI set up, the ID
+    // check says so, and staff are told to check the ID by eye.
+    let checks: { identity: { status: string; error: string } | null } = { identity: null };
+    for (let i = 0; i < 40 && !checks.identity; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      checks = (
+        await http()
+          .get(`/applications/${res.body.code}/checks`)
+          .set('Cookie', staffCookies)
+          .expect(200)
+      ).body;
+    }
+    expect(checks.identity).toMatchObject({ status: 'SKIPPED' });
+    expect(checks.identity!.error).toContain('by eye');
+    const profile = (
+      await http().get(`/borrowers/${borrowerCode}`).set('Cookie', staffCookies).expect(200)
+    ).body;
+    expect(profile.identityCheck).toMatchObject({ status: 'SKIPPED' });
   });
 
   it('refuses an ID number that belongs to another customer, with a clear message', async () => {

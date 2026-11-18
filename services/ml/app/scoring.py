@@ -39,6 +39,9 @@ class History(Strict):
 class Affordability(Strict):
     monthly_income: int | None = Field(default=None, ge=0, description="Verified, RWF")
     stated_income: int | None = Field(default=None, ge=0, description="What the applicant told us, RWF")
+    statement_income: int | None = Field(
+        default=None, ge=0, description="Average monthly income read from their statements, RWF"
+    )
     new_instalment: int = Field(ge=0)
     existing_instalments: int = Field(default=0, ge=0)
     limit_bps: int = Field(default=3500, ge=0, le=10_000)
@@ -118,7 +121,16 @@ def score(req: ScoreRequest) -> ScoreResponse:
 
     # 3. Affordability: the brief's 35% rule (per product).
     a = req.affordability
-    income = a.monthly_income or (int(momo_avg) if momo_avg else None) or a.stated_income
+    income = (
+        a.monthly_income
+        or a.statement_income
+        or (int(momo_avg) if momo_avg else None)
+        or a.stated_income
+    )
+    if not a.monthly_income and a.statement_income:
+        reasons.append(
+            Reason(kind="watch", text="Income taken from their bank or MoMo statements", points=0)
+        )
     total = a.new_instalment + a.existing_instalments
     affordable = False
     if income:
@@ -134,9 +146,12 @@ def score(req: ScoreRequest) -> ScoreResponse:
     else:
         reasons.append(Reason(kind="watch", text="No income to check affordability against", points=0))
 
-    # 4. Stated income far above what MoMo shows.
+    # 4. Stated income far above what MoMo or their statements show.
     if a.stated_income and momo_avg and a.stated_income > 2 * momo_avg:
         add(-60, f"Stated revenue {a.stated_income / momo_avg:.1f}× MoMo inflows")
+        flags.append("mismatch")
+    elif a.stated_income and a.statement_income and a.stated_income > 2 * a.statement_income:
+        add(-60, f"Stated revenue {a.stated_income / a.statement_income:.1f}× what statements show")
         flags.append("mismatch")
 
     value = max(SCORE_MIN, min(SCORE_MAX, points))

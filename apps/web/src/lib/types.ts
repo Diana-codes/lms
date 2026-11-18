@@ -1,3 +1,4 @@
+import type { IdentityCheckView } from '@/components/checks-panel';
 import type {
   ApplicationStage,
   DpdBucket,
@@ -590,6 +591,7 @@ export interface BorrowerProfile {
     officerId: string | null;
   };
   source: 'BRANCH' | 'APP';
+  identityCheck: IdentityCheckView | null;
   aiSummary: {
     text: string;
     reasons: Array<{ kind: 'why' | 'watch'; text: string }>;

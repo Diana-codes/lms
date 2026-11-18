@@ -68,6 +68,17 @@ export class ScoringService {
     return rows.length ? rows.reverse().map((r) => Number(r.inflow)) : null;
   }
 
+  /** Income from the application's current cash-flow analysis, if there is one. */
+  private async statementIncome(applicationId: string): Promise<number | null> {
+    const a = await this.prisma.cashflowAnalysis.findFirst({
+      where: { applicationId, status: { in: ['READY_FOR_REVIEW', 'REVIEWED'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { aiAverageIncome: true, confirmedIncome: true },
+    });
+    const v = a?.confirmedIncome ?? a?.aiAverageIncome;
+    return v != null && v > 0n ? Number(v) : null;
+  }
+
   /** Score one application. Returns null, and logs, if the scoring service is down. */
   async scoreApplication(
     code: string,
@@ -103,6 +114,8 @@ export class ScoringService {
         monthly_income:
           app.borrower.monthlyIncome != null ? Number(app.borrower.monthlyIncome) : null,
         stated_income: app.statedMonthlyIncome != null ? Number(app.statedMonthlyIncome) : null,
+        // Average monthly income read from their statements (the analyst's figure once reviewed).
+        statement_income: await this.statementIncome(app.id),
         new_instalment: Number(
           monthlyEquivalent(applicationQuote(app).instalment, productTerms(app.product).frequency),
         ),

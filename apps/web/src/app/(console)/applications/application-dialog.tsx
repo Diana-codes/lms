@@ -25,6 +25,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { ChecksPanel } from '@/components/checks-panel';
 import { api, ApiError } from '@/lib/api';
 import { cardAge, termLine } from '@/lib/format';
 import type { ApplicationCard, Me } from '@/lib/types';
@@ -234,6 +235,8 @@ export function ApplicationDialog({
           ) : null}
         </AiPanel>
       ) : null}
+
+      <ChecksPanel code={card.code} />
 
       {awaitingSecond ? (
         <p className="m-0 rounded-control bg-info-bg px-3.5 py-2.5 text-sm text-info-fg">

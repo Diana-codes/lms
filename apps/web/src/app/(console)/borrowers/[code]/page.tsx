@@ -16,6 +16,7 @@ import { Breadcrumb } from '@/components/list-tools';
 import { serverApi } from '@/lib/server-api';
 import type { BorrowerProfile, Me } from '@/lib/types';
 import { SendSmsButton } from '@/components/send-sms-button';
+import { IdentityCheckLines } from '@/components/checks-panel';
 import { AiSummaryButton } from './ai-summary-button';
 import { DocumentsCard } from './documents-card';
 import { NoteForm } from './note-form';
@@ -197,6 +198,17 @@ export default async function BorrowerPage({ params }: { params: Promise<{ code:
             borrower={b}
             canReview={me.ok && ['LOAN_OFFICER', 'MANAGER', 'ADMIN'].includes(me.data.role)}
           />
+
+          <Card className="gap-3 p-[22px] text-sm">
+            <h2 className="m-0 font-display text-base font-semibold">ID check</h2>
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              <IdentityCheckLines check={b.identityCheck} />
+            </ul>
+            <p className="m-0 text-xs text-ink-muted">
+              The ID photo read automatically and compared with what the borrower gave. Advice
+              only; check by eye before deciding.
+            </p>
+          </Card>
 
           <Card className="gap-3 p-[22px] text-sm">
             <h2 className="m-0 font-display text-base font-semibold">Contact &amp; business</h2>

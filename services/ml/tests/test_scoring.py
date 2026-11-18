@@ -78,3 +78,23 @@ def test_early_warning_flags_falling_inflows_and_late_payers() -> None:
     assert set(by_id) == {"a", "b"}
     assert by_id["a"].signals == ["MoMo inflows down 50% this month"]
     assert by_id["b"].risk == "high"
+
+
+def test_statement_income_is_used_when_no_verified_income() -> None:
+    first = {"instalments_paid": 0, "paid_late": 0, "overdue_now": 0, "months_as_customer": 0}
+    r = score(
+        req(
+            history=first,
+            affordability={"stated_income": 800_000, "statement_income": 3_000_000, "new_instalment": 300_000},
+        )
+    )
+    assert any("statements" in x.text for x in r.reasons)
+    assert any("10% of income" in x.text for x in r.reasons)
+
+
+def test_stated_income_far_above_statements_is_flagged() -> None:
+    r = score(
+        req(affordability={"stated_income": 3_000_000, "statement_income": 500_000, "new_instalment": 100_000})
+    )
+    assert r.recommendation == "FLAG"
+    assert any("what statements show" in x.text for x in r.reasons)

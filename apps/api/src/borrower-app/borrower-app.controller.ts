@@ -24,6 +24,7 @@ import { Public } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import { AgreementsService } from '../agreements/agreements.service';
+import { ChecksService } from '../identity/checks.service';
 import { DocumentsService } from '../documents/documents.service';
 import { BorrowerAppService } from './borrower-app.service';
 import { BorrowerAuthService } from './borrower-auth.service';
@@ -110,6 +111,7 @@ export class BorrowerAppController {
     private readonly uploads: UploadsService,
     private readonly documents: DocumentsService,
     private readonly agreements: AgreementsService,
+    private readonly checks: ChecksService,
   ) {}
 
   // ── sign-in ──
@@ -298,13 +300,22 @@ export class BorrowerAppController {
   @UseGuards(BorrowerGuard)
   @Post('documents/:type')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 } }))
-  uploadDocument(
+  async uploadDocument(
     @Req() req: BorrowerRequest,
     @Param('type', new ZodPipe(z.enum(DOCUMENT_TYPES))) type: DocumentType,
     @UploadedFile() file: { mimetype: string; size: number; buffer: Buffer } | undefined,
     @Query('product', new ZodPipe(productParam)) product?: string,
   ) {
-    return this.documents.upload(req.borrower.borrowerId, type, file, requestMeta(req), product);
+    const result = await this.documents.upload(
+      req.borrower.borrowerId,
+      type,
+      file,
+      requestMeta(req),
+      product,
+    );
+    // Read the ID or statement in the background; staff see the findings.
+    this.checks.later(() => this.checks.afterDocument(req.borrower.borrowerId, type));
+    return result;
   }
 
   @UseGuards(BorrowerGuard)

@@ -38,6 +38,7 @@ import { ScoringService } from '../ai/scoring.service';
 import { loanTerms, productTerms, quoteFor } from '../products/terms';
 import { MoneyService } from '../money/money.service';
 import { AgreementsService } from '../agreements/agreements.service';
+import { ChecksService } from '../identity/checks.service';
 import { AGREEMENT_VERSION } from '../agreements/template';
 import { DocumentsService } from '../documents/documents.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -85,6 +86,7 @@ export class BorrowerAppService {
     private readonly scoring: ScoringService,
     private readonly documents: DocumentsService,
     private readonly agreements: AgreementsService,
+    private readonly checks: ChecksService,
   ) {}
 
   /** Everything the home screen shows. */
@@ -510,6 +512,15 @@ export class BorrowerAppService {
           ip: meta.ip ?? null,
         },
       ];
+      // The agreement text covers reading the documents they send (statements, ID).
+      consents.push({
+        borrowerId: b.id,
+        applicationId: app.id,
+        type: 'CASHFLOW_ANALYSIS',
+        textVersion: input.consentVersion,
+        channel: 'APP',
+        ip: meta.ip ?? null,
+      });
       if (input.agreedBureau)
         consents.push({
           borrowerId: b.id,
@@ -575,6 +586,8 @@ export class BorrowerAppService {
       return app.code;
     });
     await this.scoring.scoreApplication(code).catch(() => null);
+    // Then read their statements and ID, and score again with what was found.
+    this.checks.later(() => this.checks.afterApply(code));
     await this.sms.send({
       toPhone: b.phone,
       borrowerId: b.id,

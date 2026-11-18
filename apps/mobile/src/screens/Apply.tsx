@@ -761,7 +761,7 @@ export function Apply({
             >
               loan agreement
             </Text>
-            , and I allow Bridge to Finance to check my credit record with the credit bureau.
+            , and I allow Bridge to Finance to check my credit record with the credit bureau and to read the ID and statements I sent, to check my details and income.
           </Text>
         </Checkbox>
         <ErrorText>{error}</ErrorText>

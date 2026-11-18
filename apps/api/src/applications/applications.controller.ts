@@ -17,6 +17,7 @@ import { CurrentUser, Roles } from '../auth/decorators';
 import { requestMeta, rwfString } from '../common/http';
 import { ZodPipe } from '../common/zod.pipe';
 import { AgreementsService } from '../agreements/agreements.service';
+import { ChecksService } from '../identity/checks.service';
 import { ApplicationsService } from './applications.service';
 
 const codeParam = new ZodPipe(z.string().regex(/^APP-\d{1,9}$/, 'Not an application reference'));
@@ -46,6 +47,7 @@ export class ApplicationsController {
   constructor(
     private readonly applications: ApplicationsService,
     private readonly agreements: AgreementsService,
+    private readonly checks: ChecksService,
   ) {}
 
   @Get()
@@ -64,6 +66,12 @@ export class ApplicationsController {
   }
 
   /** The Key Facts Statement to give the applicant before they sign (BNR Regulation 91/2025). */
+  /** What the automatic checks found: the ID read against the application, the statements analysed. */
+  @Get(':code/checks')
+  checksFor(@Param('code', codeParam) code: string) {
+    return this.checks.summary(code);
+  }
+
   @Get(':code/key-facts')
   keyFacts(@Param('code', codeParam) code: string) {
     return this.applications.keyFacts(code);

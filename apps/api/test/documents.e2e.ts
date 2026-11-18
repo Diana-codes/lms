@@ -583,3 +583,40 @@ describe('fixing mistakes', () => {
     ).toContain('outside the console');
   });
 });
+
+describe('automatic checks', () => {
+  it('analyses statements the borrower sends, without anyone asking', async () => {
+    const { number, borrowerCode, appCode } = await applicant();
+    const token = await signInBorrower(number);
+    const borrower = await prisma.borrower.findUniqueOrThrow({ where: byCode(borrowerCode) });
+
+    // Without consent to analyse statements, nothing is read.
+    await upload(token, 'FINANCIAL_STATEMENTS', PDF, 'bank.pdf', 'application/pdf').expect(201);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(await prisma.cashflowDocument.count({ where: { borrowerId: borrower.id } })).toBe(0);
+
+    await prisma.consent.create({
+      data: {
+        borrowerId: borrower.id,
+        type: 'CASHFLOW_ANALYSIS',
+        textVersion: 'e2e',
+        channel: 'APP',
+      },
+    });
+    await upload(token, 'FINANCIAL_STATEMENTS', PDF, 'bank2.pdf', 'application/pdf').expect(201);
+
+    type Checks = { statements: { automatic: boolean; status: string } | null };
+    let checks: Checks = { statements: null };
+    for (let i = 0; i < 50 && (!checks.statements || checks.statements.status === 'PROCESSING'); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      checks = (
+        await http().get(`/applications/${appCode}/checks`).set('Cookie', cookies.officer!).expect(200)
+      ).body;
+    }
+    // No AI in tests, so the PDF can't be read; it still runs, and says so.
+    expect(checks.statements).toMatchObject({ automatic: true, status: 'FAILED' });
+    const docs = await prisma.cashflowDocument.findMany({ where: { borrowerId: borrower.id } });
+    expect(docs.length).toBeGreaterThan(0);
+    expect(docs.every((d) => d.kycDocumentId && d.uploadedById === null)).toBe(true);
+  });
+});

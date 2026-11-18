@@ -173,6 +173,82 @@ export class CashflowService {
   // ── analysis ───────────────────────────────────────────────────────
 
   async analyse(code: string, user: AuthUser, meta: RequestMeta) {
+    await this.run(code, user.id, meta);
+    return this.view(code);
+  }
+
+  /**
+   * After a borrower applies in the app (or sends statements later): copy the
+   * statements and payslips they sent into the application's analysis and run
+   * it, with no staff member involved. Advisory only, like a staff-run analysis.
+   * Returns false when there is nothing to analyse or no consent.
+   */
+  async autoFromBorrowerDocuments(applicationId: string): Promise<boolean> {
+    const app = await this.prisma.application.findUniqueOrThrow({
+      where: { id: applicationId },
+      select: { id: true, code: true, borrowerId: true },
+    });
+    const consented = await this.prisma.consent.findFirst({
+      where: { borrowerId: app.borrowerId, type: 'CASHFLOW_ANALYSIS', revokedAt: null },
+    });
+    if (!consented) return false;
+    const kyc = await this.prisma.kycDocument.findMany({
+      where: {
+        borrowerId: app.borrowerId,
+        type: 'FINANCIAL_STATEMENTS',
+        supersededAt: null,
+        storageKey: { not: null },
+        status: { not: 'REJECTED' },
+      },
+      orderBy: { uploadedAt: 'asc' },
+    });
+    const have = new Set(
+      (
+        await this.prisma.cashflowDocument.findMany({
+          where: { applicationId: app.id, kycDocumentId: { not: null } },
+          select: { kycDocumentId: true },
+        })
+      ).map((d) => d.kycDocumentId),
+    );
+    let added = 0;
+    for (const doc of kyc) {
+      if (have.has(doc.id) || !doc.storageKey || !doc.mimeType) continue;
+      if (!TYPES.has(doc.mimeType)) continue;
+      let buffer: Buffer;
+      try {
+        buffer = await readFile(path.join(this.env.UPLOAD_DIR, doc.storageKey));
+      } catch {
+        continue;
+      }
+      await this.prisma.cashflowDocument.create({
+        data: {
+          applicationId: app.id,
+          borrowerId: app.borrowerId,
+          kind: 'BANK_STATEMENT',
+          fileName: `statement-${doc.id.slice(0, 8)}.${TYPES.get(doc.mimeType)}`,
+          mimeType: doc.mimeType,
+          size: buffer.length,
+          storageKey: doc.storageKey,
+          sha256: createHash('sha256').update(buffer).digest('hex'),
+          kycDocumentId: doc.id,
+        },
+      });
+      added += 1;
+    }
+    const total = await this.prisma.cashflowDocument.count({ where: { applicationId: app.id } });
+    if (!total) return false;
+    // Nothing new since the last run: keep the analysis staff may be reviewing.
+    if (!added) {
+      const current = await this.prisma.cashflowAnalysis.findFirst({
+        where: { applicationId: app.id, status: { not: 'SUPERSEDED' } },
+      });
+      if (current) return true;
+    }
+    await this.run(app.code, null, {});
+    return true;
+  }
+
+  private async run(code: string, actorId: string | null, meta: RequestMeta) {
     const app = await this.application(code);
     const consented = await this.prisma.consent.findFirst({
       where: { borrowerId: app.borrowerId, type: 'CASHFLOW_ANALYSIS', revokedAt: null },
@@ -201,7 +277,7 @@ export class CashflowService {
         borrowerId: app.borrowerId,
         modelVersion: CASHFLOW_MODEL_VERSION,
         extractors: [],
-        createdById: user.id,
+        createdById: actorId,
       },
     });
 
@@ -298,7 +374,7 @@ export class CashflowService {
     ]);
     await this.audit.record({
       action: 'cashflow.analyse',
-      actorId: user.id,
+      ...(actorId ? { actorId } : { actorType: 'SYSTEM' as const }),
       entityType: 'Application',
       entityId: code,
       metadata: {
@@ -310,7 +386,7 @@ export class CashflowService {
       },
       ...meta,
     });
-    return this.view(code);
+    return analysis.id;
   }
 
   /** An analyst changes a transaction's category; the report is worked out again. */
