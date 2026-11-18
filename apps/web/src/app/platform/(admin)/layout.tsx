@@ -17,7 +17,7 @@ export default async function PlatformLayout({ children }: { children: ReactNode
       <header className="flex flex-wrap items-center justify-between gap-4 bg-forest px-5 py-3 text-white md:px-8">
         <Link href="/platform" className="flex flex-col text-white no-underline">
           <span className="text-[11px] font-semibold tracking-wide text-forest-muted uppercase">
-            Platform administration
+            Orin Tech House
           </span>
           <span className="font-display text-lg font-semibold">{PRODUCT_NAME} platform</span>
         </Link>
