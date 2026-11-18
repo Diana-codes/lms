@@ -1,10 +1,14 @@
 # Deploying a test server on Railway
 
-A shared test server for the team: the Demo company, local simulators for
-MoMo and SMS (codes appear in the API's logs), and no real borrower data.
-Production needs more (see the end).
+A shared test server for the team: Bridge to Finance's loan management
+system with demo data, local simulators for MoMo and SMS (codes appear in the
+API's logs), and no real borrower data. Production needs more (see the end).
 
-Railway project, five services:
+The system serves one company, Bridge to Finance (`COMPANY_SLUG=bf`).
+Multi-company hosting and the platform admin are switched off
+(`MULTI_COMPANY` unset).
+
+Railway project, six services:
 
 | Service | What | Built from |
 |---|---|---|
@@ -12,7 +16,8 @@ Railway project, five services:
 | `Redis` | Job queues | Railway's Redis template |
 | `api` | NestJS API | `deploy/api.Dockerfile` |
 | `ml` | Scoring service | `deploy/ml.Dockerfile` |
-| `web` | Console, platform admin, borrower portal | `deploy/web.Dockerfile` |
+| `web` | Staff console, and the customer app at `/app` | `deploy/web.Dockerfile` |
+| `site` | Public website (Apply, Log in) | `deploy/site.Dockerfile` |
 
 Every service is built from the repository root. Railway reads the
 Dockerfile from the `RAILWAY_DOCKERFILE_PATH` variable.
@@ -24,8 +29,8 @@ Dockerfile from the `RAILWAY_DOCKERFILE_PATH` variable.
    Rename the service it creates to `api`, and set its branch to
    `alexschanges` (Settings → Source).
 3. In the project: New → Database → PostgreSQL, then New → Database → Redis.
-4. New → GitHub repo → the same repo twice more, renamed `ml` and `web`,
-   both on `alexschanges`.
+4. New → GitHub repo → the same repo three more times, renamed `ml`, `web`
+   and `site`, all on `alexschanges`.
 
 ## 2. Secrets
 
@@ -62,8 +67,7 @@ REPORTING_DATABASE_URL=postgresql://kora_reporting:<APP_DB_PASSWORD>@${{Postgres
 REDIS_URL=${{Redis.REDIS_URL}}
 ML_URL=http://${{ml.RAILWAY_PRIVATE_DOMAIN}}:8000
 WEB_ORIGIN=https://<web address>
-APP_BASE_DOMAIN=<base domain>
-DEFAULT_COMPANY_SLUG=demo
+COMPANY_SLUG=bf
 COOKIE_SECURE=true
 JWT_ACCESS_SECRET=<…>
 PII_ENCRYPTION_KEY=<…>
@@ -82,34 +86,35 @@ Then on `api`: Settings → Volumes → add a volume mounted at `/data`
 RAILWAY_DOCKERFILE_PATH=deploy/web.Dockerfile
 PORT=3000
 API_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000
-APP_BASE_DOMAIN=<base domain>
+SITE_URL=https://<site address>
 ```
 
-`API_URL` and `APP_BASE_DOMAIN` are read when the web app is built: after
-changing them, redeploy `web`.
+`site`:
+
+```
+RAILWAY_DOCKERFILE_PATH=deploy/site.Dockerfile
+PORT=3001
+APP_URL=https://<web address>
+API_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000
+```
+
+`API_URL` (web) and `APP_URL` (site) are read when the apps are built: after
+changing them, redeploy that service.
 
 ## 4. Addresses
 
-Each lender opens at `<company>.<base domain>` and the platform admin at
-`admin.<base domain>`, so the web app needs a domain where every name in
-front of it works:
+Generate a public address for `web` and for `site` (Settings → Networking),
+or attach your own domains, e.g. `app.bridgetofinance.rw` for `web` and
+`bridgetofinance.rw` for `site`. Then set `WEB_ORIGIN` on `api` to the web
+address, `SITE_URL` on `web` and `APP_URL` on `site`, and redeploy.
 
-- **With a domain you control (recommended):** on `web`, Settings →
-  Networking → Custom domain → `*.<base domain>` (and the bare
-  `<base domain>`), then add the DNS records Railway shows. Set
-  `APP_BASE_DOMAIN=<base domain>` on `api` and `web`, and
-  `WEB_ORIGIN=https://demo.<base domain>`.
-- **Without one:** generate a Railway address for `web`
-  (`<name>.up.railway.app`) and set `WEB_ORIGIN` to it and
-  `APP_BASE_DOMAIN` to the same host. The address opens the Demo company
-  only; the platform admin and other companies are not reachable.
-
-Only `web` needs a public address. `api` and `ml` stay on the private network.
+Only `web` and `site` need public addresses. `api` and `ml` stay on the
+private network.
 
 ## 5. First deploy and demo data
 
 Deploy `ml`, then `api` (it applies the database changes on every start),
-then `web`. Check the `api` logs for `API listening`.
+then `web` and `site`. Check the `api` logs for `API listening`.
 
 Load the demo data once:
 
@@ -122,13 +127,13 @@ pnpm db:seed            # inside the container, in /app/apps/api
 The seed replaces the demo data, so run it again only to reset. Afterwards
 restart `api` (it caches ledger accounts).
 
-Sign in at the web address as `manager@koralend.test` with
+Sign in at the web address as `manager@bf.test` with
 `SEED_STAFF_PASSWORD`. Sign-in codes and MoMo prompts are simulated: codes
 appear in the `api` logs.
 
 ## Before real customers use it
 
-- `NODE_ENV=production`, no `DEFAULT_COMPANY_SLUG`, and an Africa's Talking
+- `NODE_ENV=production`, `COMPANY_SLUG=bf`, and an Africa's Talking
   account in `PLATFORM_SMS_API_KEY` (the API refuses to start otherwise).
 - `PLATFORM_TWO_FACTOR=true`.
 - Hosting in Rwanda or an approved location for personal data (PRD), object

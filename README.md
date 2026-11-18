@@ -1,19 +1,18 @@
-# Kora Lend
+# Bridge to Finance loan management system
 
-Loan management for lenders in Rwanda: a web console for staff and a mobile app for borrowers, on one backend. `BUILD_BRIEF.md` is the source of truth for scope and rules. The approved screen designs are in `design/screens/`.
-
-**Status:** all five phases in `BUILD_BRIEF.md` §6 are built: foundations, core lending, money movement and messaging, the borrower app, reports, and AI.
+Bridge to Finance's loan management system: a website for customers, a customer app (phone and web, the same app) and a staff console, on one backend. `BUILD_BRIEF.md` is the source of truth for scope and rules. The approved screen designs are in `design/screens/`.
 
 ## What's here
 
-| Path            | What it is                                                                                                             |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `packages/core` | Money helpers (integer RWF), the repayment schedule calculator, days-past-due and PAR maths, PII masking, shared enums |
-| `packages/ui`   | Design tokens and the shared React components (buttons, pills, cards, tables, sidebar, AI panel)                       |
-| `apps/api`      | NestJS API, Prisma schema and migrations, seed data                                                                    |
-| `apps/web`      | Next.js lender console + borrower web portal (`/portal`)                                                               |
-| `apps/mobile`   | Expo borrower app: phone + code sign-in, home, pay with MoMo, 3-step apply                                             |
-| `services/ml`   | FastAPI scoring service: transparent rules-based score and early warning                                               |
+| Path            | What it is                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `apps/site`     | Public website (port 3001): products from the API, Apply and Log in buttons                                    |
+| `apps/web`      | Staff console (port 3000), and the customer app's web build at `/app`                                          |
+| `apps/mobile`   | Customer app (Expo): sign up, documents, apply, loan, pay with MoMo. `pnpm build` also exports it for the web |
+| `apps/api`      | NestJS API, Prisma schema and migrations, seed data                                                              |
+| `packages/core` | Money helpers (integer RWF), the loan engine, days past due, PII masking, shared enums                          |
+| `packages/ui`   | Design tokens (BF colours) and shared React components                                                          |
+| `services/ml`   | FastAPI scoring service: transparent rules-based score and early warning                                        |
 
 ## Getting started
 
@@ -24,32 +23,28 @@ nvm use
 pnpm install
 pnpm setup:env      # creates apps/api/.env and apps/web/.env.local with fresh secrets
 pnpm db:up          # Postgres on :5433 and Redis on :6380, in Docker
-pnpm db:migrate     # also creates the company-scoped and reporting database logins
-pnpm build          # the seed needs the built packages and the Prisma client
-pnpm db:seed        # sample data that matches the designs, in the "demo" company
+pnpm db:migrate     # also creates the database logins the API and reports use
+pnpm build          # packages, Prisma client, the customer app's web build, the site
+pnpm db:seed        # Bridge to Finance with sample data that matches the designs
 (cd services/ml && python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]')   # once
-(cd services/ml && .venv/bin/uvicorn app.main:app --port 8000) &                # scoring service (match ML_URL)
-pnpm dev            # API on :4000, console on :3000
+(cd services/ml && .venv/bin/uvicorn app.main:app --port 8000) &                # scoring service
+pnpm dev
 ```
 
-**Borrower portal (web):** http://demo.localhost:3000/portal — phone + SMS code, same `/app` API as the mobile app (home, MoMo pay, apply, schedule, alerts, profile). Staff sign-in links to it from the console login page.
+Then:
 
-**Borrower app (mobile):** `cd apps/mobile && pnpm start`, then open it in Expo Go or an Android emulator. Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's address (the emulator uses `http://10.0.2.2:4000`). Sign in with a seeded borrower's phone number; with no SMS key the code is not texted; in development the API log prints it ("Development sign-in code for …"). The easiest way in: create an application in the console with your own phone number, then sign in to the app or portal with that number.
+- **Website:** http://localhost:3001 — Apply on a product opens the customer app with that product chosen.
+- **Customer app in the browser:** http://localhost:3000/app — sign in or sign up with a phone number. In development the code is printed in the API log ("Development sign-in code for …"). New customers: sign up → send ID and selfie → choose a loan → send the documents it needs → review and submit. After approval and payout they follow the loan and pay with MoMo (their own wallet or another MTN number).
+- **Customer app on a phone:** `cd apps/mobile && pnpm start`, open it in Expo Go or an Android emulator. Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` to your computer's address (the emulator uses `http://10.0.2.2:4000`).
+- **Staff console:** http://localhost:3000, sign in as `manager@bf.test` (or `admin@`, `kevin@`, `analyst@`, `accountant@`, `auditor@`, `collections@bf.test`). The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. Staff 2FA and customer sign-in codes for known numbers are off by default; admins turn them on under Company settings → Sign-in security.
 
-**Providers:** each company brings its own MoMo and Africa's Talking keys, set by a platform admin on the company's page. A company without them uses the local simulators in development (the API logs which); in production MoMo and SMS stay off for it. In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. Keys still in `apps/api/.env` from older setups are copied into the demo company by `pnpm db:seed`. With no `ANTHROPIC_API_KEY`, the Claude-written features (summaries, collections advice, Ask your data) say they are not configured; scoring still works.
+After rebuilding the customer app (`pnpm --filter @kora/mobile build`), restart the console (`next start` reads the files at start-up).
 
-Open http://demo.localhost:3000 and sign in as `manager@koralend.test`. The password is `SEED_STAFF_PASSWORD` in `apps/api/.env`. **Staff 2FA and borrower SMS OTP are off by default**; company admins turn them on under Company settings → Sign-in security (platform admin can set them too). When staff 2FA is on, enter the 6-digit code texted to the account's phone: with no `PLATFORM_SMS_API_KEY`, nothing is sent and the code appears in the API log (`Development code for +250 78• ••• 002: …`). The seed prints the other accounts (admin, four loan officers, a collections agent); they share that password. Plain http://localhost:3000 also reaches the demo company in development (`DEFAULT_COMPANY_SLUG`).
+**Providers:** MoMo and Africa's Talking keys are set under Company settings. Without them the local simulators are used in development (the API logs which). In the MoMo simulator a phone ending in `00` declines and one ending in `99` never answers. With no `ANTHROPIC_API_KEY`, the Claude-written features say they are not configured; scoring still works.
 
-## Companies (multi-tenancy)
+## One company
 
-Kora Lend runs many lenders on one installation. Each company has its own address (`<slug>.<APP_BASE_DOMAIN>`, e.g. `bf.koralend.rw`), staff, borrowers, products, ledger, provider accounts and branding.
-
-- **Isolation is enforced by Postgres**, not only by the code. The API connects with `APP_DATABASE_URL`, a login that owns nothing, and row-level security limits every query (raw SQL included) to the company of the request. With no company set it sees nothing. Migrations, the seed and the platform admin use the owner login (`DATABASE_URL`). `test/tenancy.e2e.ts` checks this table by table.
-- **Finding the company:** from the subdomain (the console proxy passes it to the API as `x-company`). Sign-in tokens carry their company and are refused on another company's address. The borrower app sends `x-company` too.
-- **Platform admin** (Orin Tech House): http://admin.localhost:3000, signed in as `platform@koralend.test` (same seed password). Create companies and their first administrator, set branding and optional features, add MoMo and SMS keys, issue webhook secrets, suspend a company, and see daily usage.
-- **Optional features** (AI assistance, bulk approve) are off for a new company until switched on.
-- **Background jobs** run company by company; the nightly run happens at 01:00 in each company's time zone and records the day's usage for billing.
-- **Adding a table:** give it a `companyId` (copy an existing model), and add it to the row-level security list in a migration. The tenancy tests fail if a table with a `companyId` has no policy.
+The system belongs to Bridge to Finance. Every request is for the company `COMPANY_SLUG` (default `DEFAULT_COMPANY_SLUG`, then `bf`). Multi-company hosting (companies by subdomain) and the platform admin are switched off; the code stays, behind `MULTI_COMPANY=true` (API) and `MULTI_COMPANY=true` (web build), and the tests keep it checked. Data is still stored with a company column and Postgres row-level security, which costs nothing with one company and keeps the door open.
 
 `pnpm db:seed` wipes the database and rebuilds it "as of today", so days past due are always correct. It refuses to run with `NODE_ENV=production`.
 
