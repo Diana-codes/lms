@@ -304,7 +304,8 @@ describe('home and payments', () => {
     expect(airtel.body.message).toBe('MoMo payments need an MTN number starting 078 or 079');
     expect(await prisma.payment.count({ where: { loan: { code: loanCode } } })).toBe(0);
 
-    const other = `079${randomInt(1_000_000, 9_999_999)}`;
+    // The MoMo simulator declines numbers ending 00, so avoid them.
+    const other = `079${randomInt(100_000, 999_999)}7`;
     const res = await pay(other).expect(202);
     const payment = await prisma.payment.findUniqueOrThrow({ where: { id: res.body.paymentId } });
     expect(payment.payerPhone).toBe(`+250${other.slice(1)}`);

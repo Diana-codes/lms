@@ -124,8 +124,8 @@ describe('portfolio reports', () => {
   it('exports CSV with the period in the filename', async () => {
     const res = await get(staff.manager, '/reports/export.csv?period=12M').expect(200);
     expect(res.headers['content-type']).toMatch(/text\/csv/);
-    expect(res.headers['content-disposition']).toContain('kora-lend-report-12M.csv');
-    expect(res.text).toContain('Kora Lend report,12M,as of ');
+    expect(res.headers['content-disposition']).toContain('bf-report-12M.csv');
+    expect(res.text).toContain('Bridge to Finance report,12M,as of ');
     expect(res.text).toContain('Month end,Outstanding principal (RWF)');
     expect(res.text).toContain('Report test loan');
   });

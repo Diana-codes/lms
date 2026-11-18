@@ -85,7 +85,7 @@ test.describe('reports', () => {
     const download = page.waitForEvent('download');
     await page.locator('header').getByRole('link', { name: 'Export CSV' }).click();
     const file = await download;
-    expect(file.suggestedFilename()).toBe('kora-lend-report-Q.csv');
+    expect(file.suggestedFilename()).toBe('bf-report-Q.csv');
 
     await page.getByRole('link', { name: 'Print or PDF' }).click();
     await expect(page.getByRole('heading', { name: 'Portfolio report' })).toBeVisible();

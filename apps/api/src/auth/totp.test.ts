@@ -63,10 +63,10 @@ describe('TOTP (RFC 6238)', () => {
     expect(secret).toMatch(/^[A-Z2-7]{32}$/);
     expect(base32Decode(secret)).toHaveLength(20);
     expect(generateTotpSecret()).not.toBe(secret);
-    const uri = new URL(totpUri(secret, 'kevin@koralend.test'));
+    const uri = new URL(totpUri(secret, 'kevin@bf.test'));
     expect(uri.protocol).toBe('otpauth:');
-    expect(decodeURIComponent(uri.pathname)).toBe('//totp/Kora Lend:kevin@koralend.test'.slice(6));
+    expect(decodeURIComponent(uri.pathname)).toBe('//totp/Bridge to Finance:kevin@bf.test'.slice(6));
     expect(uri.searchParams.get('secret')).toBe(secret);
-    expect(uri.searchParams.get('issuer')).toBe('Kora Lend');
+    expect(uri.searchParams.get('issuer')).toBe('Bridge to Finance');
   });
 });

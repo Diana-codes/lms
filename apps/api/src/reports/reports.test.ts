@@ -48,7 +48,7 @@ describe('reportToCsv', () => {
         },
       ],
     });
-    expect(csv).toContain('Kora Lend report,Q,as of 2026-11-14');
+    expect(csv).toContain('Bridge to Finance report,Q,as of 2026-11-14');
     expect(csv).toContain('2026-09-30,1000000,2,500000,2.50,18.00');
     expect(csv).toContain('Personal loan,1000000,100.00');
     expect(csv).toContain('Kevin N.,2,1000000,0.00,95.50');

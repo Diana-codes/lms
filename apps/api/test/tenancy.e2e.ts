@@ -244,7 +244,7 @@ describe('platform administration', () => {
     expect(next.body).toMatchObject({ status: 'TWO_FACTOR_REQUIRED', method: 'sms' });
     // The message names the platform, not a lender.
     const outbox = app.get(ProvidersService).platformSmsSimulator.outbox;
-    expect(outbox.at(-1)!.message).toMatch(/^Kora Lend platform: your sign-in code is \d{6}\./);
+    expect(outbox.at(-1)!.message).toMatch(/^BF Loan Management System platform: your sign-in code is \d{6}\./);
     await http()
       .post('/platform/auth/2fa/verify')
       .send({ challengeToken: next.body.challengeToken, code: lastCodeTo(app, adminPhone) })
